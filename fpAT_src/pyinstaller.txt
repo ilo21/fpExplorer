@@ -1,0 +1,9 @@
+Pyinstaller has issue:
+Solved: using .spec file for conversion to exe
+	.spec file has to have additional line in the beginning:
+import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 10)
+
+Pyinstaller:
+pyinstaller --clean --windowed --name "fpAT" --icon=app_icon.ico --add-data "Documentation/*.pdf;Documentation" fpAT.py
+Then from spec file
+pyinstaller fpAT.spec
