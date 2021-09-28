@@ -1,0 +1,5323 @@
+# -*- coding: utf-8 -*-
+"""
+ Copyright (c) 2021 CSAN_LiU
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ """
+
+
+"""
+Created on Fri Dec 18 11:34:19 2020
+
+@author: ilosz01
+Many analysis ideas come from TDT
+https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
+
+"""
+
+import tdt
+# https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/
+import numpy as np
+from numpy.polynomial import Polynomial
+from numpy.polynomial.polynomial import polyval
+import math
+# https://pypi.org/project/lowess/
+#import lowess
+import pandas as pd
+from scipy.ndimage import gaussian_filter
+from scipy import stats
+from sklearn.metrics import auc
+#from loess.loess_1d import loess_1d
+#import statsmodels.api as sm
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+from scipy.signal import find_peaks
+import os
+import copy
+
+
+''' get all data from the recording (reads from multiple files)
+    read_block returns a structured object. It is a Python dictionary 
+    
+    epocs	[struct]
+    snips	[struct]
+    streams	[struct]
+    scalars	[struct]
+    info	[struct]
+    time_ranges:	array([[ 0.],
+       [inf]])
+
+    Streams is the recording (names: x465A and  x405A)
+    epocs[PrtA] has the codes for events (i.e tone)
+    
+    examples of how to access data:
+        print(data.streams.Wav1.fs) # dot syntax
+        print(data['streams']['Wav1']['fs'])
+        print(data['streams'].Wav1['fs']) # mix of dot syntax and dict keys
+'''
+
+#################################
+# PLOT GENERAL SETTINGS
+##############################
+# location of all plots legend
+MY_LEGEND_LOC='upper left'
+MY_LEGENG_POS = (0.96, 1)
+MY_LEFT = 0.06
+MY_RIGHT = 0.9
+MY_TOP = 0.9
+MY_BOTTOM = 0.1
+MY_WSPACE = 0.2
+MY_HSPACE = 0.5
+
+DPI4SVG = 1200
+################################
+# return raw data structure
+def get_raw_data(path):
+    '''Returns a raw data extracted by tdt from all recording files
+    '''
+#    raw_data = tdt.read_block("C://Users//ilosz01//OneDrive - Linköpings universitet//FPproject//Data//1//fear_test")
+    raw_data = tdt.read_block(path) 
+    return raw_data
+
+def get_channel_names(raw_data):
+    '''
+    Returns a list of unique channel names in streams from file
+    i.e. _405A, _465A
+    '''
+    all_channel_names = [key for key in raw_data.streams.keys()]
+    return all_channel_names
+
+def get_events(raw_data):
+    '''
+    Returns a list of unique events from file that start with Prt
+    i.e. PrtA 253, PrtA 249
+    '''
+    # tdt StructTypes are dictionaries
+    all_epocs_list = [key for key in raw_data.epocs.keys()]
+    my_event_list = []
+    # iterate over all events that start with Ptr
+    for evt in all_epocs_list:
+        if evt.startswith("Prt") or evt.startswith("Note"):
+            # create set of unique events
+            unique_events = set(raw_data.epocs[evt].data)
+            for el in unique_events:
+                evt_name = evt + " " + str(int(el))
+                my_event_list.append(evt_name)
+
+    return my_event_list
+
+# returns true if there are any events in the data
+def check_events(path):
+    events_present = False
+    data = get_raw_data(path)
+    if len(get_events(data)) > 0:
+        events_present = True
+    return events_present
+
+def get_event_on_off(raw_data, event):
+    ''' Returns onset and offset times of the tones
+        First element of this array are onset times, 
+        Second el are offset times
+    '''
+    event_name_split = event.split(" ")
+    on_off = [[],[]]
+    # find tone onsets and offsets
+    try:    # some data was not readable by tdt.epoc_filter
+        evt_on_off= tdt.epoc_filter(raw_data, event_name_split[0], values=[int(event_name_split[1])])
+        on_off = evt_on_off.time_ranges
+    except: 
+        print("Problem getting on off event data by tdt.epoc_filter")
+    return on_off
+
+def get_single_channel(raw_data,chnl_name):
+#    print('channel 1:', len(raw_data.streams[chnl_name].data))
+    chnl_data = raw_data.streams[chnl_name].data
+    # get that in seconds 
+    times = create_timestamps(raw_data,chnl_name,chnl_data)
+    # round to whole seconds
+    full_total_sec = int(times[-1])
+    # get only recording up to that time value
+    full_times = [el for el in times if el < full_total_sec]
+    chnl_data = chnl_data[:len(full_times)]
+    return chnl_data
+
+def create_timestamps(raw_data,chnl_name,channel_data):
+    num_samples = len(channel_data)
+    times = np.linspace(1, num_samples, num_samples) / raw_data.streams[chnl_name].fs
+    return times
+
+def trim_raw_data(raw_data,signal_name,control_name,beginning_sec,ending_sec):
+    # return numpy array for all GCaMP channel raw data
+    GCaMP_data = get_single_channel(raw_data,signal_name)
+    # return numpy arrayfor all control raw data
+    control_data = get_single_channel(raw_data,control_name)
+    ts_raw = create_timestamps(raw_data,signal_name,GCaMP_data)
+    #########
+    # check
+    # make sure both arrays are the same size
+    len_all_GCaMP = GCaMP_data.size
+    len_all_control = control_data.size
+    # if GCaMP recording is longer, trim it to the control size
+    if len_all_GCaMP > len_all_control:
+        GCaMP_data = GCaMP_data[:len_all_control]
+    # if control data is longer, trim it to GCaMP size
+    elif len_all_GCaMP < len_all_control:
+        control_data = control_data[:len_all_GCaMP]
+        
+#    print(len(GCaMP_data),len(control_data))
+    # calculate the first beginning_sec seconds from a signal channel
+    t0 = int(beginning_sec * raw_data.streams[signal_name].fs) # int rounds it to the nearest integer
+    t1 = int(ending_sec * raw_data.streams[signal_name].fs)
+#    print(t0,t1)
+    if t1 == 0:
+        ts = ts_raw[t0:]
+        signal_trimmed = GCaMP_data[t0:]
+        control_trimmed = control_data[t0:]
+    else:
+        ts = ts_raw[t0:-t1]
+        signal_trimmed = GCaMP_data[t0:-t1]
+        control_trimmed = control_data[t0:-t1]
+#    print(len(signal_trimmed),len(control_trimmed))
+    # create a dictionary
+    trimmed_dict = {"ts":ts,"signal":signal_trimmed,"control":control_trimmed}
+    return trimmed_dict
+
+# create path to single data tank (data folder+subject name+experiment name)
+# return a dictionary subject name: path
+def create_list_of_paths(main_path,subject_list,experiment_name):
+    paths_dict = {}
+    for el in subject_list:
+        to_subject = os.path.join(main_path,el)
+        to_data_tank = os.path.join(to_subject,experiment_name)
+        paths_dict[el] = to_data_tank
+    return paths_dict
+
+# create path to single data tank (data folder+experiment name+subject name)
+# return a dictionary subject name: path
+def create_list_of_paths_experiment_subjects(main_path,subject_list,experiment_name):
+    paths_dict = {}
+    # keep only subjects in the experiment folder
+    valid_subjects = []
+    to_experiment = os.path.join(main_path,experiment_name)
+    for el in subject_list:
+        to_data_tank = os.path.join(to_experiment,el)
+        # check if path exists, because subjects come from all experiments
+        if os.path.exists(to_data_tank):
+            paths_dict[el] = to_data_tank
+            valid_subjects.append(el) 
+    return valid_subjects, paths_dict
+
+# downsample by using median instead of mean
+def downsample_tdt(signal_dict,downsample_n):
+    GCaMP_data = signal_dict["signal"]
+    control_data = signal_dict["control"]
+    ts = signal_dict["ts"]
+    GCaMP_data_means = []
+    control_data_means = []
+    for i in range(0, len(GCaMP_data), downsample_n):
+        GCaMP_data_means.append(np.mean(GCaMP_data[i:i+downsample_n-1])) # This is the moving window median
+        control_data_means.append(np.mean(control_data[i:i+downsample_n-1]))
+    # adjust timestamps every nth
+    ts_adjusted = ts[:-1:downsample_n]
+    
+    # check for equal lengths
+    if len(GCaMP_data_means) < len(ts_adjusted):
+        ts_adjusted = ts_adjusted[:len(GCaMP_data_means)]
+    elif len(GCaMP_data_means) > len(ts_adjusted):
+        GCaMP_data_means = GCaMP_data_means[:len(ts_adjusted)]
+        control_data_means = control_data_means[:len(ts_adjusted)]
+    
+#    print(len(GCaMP_data))
+#    print(len(GCaMP_data_means))
+#    print(len(control_data))
+#    print(len(control_data_means))
+#    print(ts_adjusted)    
+#     # debug
+#    a = np.array([1, 2, 3, 4,5,6,7,8,9,10])
+#    a_means = []
+#    for i in range(0, len(a), downsample_n):
+#        a_means.append(np.mean(a[i:i+downsample_n-1])) # This is the moving window mean
+#        print(a[i:i+downsample_n-1])
+#    print(a)
+#    print(a_means)    
+    return {"ts":ts_adjusted,"signal":GCaMP_data_means,"control":control_data_means}
+
+# Mulholland dff
+def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_fraq):
+    # debug
+#    a = np.array([1, 2, 3, 4])
+#    test_add = a + 1
+##    print(test_add)
+#    b = np.ones(4) + 1
+#    print(b)
+##    print(a-b)  # element wise
+##    print(2*a+1)  # element wise
+#    c = np.array([1, 2, 3, 4])
+#    print(c)
+#    print(b-c)
+#    print((b-c)/c)
+    #####################
+    # change lists to numpy array for calculations
+    # create new timestamps for the data (from zero)
+#    ts_arr = create_timestamps(raw_data,GCAMP_CHNL,signal_dict["signal"])
+    ts_arr = np.asarray(signal_dict["ts"])
+    signal_arr =np.asarray(signal_dict["signal"])
+    control_arr = np.asarray(signal_dict["control"])
+    if smooth == True:
+        print("Start smoothing",smooth_fraq)
+        # smooth data using lowess filter
+        # https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html
+        # https://github.com/djamesbarker/pMAT/blob/master/pMAT%20v1-2%20MATLAB/pmat.m
+#        lowess = sm.nonparametric.lowess
+#        signal_arr = lowess(signal_arr,ts_arr,frac=smooth_fraq,it=0,missing='none',return_sorted=False)
+#        control_arr = lowess(control_arr, ts_arr, frac=smooth_fraq,it=0,missing='none',return_sorted=False)
+#        xout_sig, signal_arr, weigts_sig = loess_1d(ts_arr, signal_arr, frac=smooth_fraq)
+#        xout_cont, control_arr, weigts_cont = loess_1d(ts_arr, control_arr, frac=smooth_fraq)
+        # working lowess (super slow)
+#        signal_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(signal_arr), bandwidth=smooth_fraq, polynomialDegree=1)
+#        control_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(control_arr), bandwidth=smooth_fraq, polynomialDegree=1)
+        signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+        control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+        print("Done smoothing")
+        
+    # Before:
+#    # fit time axis to the 465nm stream
+#    # https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html#numpy.polynomial.polynomial.Polynomial.fit
+#    bls_Ca = np.polyfit(ts_arr,signal_arr,1)
+#    F0Ca = np.multiply(bls_Ca[0], ts_arr) + bls_Ca[1]
+#    # dF/F for the 465 channel
+#    dFFCa = (signal_arr - F0Ca)/F0Ca *100
+##    print(dFFCa)
+#    # fit time axis the 405nm stream
+#    bls_ref = np.polyfit(ts_arr,control_arr,1)
+#    F0Ref = np.multiply(bls_ref[0], ts_arr) + bls_ref[1]
+#    # dF/F for the 405 channel
+#    dFFRef = (control_arr - F0Ref)/F0Ref *100
+##    print(dFFRef)
+#    dFFnorm = dFFCa - dFFRef
+#    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+#    # to make 0 the mean value for DF/F
+#    negative = dFFnorm[dFFnorm<0]
+#    dFF=dFFnorm-np.mean(negative)
+    
+    # fit time axis to the 465nm stream  
+#    bls_Ca = np.polyfit(ts_arr,signal_arr,1) # deprecieted
+    bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_arr,signal_arr,1)
+#    print("bls_Ca",bls_Ca.convert().coef[::-1])
+#    F0Ca = np.polyval(bls_Ca,ts_arr) # deprecieted
+    F0Ca = polyval(ts_arr,bls_Ca.convert().coef)
+    # dF/F for the 465 channel
+    dFFCa = (signal_arr - F0Ca)/F0Ca *100
+    # fit time axis the 405nm stream
+#    bls_ref = np.polyfit(ts_arr,control_arr,1) # depreciated
+    bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_arr,control_arr,1)
+#    F0Ref = np.polyval(bls_ref,ts_arr) # deprecieted
+    F0Ref = polyval(ts_arr,bls_ref.convert().coef)
+    # dF/F for the 405 channel
+    dFFRef = (control_arr - F0Ref)/F0Ref *100
+#    print(dFFRef)
+    dFFnorm = dFFCa - dFFRef
+    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+    # to make 0 the mean value for DF/F
+    negative = dFFnorm[dFFnorm<0]
+    dFF=dFFnorm-np.mean(negative)
+
+    if show_as == "Z-Score":
+        median_all = np.median(dFF)
+        mad = stats.median_absolute_deviation(dFF)
+        dFF = (dFF - median_all)/mad
+
+    return {"ts":ts_arr,"normalized_signal":dFF}
+
+
+# https://github.com/djamesbarker/pMAT
+def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_fraq):
+    # change lists to numpy array for calculations
+    ts_arr = np.asarray(signal_dict["ts"])
+    signal_arr =np.asarray(signal_dict["signal"])
+    control_arr = np.asarray(signal_dict["control"])
+    
+    if smooth == True:
+        print("Start smoothing",smooth_fraq)
+        # smooth data using lowess filter
+        # https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html
+        # https://github.com/djamesbarker/pMAT/blob/master/pMAT%20v1-2%20MATLAB/pmat.m
+#        lowess = sm.nonparametric.lowess
+#        signal_arr = lowess(signal_arr,ts_arr,frac=smooth_fraq,it=0,missing='none',return_sorted=False)
+#        control_arr = lowess(control_arr, ts_arr, frac=smooth_fraq,it=0,missing='none',return_sorted=False)
+        # working lowess
+#        signal_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(signal_arr), bandwidth=smooth_fraq, polynomialDegree=1)
+#        control_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(control_arr), bandwidth=smooth_fraq, polynomialDegree=1)
+        signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+        control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+        print("Done smoothing")
+        
+        
+    # Before
+#    bls = np.polyfit(control_arr, signal_arr, 1)
+#    fit_line = np.multiply(bls[0], control_arr) + bls[1]
+#    dff = (signal_arr - fit_line)/fit_line * 100
+        
+    # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+    mu = np.mean(control_arr)
+    std = np.std(control_arr, ddof=0)
+    # Call np.polyfit(), using the shifted and scaled version of control_arr
+#    cscaled = np.polyfit((control_arr - mu)/std, signal_arr, 1) # depreciated
+    cscaled = np.polynomial.polynomial.Polynomial.fit((control_arr - mu)/std, signal_arr, 1)
+    # Create a poly1d object that can be called
+#    pscaled = np.poly1d(cscaled) # old obsolete function
+    # https://numpy.org/doc/stable/reference/routines.polynomials.html
+    pscaled = Polynomial(cscaled.convert().coef)
+    # Inputs to pscaled must be shifted and scaled using mu and std
+    F0 = pscaled((control_arr - mu)/std)
+#    print("F0?",F0[:20])
+    dffnorm = (signal_arr - F0)/F0 * 100
+    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+    # to make 0 the mean value for DF/F
+    negative = dffnorm[dffnorm<0]
+    dff=dffnorm-np.mean(negative)
+
+    if show_as == "Z-Score":
+        median_all = np.median(dff)
+        mad = stats.median_absolute_deviation(dff)
+        dff = (dff - median_all)/mad
+
+    return {"ts":ts_arr,"normalized_signal":dff}
+
+
+#https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
+def filter_data_around_event(raw_data,trimmed_data,perievent_options_dict,settings_dict,signal_name,control_name):
+    event_name_split = perievent_options_dict["event"].split(" ")
+    before = -perievent_options_dict["sec_before"]
+    till = perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]
+    trange = [before,till]
+    modified_data = tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
+    all_control_filtered = modified_data.streams[control_name].filtered
+    all_signal_filtered = modified_data.streams[signal_name].filtered
+    onsets = get_event_on_off(raw_data, perievent_options_dict["event"])[0]
+    # check how many events from the beginning or ending of the recording have been already trimmed out
+    from_begin = 0
+    from_end = 0
+    for el in onsets:
+        # print(el,trimmed_data[1]["ts"][0])
+        if el < trimmed_data[1]["ts"][0]:
+            from_begin +=1
+        else:
+            break
+    for el in onsets:
+        # print(el,trimmed_data[1]["ts"][-1])
+        if el > trimmed_data[1]["ts"][-1]:
+            from_end +=1
+            
+    # print(from_begin,from_end)
+    if from_begin > 0:
+        for i in range(from_begin):
+            all_control_filtered=np.delete(all_control_filtered,0,0)
+            all_signal_filtered=np.delete(all_signal_filtered,0,0)
+    if from_end > 0:
+        for i in range(from_end):
+            all_control_filtered=np.delete(all_control_filtered,-1,0)
+            all_signal_filtered=np.delete(all_signal_filtered,-1,0)
+    modified_data.streams[signal_name].filtered = all_signal_filtered
+    modified_data.streams[control_name].filtered = all_control_filtered
+    '''Applying a time filter to a uniformly sampled signal means that the length 
+        of each segment could vary by one sample. Let's find the minimum length 
+        so we can trim the excess off before calculating the median.
+        '''
+    try:
+        min1 = np.min([np.size(x) for x in modified_data.streams[signal_name].filtered])
+        min2 = np.min([np.size(x) for x in modified_data.streams[control_name].filtered])
+        modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
+        modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
+        # downsample data as well
+        N = settings_dict[0]["downsample"] # Average every N samples into 1 value
+        control = []
+        signal = []
+        for lst in modified_data.streams[control_name].filtered:
+            small_lst = []
+            for i in range(0, min2, N):
+                small_lst.append(np.median(lst[i:i+N-1])) # This is the moving window median
+            control.append(small_lst)
+        
+        for lst in modified_data.streams[signal_name].filtered:
+            small_lst = []
+            for i in range(0, min1, N):
+                small_lst.append(np.median(lst[i:i+N-1]))
+            signal.append(small_lst)
+            
+        modified_data.streams[signal_name].filtered_downsampled = signal
+        modified_data.streams[control_name].filtered_downsampled = control
+    except:
+        print("Not enough data that satisfy your request. Try changing event or times around event.")
+    
+    return modified_data
+
+def analyze_perievent_data(data,perievent_options_dict,settings_dict,signal_name,control_name):
+    # create a dictionary with analysed data for plotting
+    analyzed_perievent_dict = {}
+    # get downsampled data from around event 
+    GCaMP_perievent_data = data.streams[signal_name].filtered_downsampled
+    control_perievent_data = data.streams[control_name].filtered_downsampled
+    
+    # Create a mean signal, standard error(median absolute deviation in pMat) of signal, and DC offset
+    mean_signal = np.mean(GCaMP_perievent_data, axis=0)
+    std_signal = np.std(GCaMP_perievent_data, axis=0) / np.sqrt(len(data.streams[signal_name].filtered))
+    dc_signal = np.mean(mean_signal)
+    mean_control = np.mean(control_perievent_data, axis=0)
+    std_control = np.std(control_perievent_data, axis=0) / np.sqrt(len(data.streams[control_name].filtered))
+    dc_control = np.mean(mean_control)
+    
+    # Create the time vector for each stream store
+    N = settings_dict[0]["downsample"]
+    ts_signal4average = -perievent_options_dict["sec_before"] + np.linspace(1, len(mean_signal), len(mean_signal))/data.streams[signal_name].fs*N
+    ts_control4average = -perievent_options_dict["sec_before"] + np.linspace(1, len(mean_control), len(mean_control))/data.streams[control_name].fs*N
+    
+    # Subtract DC offset to get signals on top of one another
+    mean_signal = mean_signal - dc_signal
+    mean_control = mean_control - dc_control
+    
+    # create dictionary with data for average plot
+    avg_data2plot_dict = {}
+    avg_data2plot_dict["ts_signal"] = ts_signal4average
+    avg_data2plot_dict["ts_control"] = ts_control4average
+    avg_data2plot_dict["signal"] = mean_signal
+    avg_data2plot_dict["control"] = mean_control
+    avg_data2plot_dict["std_signal"] = std_signal
+    avg_data2plot_dict["std_control"] = std_control
+    # add that dict to all analysed data dict
+    analyzed_perievent_dict["average"] = avg_data2plot_dict
+    
+    if settings_dict[0]["filter"] == True:
+        print("Start smoothing",settings_dict[0]["filter_fraction"])
+        # smooth data using lowess filter
+        temp_signal_smoothed = []
+        temp_control_smoothed = []
+        for i in range(len(GCaMP_perievent_data)):
+            single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+#            single_evt = lowess.lowess(pd.Series(ts_signal4average), pd.Series(GCaMP_perievent_data[i]), 
+#                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
+            temp_signal_smoothed.append(single_evt)
+        for i in range(len(control_perievent_data)):
+            single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+#            single_evt = lowess.lowess(pd.Series(ts_control4average), pd.Series(control_perievent_data[i]), 
+#                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
+            temp_control_smoothed.append(single_evt)
+        if len(temp_signal_smoothed) > 0 and len(temp_control_smoothed) > 0:
+            GCaMP_perievent_data = temp_signal_smoothed
+            control_perievent_data = temp_control_smoothed
+        print("Done smoothing")
+        
+    # normalize
+    y_dff_all = []
+    # find out how to normalize
+    if settings_dict[0]["normalization"] == 'Standard Polynomial Fitting':
+        # https://github.com/djamesbarker/pMAT
+        for x, y in zip(control_perievent_data, GCaMP_perievent_data):
+            x = np.array(x)
+            y = np.array(y)
+            
+#            bls = np.polyfit(x, y, 1)
+#            fit_line = np.multiply(bls[0], x) + bls[1]
+#            dff = (y - fit_line)/fit_line * 100
+#            y_dff_all.append(dff)
+            
+            # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+            mu = np.mean(x)
+            std = np.std(x, ddof=0)
+            # Call np.polyfit(), using the shifted and scaled version of control_arr
+            cscaled = np.polynomial.polynomial.Polynomial.fit((x - mu)/std, y, 1)
+            # Create a poly1d object that can be called
+            # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            pscaled = Polynomial(cscaled.convert().coef)
+            # Inputs to pscaled must be shifted and scaled using mu and std
+            F0 = pscaled((x - mu)/std)
+        #    print("F0?",F0[:20])
+            dffnorm = (y - F0)/F0 * 100
+            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+            # to make 0 the mean value for DF/F
+            negative = dffnorm[dffnorm<0]
+            dff=dffnorm-np.mean(negative)
+            y_dff_all.append(dff)
+            
+    elif settings_dict[0]["normalization"] == 'Modified Polynomial Fitting':
+        for x, y in zip(control_perievent_data, GCaMP_perievent_data):
+            x = np.array(x)
+            y = np.array(y)
+            
+#            bls_signal = np.polyfit(ts_signal4average, y, 1)
+#            F0_signal = np.multiply(bls_signal[0], ts_signal4average) + bls_signal[1]
+#            dFF_signal = (y - F0_signal)/F0_signal *100
+#             
+#            bls_control = np.polyfit(ts_control4average,x,1)
+#            F0_control = np.multiply(bls_control[0], ts_control4average) + bls_control[1]
+#            dFF_control = (x - F0_control)/F0_control *100
+#            dFFnorm = dFF_signal - dFF_control
+#            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+#            # to make 0 the mean value for DF/F
+#            negative = dFFnorm[dFFnorm<0]
+#            dFF = dFFnorm-np.mean(negative)
+#            y_dff_all.append(dFF)
+             
+             
+            bls_signal = np.polynomial.polynomial.Polynomial.fit(ts_signal4average, y, 1)
+            F0_signal = polyval(ts_signal4average,bls_signal.convert().coef)
+            dFF_signal = (y - F0_signal)/F0_signal *100
+            
+            bls_control = np.polynomial.polynomial.Polynomial.fit(ts_control4average,x,1)
+            F0_control = polyval(ts_control4average,bls_control.convert().coef)
+            dFF_control = (x - F0_control)/F0_control *100
+            dFFnorm = dFF_signal - dFF_control
+            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+            # to make 0 the mean value for DF/F
+            negative = dFFnorm[dFFnorm<0]
+            dFF = dFFnorm-np.mean(negative)
+            y_dff_all.append(dFF)
+    
+                   
+    # get the z-score and standard error(median absolute deviation in pMat)
+    zscore_all = []
+    for dF in y_dff_all:
+       ind = np.where((np.array(ts_control4average)<perievent_options_dict["baseline_to"]) & (np.array(ts_control4average)>perievent_options_dict["baseline_from"]))
+       zb = np.median(dF[ind])
+       mad = stats.median_absolute_deviation(dF[ind])
+       zscore_all.append((dF - zb)/mad)
+    zerror = np.std(zscore_all, axis=0)/np.sqrt(np.size(zscore_all, axis=0))
+    
+#    for dF in y_dff_all:
+#        ind = np.where((np.array(ts_control4average)<perievent_options_dict["baseline_to"]) & (np.array(ts_control4average)>perievent_options_dict["baseline_from"]))
+#        zb = np.mean(dF[ind])
+#        zsd = np.std(dF[ind])
+#        zscore_all.append((dF - zb)/zsd)
+#
+#    zerror = np.std(zscore_all, axis=0)/np.sqrt(np.size(zscore_all, axis=0))
+    
+    # create dictionary with data for z-score plot
+    zscore_data2plot_dict = {}
+    zscore_data2plot_dict["ts"] = ts_control4average
+    zscore_data2plot_dict["zscored"] = zscore_all
+    zscore_data2plot_dict["zerror"] = zerror
+    # add that dict to all analysed data dict
+    analyzed_perievent_dict["zscore"] = zscore_data2plot_dict
+    
+    # Quantify changes as an area under the curve
+    pre_ind = np.where((np.array(ts_control4average)<perievent_options_dict["auc_pre_to"]) & (np.array(ts_control4average)>perievent_options_dict["auc_pre_from"]))
+    AUC_pre = auc(ts_control4average[pre_ind], np.mean(zscore_all, axis=0)[pre_ind])
+    post_ind = np.where((np.array(ts_control4average)>perievent_options_dict["auc_post_from"]) & (np.array(ts_control4average)<perievent_options_dict["auc_post_to"]))
+    AUC_post= auc(ts_control4average[post_ind], np.mean(zscore_all, axis=0)[post_ind])
+    AUC = [AUC_pre, AUC_post]  
+    # run a two-sample T-test
+    t_stat,p_val = stats.ttest_ind(np.mean(zscore_all, axis=0)[pre_ind],
+                               np.mean(zscore_all, axis=0)[post_ind], equal_var=False)
+
+    aucs_pre_by_trial =[]
+    aucs_post_by_trial = []
+    # get single trial aucs
+    for i in range(len(zscore_all)):
+        pre = auc(ts_control4average[pre_ind], zscore_all[i][pre_ind])
+        aucs_pre_by_trial.append(pre)
+        post = auc(ts_control4average[post_ind], zscore_all[i][post_ind])
+        aucs_post_by_trial.append(post)
+
+    # print("pre mean",np.mean(np.asarray(aucs_pre_by_trial)),AUC_pre)
+    # print("post mean",np.mean(np.asarray(aucs_post_by_trial)),AUC_post)
+    AUC_pre_err = np.std(np.asarray(aucs_pre_by_trial)/np.sqrt(len(aucs_pre_by_trial)))
+    AUC_post_err = np.std(np.asarray(aucs_post_by_trial)/np.sqrt(len(aucs_post_by_trial)))
+    # print("errors",AUC_pre_err,AUC_post_err)
+
+    
+    # bin auc data in one second bins
+    # create indexes
+    aucs = []
+    start = -perievent_options_dict["sec_before"]
+    end = start + 1
+    while end < perievent_options_dict["sec_after"]:
+        ind = np.where((np.array(ts_control4average)<end) & (np.array(ts_control4average)>start))
+        my_auc = auc(ts_control4average[ind], np.mean(zscore_all, axis=0)[ind])
+        aucs.append(my_auc)
+        start = end
+        end = start+1
+        
+        
+    
+    # create dictionary with data for AUC plot
+    auc_data2plot_dict = {}
+    auc_data2plot_dict['auc_data'] = AUC
+    auc_data2plot_dict['p'] = p_val
+    auc_data2plot_dict['auc_err_pre'] = AUC_pre_err
+    auc_data2plot_dict['auc_err_post'] = AUC_post_err
+    # add that dict to all analysed data dict
+    analyzed_perievent_dict["auc"] = auc_data2plot_dict
+    analyzed_perievent_dict["auc_by_sec"] = aucs
+    analyzed_perievent_dict["aucs_pre_by_trial"] = aucs_pre_by_trial
+    analyzed_perievent_dict["aucs_post_by_trial"] = aucs_post_by_trial
+        
+    return analyzed_perievent_dict
+    
+    
+def get_settings_df(settings_dict):
+#    self.settings_dict = [{"downsample":10,
+#                              "normalization": "Mulholland dF/F",
+#                              "filter":False,
+#                              "filter_fraction":DEFAULT_SMOOTH_FRAQ}]
+    downsample_no = settings_dict[0]["downsample"]
+    normalization = settings_dict[0]["normalization"]
+    filter_on = settings_dict[0]["filter"]
+    filter_fraction = settings_dict[0]["filter_fraction"]
+    normalization_as = settings_dict[0]["show_norm_as"]
+    subjects = settings_dict[0]["subject"]
+    my_df = pd.DataFrame({"downsample":[downsample_no],
+                          "normalization":[normalization],
+                          "normalization as": normalization_as,
+                          "filter":[filter_on],
+                          "filter fraction":[filter_fraction],
+                          "subjects":subjects})
+    my_df_transposed = my_df.transpose()
+    return my_df_transposed
+
+def get_last_timestamp(raw_data,signal_name):
+    # return numpy array for all GCaMP channel raw data
+    GCaMP_data = get_single_channel(raw_data,signal_name)
+    ###############################
+    # create new timestamps for the data (from zero)
+    ts = create_timestamps(raw_data,signal_name,GCaMP_data)
+
+    return ts[-1]
+
+
+#################################################################################################
+# PLOTS
+
+def plot_raw(canvas,subject,raw_data,signal_name,control_name,export,save_plots,export_loc_data):
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    # return numpy array for all GCaMP channel raw data
+    GCaMP_data = get_single_channel(raw_data,signal_name)
+    # return numpy arrayfor all control raw data
+    control_data = get_single_channel(raw_data,control_name)
+    #########
+    # check
+    # make sure both arrays are the same size
+    len_all_GCaMP = GCaMP_data.size
+    len_all_control = control_data.size
+    # if GCaMP recording is longer, trim it to the control size
+    if len_all_GCaMP > len_all_control:
+        GCaMP_data = GCaMP_data[:len_all_control]
+    # if control data is longer, trim it to GCaMP size
+    elif len_all_GCaMP < len_all_control:
+        control_data = control_data[:len_all_GCaMP]
+    ###############################
+    # create new timestamps for the data (from zero)
+    ts = create_timestamps(raw_data,signal_name,GCaMP_data)
+    
+    # plot
+    ax = canvas.fig.add_subplot(111)
+    ax.cla()  # Clear the canvas
+    # plot the lines
+    ax.plot(ts, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+
+    # create title, axis labels, and legend
+    my_title = 'Raw data: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+#    ax.set_xlim([min(ts),max(ts)])
+#    # Get current tick locations and append last to this array
+#    x_ticks = np.append(ax.get_xticks(), max(ts))
+#    # Set xtick locations to the values of the array `x_ticks`
+#    ax.set_xticks(x_ticks)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_raw.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        sig = "Signal_"+signal_name
+        cont = "Control_"+control_name
+        raw_df= pd.DataFrame({"Time (sec)":ts,
+                                 sig +' (mV)' : GCaMP_data, 
+                                 cont +' (mV)': control_data})
+        raw_df.to_csv(dump_file_path, index=False)  
+            
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_raw.png"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        plot_file_name = file_beginning+"_raw.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw() 
+    
+def plot_trimmed(canvas,subject,signal_dict,export,save_plots,export_loc_data,signal_name,control_name):
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    GCaMP_data = signal_dict["signal"]
+    control_data = signal_dict["control"]
+    ts = signal_dict["ts"]
+
+    total_seconds = ts[-1]-ts[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning + "_raw_trimmed.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        sig = "Signal_"+signal_name
+        cont = "Control_"+control_name
+        raw_df= pd.DataFrame({"Time (sec)":ts_reset,
+                                 sig +' (mV)': GCaMP_data, 
+                                 cont +' (mV)': control_data})
+        raw_df.to_csv(dump_file_path, index=False)  
+    
+    
+#    print(len(GCaMP_data),len(control_data),len(ts))
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+   
+    # plot the lines
+    ax.plot(ts_reset, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    
+    # create title, axis labels, and legend
+    my_title = 'Raw data: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+#    ax.set_xlim([min(ts),max(ts)])
+#    # Get current tick locations and append last to this array
+#    x_ticks = np.append(ax.get_xticks(), max(ts))
+#    # Set xtick locations to the values of the array `x_ticks`
+#    ax.set_xticks(x_ticks)
+#    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning + "_raw_trimmed.png"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        plot_file_name = file_beginning+"_raw_trimmed.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    
+def plot_with_downsampled(canvas,subject,trimmed_signal_dict,downsampled_signal_dict):
+    # trimmed raw data
+    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
+    control_trimmed_data = trimmed_signal_dict["control"]
+    ts_trimmed = trimmed_signal_dict["ts"]
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    
+    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
+    # start time from zero
+    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
+    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax,sharey=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_trimmed,control_trimmed_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot downsampled
+    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset_downsampled,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Raw')
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Downsampled')
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+
+def plot_with_event(canvas,subject,signal_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,signal_name,control_name):
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    try:
+        GCaMP_data = signal_dict["signal"]
+        control_data = signal_dict["control"]
+        ts = signal_dict["ts"]
+    except:
+        # return numpy array for all GCaMP channel raw data
+        GCaMP_data = get_single_channel(signal_dict,signal_name)
+        # return numpy arrayfor all control raw data
+        control_data = get_single_channel(signal_dict,control_name)
+        #########
+        # check
+        # make sure both arrays are the same size
+        len_all_GCaMP = GCaMP_data.size
+        len_all_control = control_data.size
+        # if GCaMP recording is longer, trim it to the control size
+        if len_all_GCaMP > len_all_control:
+            GCaMP_data = GCaMP_data[:len_all_control]
+        # if control data is longer, trim it to GCaMP size
+        elif len_all_GCaMP < len_all_control:
+            control_data = control_data[:len_all_GCaMP]
+        ###############################
+        # create new timestamps for the data (from zero)
+        ts = create_timestamps(signal_dict,signal_name,GCaMP_data)
+        
+    total_seconds = ts[-1]-ts[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    
+    # plot the lines
+    ax.plot(ts_reset, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Raw data: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+#    ax.set_xlim([min(ts),max(ts)])
+#    # Get current tick locations and append last to this array
+#    x_ticks = np.append(ax.get_xticks(), max(ts))
+#    # Set xtick locations to the values of the array `x_ticks`
+#    ax.set_xticks(x_ticks)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_raw.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        sig = "Signal_"+signal_name
+        cont = "Control_"+control_name
+        raw_df= pd.DataFrame({"Time (sec)":ts_reset,
+                                 sig +' (mV)': GCaMP_data, 
+                                 cont +' (mV)': control_data})
+        raw_df.to_csv(dump_file_path, index=False)  
+        
+        event1_file = file_beginning+"_"+event_name+".csv"
+        dump_file_path = os.path.join(dump_path,event1_file)
+        evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
+                                    "offset (s)" : first_evt_offset_translated})
+        evt1_df.to_csv(dump_file_path, index=False)
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            event2_file = file_beginning+"_"+event2_name+".csv"
+            dump_file_path = os.path.join(dump_path,event2_file)
+            evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
+                                       "offset (s)" : second_evt_offset_translated})
+            evt2_df.to_csv(dump_file_path, index=False)
+            
+    if export == True and save_plots == True:
+        if event2_name == "---":
+            plot_file_name = file_beginning+"_raw_"+event_name+".png"
+            plot_file_name2 = file_beginning+"_raw_"+event_name+".svg"
+        else:
+            plot_file_name = file_beginning+"_raw_"+event_name+"_"+event2_name+".png"
+            plot_file_name2 = file_beginning+"_raw_"+event_name+".svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+        
+    else:
+        canvas.draw() 
+    
+
+def plot_with_downsampled_with_event(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,event_name,event2_name,event_data):
+    # trimmed raw data
+    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
+    control_trimmed_data = trimmed_signal_dict["control"]
+    ts_trimmed = trimmed_signal_dict["ts"]
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    
+    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
+    # start time from zero
+    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
+    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    
+    # plot
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax,sharey=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_trimmed,control_trimmed_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot downsampled
+    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset_downsampled,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts_trimmed[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts_trimmed[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts_trimmed[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts_trimmed[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        ctr1 = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset_trimmed[0] and first_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+            if first_evt_onset_translated[i] >= ts_reset_downsampled[0] and first_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
+                if ctr1 == 0:  # label only first one for the legend
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr1+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            ctr1 = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset_trimmed[0] and second_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+                if second_evt_onset_translated[i] >= ts_reset_downsampled[0] and second_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
+                    if ctr1 == 0:  # label only first one for the legend
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr1+=1
+                    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Raw')
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Downsampled')
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_with_downsampled_with_normalized(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,normalized_dict,show_norm_as):
+    # trimmed raw data
+    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
+    control_trimmed_data = trimmed_signal_dict["control"]
+    ts_trimmed = trimmed_signal_dict["ts"]
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    # normalized
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
+    # start time from zero
+    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
+    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+     
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax,sharey=ax)
+    ax3 = canvas.fig.add_subplot(313,sharex=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_trimmed,control_trimmed_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot downsampled
+    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset_downsampled,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    ax3.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Raw')
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Downsampled')
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax3.title.set_text("Normalized")
+    ax3.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax3.set_ylabel("Z-Score",fontsize=12)
+    ax3.set_xlabel('Time (sec)', fontsize=12)
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_with_downsampled_with_normalized_with_event(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,normalized_dict,show_norm_as,event_name,event2_name,event_data):
+    # trimmed raw data
+    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
+    control_trimmed_data = trimmed_signal_dict["control"]
+    ts_trimmed = trimmed_signal_dict["ts"]
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    # normalized
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
+    # start time from zero
+    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
+    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax,sharey=ax)
+    ax3 = canvas.fig.add_subplot(313,sharex=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_trimmed,control_trimmed_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot downsampled
+    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset_downsampled,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    ax3.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts_trimmed[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts_trimmed[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts_trimmed[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts_trimmed[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        ctr1 = 0
+        ctr2 = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset_trimmed[0] and first_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+            if first_evt_onset_translated[i] >= ts_reset_downsampled[0] and first_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
+                if ctr1 == 0:  # label only first one for the legend
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr1+=1
+            if first_evt_onset_translated[i] >= ts_reset_normalized[0] and first_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                if ctr2 == 0:  # label only first one for the legend
+                    ax3.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax3.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr2+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            ctr1 = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset_trimmed[0] and second_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+                if second_evt_onset_translated[i] >= ts_reset_downsampled[0] and second_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
+                    if ctr1 == 0:  # label only first one for the legend
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr1+=1
+                if second_evt_onset_translated[i] >= ts_reset_normalized[0] and second_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                    if ctr2 == 0:  # label only first one for the legend
+                        ax3.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax3.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr2+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Raw')
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Downsampled')
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax3.title.set_text("Normalized")
+    ax3.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax3.set_ylabel("Z-Score",fontsize=12)
+    ax3.set_xlabel('Time (sec)', fontsize=12)
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_with_normalized(canvas,subject,trimmed_signal_dict,normalized_dict,show_norm_as):
+    # trimmed raw data
+    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
+    control_trimmed_data = trimmed_signal_dict["control"]
+    ts_trimmed = trimmed_signal_dict["ts"]
+    # downsampled data
+    # normalized
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
+    # start time from zero
+    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_trimmed,control_trimmed_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot downsampled
+    ax2.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Raw')
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Normalized')
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax2.set_ylabel("Z-Score",fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_with_normalized_with_event(canvas,subject,trimmed_signal_dict,normalized_dict,show_norm_as,event_name,event2_name,event_data):
+    # trimmed raw data
+    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
+    control_trimmed_data = trimmed_signal_dict["control"]
+    ts_trimmed = trimmed_signal_dict["ts"]
+    # downsampled data
+    # normalized
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
+    # start time from zero
+    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_trimmed,control_trimmed_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot downsampled
+    ax2.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts_trimmed[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts_trimmed[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts_trimmed[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts_trimmed[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        ctr1 = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset_trimmed[0] and first_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+            if first_evt_onset_translated[i] >= ts_reset_normalized[0] and first_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                if ctr1 == 0:  # label only first one for the legend
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr1+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            ctr1 = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset_trimmed[0] and second_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+                if second_evt_onset_translated[i] >= ts_reset_normalized[0] and second_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                    if ctr1 == 0:  # label only first one for the legend
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr1+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Raw')
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Normalized')
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax2.set_ylabel("Z-Score",fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE)  
+    canvas.draw()
+    
+def plot_downsampled_alone(canvas,subject,downsampled_signal_dict,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
+    settings_dict[0]["subject"] = subject
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    total_seconds = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+
+    # plot downsampled
+    ax.plot(ts_reset,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Downsampled')
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_downsampled_trimmed.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        sig = "Signal_"+signal_name
+        cont = "Control_"+control_name
+        raw_df= pd.DataFrame({"Time (seconds)":ts_reset,
+                                 sig +' (mV)': GCaMP_downsampled_data, 
+                                 cont +' (mV)': control_downsampled_data})
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a')
+              
+                 
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_downsampled_trimmed.png"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        plot_file_name = file_beginning+"_downsampled_trimmed.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+
+    
+def plot_downsampled_alone_with_event(canvas,subject,downsampled_signal_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
+    settings_dict[0]["subject"] = subject
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    total_seconds = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+
+    # plot downsampled
+    ax.plot(ts_reset,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts_downsampled[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts_downsampled[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts_downsampled[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts_downsampled[0] for el in second_evt_offset]
+    
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Downsampled')
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_downsampled_trimmed.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        sig = "Signal_"+signal_name
+        cont = "Control_"+control_name
+        raw_df= pd.DataFrame({"Time (sec)":ts_reset,
+                                 sig +' (mV)': GCaMP_downsampled_data, 
+                                 cont +' (mV)': control_downsampled_data})
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a')
+            
+        event1_file = file_beginning+"_"+event_name+".csv"
+        dump_file_path = os.path.join(dump_path,event1_file)
+        evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
+                                    "offset (s)" : first_evt_offset_translated})
+        evt1_df.to_csv(dump_file_path, index=False)
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            event2_file = file_beginning+"_"+event2_name+".csv"
+            dump_file_path = os.path.join(dump_path,event2_file)
+            evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
+                                       "offset (s)" : second_evt_offset_translated})
+            evt2_df.to_csv(dump_file_path, index=False)
+            
+    if export == True and save_plots == True:
+        if event2_name == "---":
+            plot_file_name = file_beginning+"_downsampled_trimmed_"+event_name+".png"
+            plot_file_name2 = file_beginning+"_downsampled_trimmed_"+event_name+".svg"
+        else:
+            plot_file_name = file_beginning+"_downsampled_trimmed_"+event_name+"_"+event2_name+".png"
+            plot_file_name2 = file_beginning+"_downsampled_trimmed_"+event_name+"_"+event2_name+".svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw() 
+
+    
+def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,export_loc_data,settings_dict):
+    settings_dict[0]["subject"] = subject
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    # normalized data
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    
+    total_seconds = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot downsampled that starts from zero
+    ax.plot(ts_reset,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Normalized')
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax.set_ylabel("Z-Score",fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_normalized.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+subject+"_normalized.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        raw_df= pd.DataFrame({"Time (sec)":ts_reset,
+                                 "normalized" : normalized_data})
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_normalized.png"
+        plot_file_name2 = file_beginning+"_normalized.svg"
+        if file_beginning != subject:
+            plot_file_name = file_beginning+"_"+subject+"_normalized.png"
+            plot_file_name2 = file_beginning+"_"+subject+"_normalized.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    
+def plot_normalized_alone_with_event(canvas,subject,normalized_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,settings_dict):
+    settings_dict[0]["subject"] = subject
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    # a tuple path+file beginning
+    dump_path,file_beginning = export_loc_data
+    # normalized data
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    
+    total_seconds = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot downsampled
+    ax.plot(ts_reset,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+
+#    # plot downsampled
+#    ax.plot(ts_normalized,normalized_data,
+#             color='green',
+#             linewidth=1,
+#             label = "normalized")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts_normalized[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts_normalized[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts_normalized[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts_normalized[0] for el in second_evt_offset]
+    
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Normalized')
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax.set_ylabel("Z-Score",fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_normalized.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+subject+"_normalized.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        raw_df= pd.DataFrame({"Time (sec)":ts_reset,
+                                 "normalized" : normalized_data})
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+                f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a')
+            
+        event1_file = file_beginning+"_"+event_name+".csv"
+        dump_file_path = os.path.join(dump_path,event1_file)
+        evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
+                                    "offset (s)" : first_evt_offset_translated})
+        evt1_df.to_csv(dump_file_path, index=False)
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            event2_file = file_beginning+"_"+event2_name+".csv"
+            dump_file_path = os.path.join(dump_path,event2_file)
+            evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
+                                       "offset (s)" : second_evt_offset_translated})
+            evt2_df.to_csv(dump_file_path, index=False)
+            
+    if export == True and save_plots == True:
+        if event2_name == "---":
+            plot_file_name = file_beginning+"_normalized_"+event_name+".png"
+            plot_file_name2 = file_beginning+"_normalized_"+event_name+".svg"
+            if file_beginning != subject:
+                plot_file_name = file_beginning+"_"+subject+"_normalized_"+event_name+".png"
+                plot_file_name2 = file_beginning+"_"+subject+"_normalized_"+event_name+".svg"
+        else:
+            plot_file_name = file_beginning+"_normalized_"+event_name+"_"+event2_name+".png"
+            plot_file_name2 = file_beginning+"_normalized_"+event_name+"_"+event2_name+".svg"
+            if file_beginning != subject:
+                plot_file_name = file_beginning+"_"+subject+"_normalized_"+event_name+"_"+event2_name+".png"
+                plot_file_name2 = file_beginning+"_"+subject+"_normalized_"+event_name+"_"+event2_name+".svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw() 
+    
+    
+def plot_downsampled_and_normalized_alone(canvas,subject,downsampled_signal_dict,normalized_dict,show_norm_as):
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    # normalized data
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
+    
+    # plot downsampled
+    ax.plot(ts_reset_downsampled,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_downsampled,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    ax2.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Downsampled')
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Normalized')
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax2.set_ylabel("Z-Score",fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_downsampled_and_normalized_with_event(canvas,subject,downsampled_signal_dict,normalized_dict,show_norm_as,event_name,event2_name,event_data):
+    # downsampled data
+    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
+    control_downsampled_data = downsampled_signal_dict["control"]
+    ts_downsampled = downsampled_signal_dict["ts"]
+    # normalized data
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
+    # start time from zero
+    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
+    
+    # plot downsampled
+    ax.plot(ts_reset_downsampled,GCaMP_downsampled_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_reset_downsampled,control_downsampled_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    ax2.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts_downsampled[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts_downsampled[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts_downsampled[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts_downsampled[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        ctr1 = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset_downsampled[0] and first_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+            if first_evt_onset_translated[i] >= ts_reset_normalized[0] and first_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                if ctr1 == 0:  # label only first one for the legend
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr1+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            ctr1 = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset_downsampled[0] and second_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+                if second_evt_onset_translated[i] >= ts_reset_normalized[0] and second_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                    if ctr1 == 0:  # label only first one for the legend
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr1+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.title.set_text('Downsampled')
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.title.set_text('Normalized')
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax2.set_ylabel("Z-Score",fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_separate_only(canvas,subject,trimmed_signal_dict,downsampled_signal_dict):
+    # if there is downsampled data plot that
+    if subject in downsampled_signal_dict:
+        GCaMP_data = downsampled_signal_dict["signal"]
+        control_data = downsampled_signal_dict["control"]
+        ts = downsampled_signal_dict["ts"]
+    else:
+        # trimmed raw data
+        GCaMP_data = trimmed_signal_dict["signal"]
+        control_data = trimmed_signal_dict["control"]
+        ts = trimmed_signal_dict["ts"]
+        
+    total_seconds = ts[-1]-ts[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+        
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # show only integer ticks
+    ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_separate_with_event(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,event_name,event2_name,event_data):
+    # if there is downsampled data plot that
+    if subject in downsampled_signal_dict:
+        GCaMP_data = downsampled_signal_dict["signal"]
+        control_data = downsampled_signal_dict["control"]
+        ts = downsampled_signal_dict["ts"]
+    else:
+        # trimmed raw data
+        GCaMP_data = trimmed_signal_dict["signal"]
+        control_data = trimmed_signal_dict["control"]
+        ts = trimmed_signal_dict["ts"]
+    total_seconds = ts[-1]-ts[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
+
+    # plot the trimmed 
+    ax.plot(ts_reset, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+                           
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    # show only integer ticks
+    ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_separate_with_normalized(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,normalized_dict,show_norm_as):
+    # if there is downsampled data plot that
+    if subject in downsampled_signal_dict:
+        GCaMP_data = downsampled_signal_dict["signal"]
+        control_data = downsampled_signal_dict["control"]
+        ts = downsampled_signal_dict["ts"]
+    else:
+        # trimmed raw data
+        GCaMP_data = trimmed_signal_dict["signal"]
+        control_data = trimmed_signal_dict["control"]
+        ts = trimmed_signal_dict["ts"]
+    # get normalized data to plot
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds = ts[-1]-ts[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+        
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax)
+    ax3 = canvas.fig.add_subplot(313,sharex=ax)
+
+    ax.plot(ts_reset, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    ax3.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax3.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax3.set_ylabel("Z-Score",fontsize=12)
+    ax3.set_xlabel('Time (sec)', fontsize=12)
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,normalized_dict,show_norm_as,event_name,event2_name,event_data):
+    # if there is downsampled data plot that
+    if subject in downsampled_signal_dict:
+        GCaMP_data = downsampled_signal_dict["signal"]
+        control_data = downsampled_signal_dict["control"]
+        ts = downsampled_signal_dict["ts"]
+    else:
+        # trimmed raw data
+        GCaMP_data = trimmed_signal_dict["signal"]
+        control_data = trimmed_signal_dict["control"]
+        ts = trimmed_signal_dict["ts"]
+    # get normalized data to plot
+    normalized_data = normalized_dict["normalized_signal"]
+    ts_normalized = normalized_dict["ts"]
+    
+    total_seconds = ts[-1]-ts[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
+    # start time from zero
+    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
+        
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax)
+    ax3 = canvas.fig.add_subplot(313,sharex=ax)
+
+    ax.plot(ts_reset, GCaMP_data,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax2.plot(ts_reset,control_data,
+             color='red',
+             linewidth=1,
+             label = "control")
+    ax3.plot(ts_reset_normalized,normalized_data,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    
+    # get accurate event data timing
+    first_evt_onset = event_data[0][0]
+    first_evt_onset_translated = [el-ts[0] for el in first_evt_onset]
+    first_evt_offset = event_data[0][1]
+    first_evt_offset_translated = [el-ts[0] for el in first_evt_offset]
+    if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        second_evt_onset = event_data[1][0]
+        second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
+        second_evt_offset = event_data[1][1]
+        second_evt_offset_translated = [el-ts[0] for el in second_evt_offset]
+        
+    if len(first_evt_onset) > 0:
+        # first event
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        ctr1 = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+            if first_evt_onset_translated[i] >= ts_reset_normalized[0] and first_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                if ctr1 == 0:  # label only first one for the legend
+                    ax3.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
+                else:
+                    ax3.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr1+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            ctr1 = 0
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+                if second_evt_onset_translated[i] >= ts_reset_normalized[0] and second_evt_onset_translated[i] <= ts_reset_normalized[-1]:
+                    if ctr1 == 0:  # label only first one for the legend
+                        ax3.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
+                    else:
+                        ax3.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr1+=1
+    
+    # create title, axis labels, and legend
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('mV', fontsize=12)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax3.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax3.set_ylabel("Z-Score",fontsize=12)
+    ax3.set_xlabel('Time (sec)', fontsize=12)
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+# plot rwa but downsampled perievents
+def plot_raw_perievents(canvas,subject,modified_data,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,subject_data_path,export_loc_data):
+    settings_dict[0]["subject"] = subject
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    dump_path,file_beginning = export_loc_data
+    raw_df = None
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    GCaMP_perievent_data = modified_data.streams[signal_name].filtered_downsampled
+    control_perievent_data = modified_data.streams[control_name].filtered_downsampled
+    # debug to assert that all perievent data is the same lenght
+#    for i in range(len(GCaMP_perievent_data)):
+#        print(len(GCaMP_perievent_data[i]))
+    N = settings_dict[0]["downsample"]
+    ts1 = -perievent_options_dict["sec_before"] + np.linspace(1, len(GCaMP_perievent_data[0]), len(GCaMP_perievent_data[0]))/modified_data.streams[signal_name].fs*N
+    ts2 = -perievent_options_dict["sec_before"] + np.linspace(1, len(control_perievent_data[0]), len(control_perievent_data[0]))/modified_data.streams[control_name].fs*N
+    total_plots = len(GCaMP_perievent_data) # total number of events
+    
+    if settings_dict[0]["filter"] == True:
+        print("Start smoothing",settings_dict[0]["filter_fraction"])
+        # smooth data using lowess filter
+        temp_signal_smoothed = []
+        temp_control_smoothed = []
+        for i in range(len(GCaMP_perievent_data)):
+            single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+#            single_evt = lowess.lowess(pd.Series(ts_signal4average), pd.Series(GCaMP_perievent_data[i]), 
+#                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
+            temp_signal_smoothed.append(single_evt)
+        for i in range(len(control_perievent_data)):
+            single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+#            single_evt = lowess.lowess(pd.Series(ts_control4average), pd.Series(control_perievent_data[i]), 
+#                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
+            temp_control_smoothed.append(single_evt)
+        if len(temp_signal_smoothed) > 0 and len(temp_control_smoothed) > 0:
+            GCaMP_perievent_data = temp_signal_smoothed
+            control_perievent_data = temp_control_smoothed
+        print("Done smoothing")
+        
+    # normalize
+    y_dff_all = []
+    # find out how to normalize
+    if settings_dict[0]["normalization"] == 'Standard Polynomial Fitting':
+        # https://github.com/djamesbarker/pMAT
+        for x, y in zip(control_perievent_data, GCaMP_perievent_data):
+            x = np.array(x)
+            y = np.array(y)
+#            bls = np.polyfit(x, y, 1)
+#            fit_line = np.multiply(bls[0], x) + bls[1]
+#            dff = (y - fit_line)/fit_line * 100
+#            y_dff_all.append(dff)
+            
+            # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+            mu = np.mean(x)
+            std = np.std(x, ddof=0)
+            # Call np.polyfit(), using the shifted and scaled version of control_arr
+            cscaled = np.polynomial.polynomial.Polynomial.fit((x - mu)/std, y, 1)
+            # Create a poly1d object that can be called
+            # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            pscaled = Polynomial(cscaled.convert().coef)
+            # Inputs to pscaled must be shifted and scaled using mu and std
+            F0 = pscaled((x - mu)/std)
+        #    print("F0?",F0[:20])
+            dffnorm = (y - F0)/F0 * 100
+            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+            # to make 0 the mean value for DF/F
+            negative = dffnorm[dffnorm<0]
+            dff=dffnorm-np.mean(negative)
+
+            if show_norm_as == "Z-Score":
+                median_all = np.median(dff)
+                mad = stats.median_absolute_deviation(dff)
+                dff = (dff - median_all)/mad
+
+            y_dff_all.append(dff)
+            
+    elif settings_dict[0]["normalization"] == 'Modified Polynomial Fitting':
+        for x, y in zip(control_perievent_data, GCaMP_perievent_data):
+            x = np.array(x)
+            y = np.array(y)
+            bls_signal = np.polynomial.polynomial.Polynomial.fit(ts1, y, 1)
+            F0_signal = polyval(ts1,bls_signal.convert().coef)
+            dFF_signal = (y - F0_signal)/F0_signal *100
+            
+            bls_control = np.polynomial.polynomial.Polynomial.fit(ts2,x,1)
+            F0_control = polyval(ts2,bls_control.convert().coef)
+            dFF_control = (x - F0_control)/F0_control *100
+            dFFnorm = dFF_signal - dFF_control
+            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+            # to make 0 the mean value for DF/F
+            negative = dFFnorm[dFFnorm<0]
+            dFF = dFFnorm-np.mean(negative)
+
+            if show_norm_as == "Z-Score":
+                median_all = np.median(dff)
+                mad = stats.median_absolute_deviation(dff)
+                dff = (dff - median_all)/mad
+
+            y_dff_all.append(dFF)
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    
+    # plot 3 in the same row. Idea for layout from:
+    # https://towardsdatascience.com/customizing-multiple-subplots-in-matplotlib-a3e1c2e099bc
+    coord = []# create coord array from 231, 232, 233, ..., 236 
+    column = 3
+    if total_plots == 1: # if there is only single event, plot in one column
+        column = 1
+    if total_plots == 2: # if there are just two, plot in two columns
+        column = 2
+    for i in range(1, total_plots+1): 
+        row = math.ceil(total_plots/3)
+        coord.append(str(row)+str(column)+str(i))
+    first_ax = None
+    # create subplots
+    for i in range(len(coord)):
+        if i == 0: # remember for sharing axis
+            ax = canvas.fig.add_subplot(coord[i])
+            first_ax = ax
+        else:
+            ax = canvas.fig.add_subplot(coord[i],sharex=first_ax, sharey=first_ax)
+
+        ax.plot(ts1,y_dff_all[i],color='green',linewidth=1,label = "normalized\nsignal")
+        # plot event as vertical line
+        p3=ax.axvline(x=0, linewidth=2, color='k', alpha=0.5,label=event_name)
+        # hide top and right border
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.title.set_text('Trial: '+str(i+1))
+        ax.set_xlabel('Time (sec)', fontsize=12)
+        ax.set_ylabel('dF/F (%)', fontsize=12)
+        if show_norm_as == "Z-Score":
+            ax.set_ylabel('Z-Score', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+        
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE)   
+    # create a list of dataframes to join later
+    dfs = []
+    time_df = pd.DataFrame({"Time (sec)":ts1})
+    dfs.append(time_df)
+    for i in range(total_plots):
+        header_signal = "Trial"+str(i+1)
+        signal_data = y_dff_all[i]
+        df = pd.DataFrame({header_signal:signal_data})
+        dfs.append(df)
+    raw_df= pd.concat(dfs,axis=1)
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_"+event_name+"_all_perievent_normalized.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+subject+ "_"+event_name+"_all_perievent_normalized.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a')
+  
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_"+ event_name + "_all_perievent_normalized.png"
+        plot_file_name2 = file_beginning+"_"+ event_name + "_all_perievent_normalized.svg"
+        if file_beginning != subject:
+           plot_file_name = file_beginning+"_"+ subject+"_"+event_name + "_all_perievent_normalized.png" 
+           plot_file_name2 = file_beginning+"_"+ subject+"_"+event_name + "_all_perievent_normalized.svg" 
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    return raw_df
+        
+    
+
+def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,subject_data_path,settings_dict,signal_name,control_name,export_loc_data):
+    settings_dict[0]["subject"] = subject
+    dump_path,file_beginning = export_loc_data
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get data to plot
+    ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
+    ts_control = analyzed_perievent_dict["average"]["ts_control"]
+    signal = analyzed_perievent_dict["average"]["signal"]
+    control = analyzed_perievent_dict["average"]["control"]
+    std_signal = analyzed_perievent_dict["average"]["std_signal"]
+    std_control = analyzed_perievent_dict["average"]["std_control"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    ax.plot(ts_signal, signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_control, control,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
+                      facecolor='green', alpha=0.1)
+    ax.fill_between(ts_control, control+std_control, control-std_control,
+                      facecolor='red', alpha=0.1)
+    
+    my_title = 'Average From All Trials. Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_"+ event_name+"_average_perievent.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+ subject+"_"+event_name+"_average_perievent.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        sig = "Signal_"+signal_name
+        cont = "Control_"+control_name
+        raw_df= pd.DataFrame({"Time (sec)":ts_signal,
+                                 sig +' (mV)': signal, 
+                                 cont +' (mV)': control})
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a')  
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_"+ event_name+"_average_perievent.png"
+        plot_file_name2 = file_beginning+"_"+ event_name+"_average_perievent.svg"
+        if file_beginning != subject:
+            plot_file_name = file_beginning+"_"+ subject+"_"+event_name+"_average_perievent.png"
+            plot_file_name2 = file_beginning+"_"+ subject+"_"+event_name+"_average_perievent.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    
+    
+def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+    settings_dict[0]["subject"] = subject
+    dump_path,file_beginning = export_loc_data    
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    raw_df = None
+    # get data to plot
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212)
+   
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    mean_zscore = np.mean(zscore_all, axis=0)
+    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Mean Z-Score')
+    ax2.fill_between(ts, mean_zscore+zerror,
+                          mean_zscore-zerror, facecolor='green', alpha=0.2, label="Standard\nerror")
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+  
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Individual z-Score Traces')
+    ax.set_ylabel('Trials')
+    ax.set_xlabel('Seconds from Event Onset')
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_ylabel('z-Score')
+    ax2.set_xlabel('Seconds')
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    # create a list of dataframes to join later
+    dfs = []
+    # add time
+    time_df = pd.DataFrame({"Time (sec)":ts})
+    dfs.append(time_df)
+    for i in range(len(zscore_all)):
+        header = "Trial"+str(i+1)+"_zscore"
+        data = zscore_all[i]
+        df = pd.DataFrame({header:data})
+        dfs.append(df)
+    # add mean
+    mean_df = pd.DataFrame({"Mean_zscore":mean_zscore,
+                                "Error":zerror})
+    dfs.append(mean_df)
+    raw_df= pd.concat(dfs,axis=1)
+#    print("In zscore")
+#    print(raw_df)
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_"+ event_name + "_perievent_zscore.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+ subject+"_"+event_name + "_perievent_zscore.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+            
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_"+ event_name + "_perievent_zscore.png"
+        plot_file_name2 = file_beginning+"_"+ event_name + "_perievent_zscore.svg"
+        if file_beginning != subject:
+            plot_file_name = file_beginning+"_"+ subject+"_"+event_name + "_perievent_zscore.png"
+            plot_file_name2 = file_beginning+"_"+ subject+"_"+event_name + "_perievent_zscore.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    return raw_df
+
+def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+    settings_dict[0]["subject"] = subject
+    dump_path,file_beginning = export_loc_data    
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    raw_df = None
+    # get data to plot
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212)
+   
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    mean_zscore = np.mean(zscore_all, axis=0)
+    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Mean Z-Score')
+    # plot all trials
+    for i in range(len(zscore_all)):
+        if i == 0:
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+        else:
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+  
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Individual z-Score Traces')
+    ax.set_ylabel('Trials')
+    ax.set_xlabel('Seconds from Event Onset')
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_ylabel('z-Score')
+    ax2.set_xlabel('Seconds')
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    # create a list of dataframes to join later
+    dfs = []
+    # add time
+    time_df = pd.DataFrame({"Time (sec)":ts})
+    dfs.append(time_df)
+    for i in range(len(zscore_all)):
+        header = "Trial"+str(i+1)+"_zscore"
+        data = zscore_all[i]
+        df = pd.DataFrame({header:data})
+        dfs.append(df)
+    # add mean
+    mean_df = pd.DataFrame({"Mean_zscore":mean_zscore,
+                                "Error":zerror})
+    dfs.append(mean_df)
+    raw_df= pd.concat(dfs,axis=1)
+#    print("In zscore")
+#    print(raw_df)
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_"+ event_name + "_perievent_zscore.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+ subject+"_"+event_name + "_perievent_zscore.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+            
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_"+ event_name + "_perievent_zscore.png"
+        plot_file_name2 = file_beginning+"_"+ event_name + "_perievent_zscore.svg"
+        if file_beginning != subject:
+            plot_file_name = file_beginning+"_"+ subject+"_"+event_name + "_perievent_zscore.png"
+            plot_file_name2 = file_beginning+"_"+ subject+"_"+event_name + "_perievent_zscore.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    return raw_df    
+    
+def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    
+    # get data to plot avg
+    ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
+    ts_control = analyzed_perievent_dict["average"]["ts_control"]
+    signal = analyzed_perievent_dict["average"]["signal"]
+    control = analyzed_perievent_dict["average"]["control"]
+    std_signal = analyzed_perievent_dict["average"]["std_signal"]
+    std_control = analyzed_perievent_dict["average"]["std_control"]
+    # zscore
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312)
+    ax3 = canvas.fig.add_subplot(313)
+    
+    # average
+    ax.plot(ts_signal, signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_control, control,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
+                      facecolor='green', alpha=0.1)
+    ax.fill_between(ts_control, control+std_control, control-std_control,
+                      facecolor='red', alpha=0.1)
+    
+    # zscore
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    ax3.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
+                          ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2, label="Standard\nerror")
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label='Event Onset')
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Average From All Trials')
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_title('Individual z-Score Traces')
+    ax2.set_ylabel('Trials')
+    ax2.set_xlabel('Seconds from Event Onset')
+    # hide top and right border
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.set_ylabel('z-Score')
+    ax3.set_xlabel('Seconds')
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    
+    # get data to plot avg
+    ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
+    ts_control = analyzed_perievent_dict["average"]["ts_control"]
+    signal = analyzed_perievent_dict["average"]["signal"]
+    control = analyzed_perievent_dict["average"]["control"]
+    std_signal = analyzed_perievent_dict["average"]["std_signal"]
+    std_control = analyzed_perievent_dict["average"]["std_control"]
+    # zscore
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312)
+    ax3 = canvas.fig.add_subplot(313)
+    
+    # average
+    ax.plot(ts_signal, signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_control, control,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
+                      facecolor='green', alpha=0.1)
+    ax.fill_between(ts_control, control+std_control, control-std_control,
+                      facecolor='red', alpha=0.1)
+    
+    # zscore
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    # plot all trials
+    for i in range(len(zscore_all)):
+        if i == 0:
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+        else:
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label='Event Onset')
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Average From All Trials')
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_title('Individual z-Score Traces')
+    ax2.set_ylabel('Trials')
+    ax2.set_xlabel('Seconds from Event Onset')
+    # hide top and right border
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.set_ylabel('z-Score')
+    ax3.set_xlabel('Seconds')
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,subject_data_path,settings_dict,export_loc_data):   
+    settings_dict[0]["subject"] = subject
+    dump_path,file_beginning = export_loc_data 
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get data to plot
+    AUC = analyzed_perievent_dict["auc"]["auc_data"]
+    p = analyzed_perievent_dict["auc"]["p"]
+    AUC_err_pre = analyzed_perievent_dict["auc"]["auc_err_pre"]
+    AUC_err_post = analyzed_perievent_dict["auc"]["auc_err_post"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    # polt bars with error bars
+    ax.bar(np.arange(len(AUC)), AUC,
+           color=[.8, .8, .8], align='center', alpha=0.5)
+    ax.axhline(y=0, linewidth=0.5, color='k')
+    ax.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+        
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_ylim(min(AUC)-2*h, y+2*h)
+    ax.set_ylabel('AUC')
+    ax.set_title('Pre vs Post')
+    ax.set_xticks(np.arange(-1, len(AUC)+1))
+    ax.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax.set_yticks([min(AUC),max(AUC)])
+    
+    # create subfolder in current subject folder
+    if export == True:
+        file_name = file_beginning+"_"+ event_name+"_area_under_curve_perievent.csv"
+        if file_beginning != subject:
+            file_name = file_beginning+"_"+ subject+"_"+event_name+"_area_under_curve_perievent.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        # raw_df= pd.DataFrame({"pre_AUC":[AUC[0]],
+        #                          "post_AUC" : [AUC[1]]})
+         # save each trial's auc instead
+        raw_df= pd.DataFrame({"Trial":[i+1 for i in range(len(analyzed_perievent_dict["aucs_pre_by_trial"]))],
+                                    "Pre_AUC" : analyzed_perievent_dict["aucs_pre_by_trial"],
+                                    "Post_AUC":analyzed_perievent_dict["aucs_post_by_trial"]})
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+        # export also auc binned in one second bins
+        sec_auc_df = pd.DataFrame({"One second bins AUC":analyzed_perievent_dict["auc_by_sec"]})
+        auc_file_name = file_beginning+"_"+ subject+"_"+event_name+"_auc_one_second_bins.csv"
+        if file_beginning == subject:
+            auc_file_name = file_beginning+"_"+event_name+"_auc_one_second_bins.csv"
+        dump_file_path = os.path.join(dump_path,auc_file_name)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        sec_auc_df.to_csv(dump_file_path, index=False,mode='a') 
+             
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning+"_"+ event_name+"_area_under_curve_perievent.png"
+        plot_file_name2 = file_beginning+"_"+ event_name+"_area_under_curve_perievent.svg"
+        if file_beginning != subject:
+            plot_file_name = file_beginning+"_"+ subject+"_"+ event_name+"_area_under_curve_perievent.png"
+            plot_file_name2 = file_beginning+"_"+ subject+"_"+ event_name+"_area_under_curve_perievent.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    
+    
+def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_perievent_dict):       
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get avg data to plot
+    ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
+    ts_control = analyzed_perievent_dict["average"]["ts_control"]
+    signal = analyzed_perievent_dict["average"]["signal"]
+    control = analyzed_perievent_dict["average"]["control"]
+    std_signal = analyzed_perievent_dict["average"]["std_signal"]
+    std_control = analyzed_perievent_dict["average"]["std_control"]
+    # AUC data
+    AUC = analyzed_perievent_dict["auc"]["auc_data"]
+    p = analyzed_perievent_dict["auc"]["p"]
+    AUC_err_pre = analyzed_perievent_dict["auc"]["auc_err_pre"]
+    AUC_err_post = analyzed_perievent_dict["auc"]["auc_err_post"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212)
+    
+    ax.plot(ts_signal, signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_control, control,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
+                      facecolor='green', alpha=0.1)
+    ax.fill_between(ts_control, control+std_control, control-std_control,
+                      facecolor='red', alpha=0.1)
+    # polt bars with error bars
+    ax2.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
+    ax2.axhline(y=0, linewidth=0.5, color='k')
+    ax2.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax2.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax2.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+        
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Average From All Trials')
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.spines['bottom'].set_visible(False)
+    ax2.set_ylim(min(AUC)-2*h, y+2*h)
+    ax2.set_ylabel('AUC')
+    ax2.set_title('Pre vs Post')
+    ax2.set_xticks(np.arange(-1, len(AUC)+1))
+    ax2.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax2.set_yticks([min(AUC),max(AUC)])
+    
+    canvas.draw()
+    
+def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get data to plot
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    # AUC data
+    AUC = analyzed_perievent_dict["auc"]["auc_data"]
+    p = analyzed_perievent_dict["auc"]["p"]
+    AUC_err_pre = analyzed_perievent_dict["auc"]["auc_err_pre"]
+    AUC_err_post = analyzed_perievent_dict["auc"]["auc_err_post"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312)
+    ax3 = canvas.fig.add_subplot(313)
+    
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
+    ax2.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
+                          ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2,label="Standard\nerror")
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    
+    # AUC
+    # polt bars with error bars
+    ax3.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
+    ax3.axhline(y=0,linewidth=0.5, color='k')
+    ax3.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax3.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax3.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+  
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax.set_title('Individual z-Score Traces')
+    ax.set_ylabel('Trials')
+    ax.set_xlabel('Seconds from Event Onset')
+    ax2.set_ylabel('z-Score')
+    ax2.set_xlabel('Seconds')
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.spines['bottom'].set_visible(False)
+    ax3.set_ylim(min(AUC)-2*h, y+2*h)
+    ax3.set_ylabel('AUC')
+    ax3.set_title('Pre vs Post')
+    ax3.set_xticks(np.arange(-1, len(AUC)+1))
+    ax3.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax3.set_yticks([min(AUC),max(AUC)])
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get data to plot
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    # AUC data
+    AUC = analyzed_perievent_dict["auc"]["auc_data"]
+    p = analyzed_perievent_dict["auc"]["p"]
+    AUC_err_pre = analyzed_perievent_dict["auc"]["auc_err_pre"]
+    AUC_err_post = analyzed_perievent_dict["auc"]["auc_err_post"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(311)
+    ax2 = canvas.fig.add_subplot(312)
+    ax3 = canvas.fig.add_subplot(313)
+    
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
+    # plot all trials
+    for i in range(len(zscore_all)):
+        if i == 0:
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+        else:
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    
+    # AUC
+    ax3.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
+    ax3.axhline(y=0,linewidth=0.5,color='k')
+    ax3.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax3.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax3.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+  
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax.set_title('Individual z-Score Traces')
+    ax.set_ylabel('Trials')
+    ax.set_xlabel('Seconds from Event Onset')
+    ax2.set_ylabel('z-Score')
+    ax2.set_xlabel('Seconds')
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    # hide top and right border
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.spines['bottom'].set_visible(False)
+    ax3.set_ylim(min(AUC)-2*h, y+2*h)
+    ax3.set_ylabel('AUC')
+    ax3.set_title('Pre vs Post')
+    ax3.set_xticks(np.arange(-1, len(AUC)+1))
+    ax3.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax3.set_yticks([min(AUC),max(AUC)])
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get avg data to plot
+    ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
+    ts_control = analyzed_perievent_dict["average"]["ts_control"]
+    signal = analyzed_perievent_dict["average"]["signal"]
+    control = analyzed_perievent_dict["average"]["control"]
+    std_signal = analyzed_perievent_dict["average"]["std_signal"]
+    std_control = analyzed_perievent_dict["average"]["std_control"]
+    # get zscore data to plot
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    # AUC data
+    AUC = analyzed_perievent_dict["auc"]["auc_data"]
+    p = analyzed_perievent_dict["auc"]["p"]
+    AUC_err_pre = analyzed_perievent_dict["auc"]["auc_err_pre"]
+    AUC_err_post = analyzed_perievent_dict["auc"]["auc_err_post"]
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(411)
+    ax2 = canvas.fig.add_subplot(412)
+    ax3 = canvas.fig.add_subplot(413)
+    ax4 = canvas.fig.add_subplot(414)
+    
+    ax.plot(ts_signal, signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_control, control,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
+                      facecolor='green', alpha=0.1)
+    ax.fill_between(ts_control, control+std_control, control-std_control,
+                      facecolor='red', alpha=0.1)
+    
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    ax3.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
+                          ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2,label="Standard\nerror")
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    
+    # AUC
+    ax4.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
+    ax4.axhline(y=0,linewidth=0.5,color='k')
+    ax4.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax4.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax4.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+        
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Average From All Trials')
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_title('Individual z-Score Traces')
+    ax2.set_ylabel('Trials')
+#    ax2.set_xlabel('Seconds from Event Onset')
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.set_ylabel('z-Score')
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+#    ax3.set_xlabel('Seconds')
+    # hide top and right border
+    ax4.spines['top'].set_visible(False)
+    ax4.spines['right'].set_visible(False)
+    ax4.spines['bottom'].set_visible(False)
+    ax4.set_ylim(min(AUC)-2*h, y+2*h)
+    ax4.set_ylabel('AUC')
+    ax4.set_title('Pre vs Post')
+    ax4.set_xticks(np.arange(-1, len(AUC)+1))
+    ax4.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax4.set_yticks([min(AUC),max(AUC)])
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+
+def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    # get avg data to plot
+    ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
+    ts_control = analyzed_perievent_dict["average"]["ts_control"]
+    signal = analyzed_perievent_dict["average"]["signal"]
+    control = analyzed_perievent_dict["average"]["control"]
+    std_signal = analyzed_perievent_dict["average"]["std_signal"]
+    std_control = analyzed_perievent_dict["average"]["std_control"]
+    # get zscore data to plot
+    ts = analyzed_perievent_dict["zscore"]["ts"]
+    zscore_all = analyzed_perievent_dict["zscore"]["zscored"]
+    zerror = analyzed_perievent_dict["zscore"]["zerror"]
+    # AUC data
+    AUC = analyzed_perievent_dict["auc"]["auc_data"]
+    p = analyzed_perievent_dict["auc"]["p"]
+    AUC_err_pre = analyzed_perievent_dict["auc"]["auc_err_pre"]
+    AUC_err_post = analyzed_perievent_dict["auc"]["auc_err_post"]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(411)
+    ax2 = canvas.fig.add_subplot(412)
+    ax3 = canvas.fig.add_subplot(413)
+    ax4 = canvas.fig.add_subplot(414)
+    
+    ax.plot(ts_signal, signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+    ax.plot(ts_control, control,
+             color='red',
+             linewidth=1,
+             label = "control")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
+                      facecolor='green', alpha=0.1)
+    ax.fill_between(ts_control, control+std_control, control-std_control,
+                      facecolor='red', alpha=0.1)
+    
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(data.streams[signal_name].filtered_downsampled),0])
+    canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    # plot all trials
+    for i in range(len(zscore_all)):
+        if i == 0:
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+        else:
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    
+    # AUC
+    ax4.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
+    ax4.axhline(y=0,linewidth=0.5,color='k')
+    ax4.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax4.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax4.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+        
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('Average From All Trials')
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+#    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('mV', fontsize=12)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_title('Individual z-Score Traces')
+    ax2.set_ylabel('Trials')
+#    ax2.set_xlabel('Seconds from Event Onset')
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
+    ax3.set_ylabel('z-Score')
+    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+#    ax3.set_xlabel('Seconds')
+    # hide top and right border
+    ax4.spines['top'].set_visible(False)
+    ax4.spines['right'].set_visible(False)
+    ax4.spines['bottom'].set_visible(False)
+    ax4.set_ylim(min(AUC)-2*h, y+2*h)
+    ax4.set_ylabel('AUC')
+    ax4.set_title('Pre vs Post')
+    ax4.set_xticks(np.arange(-1, len(AUC)+1))
+    ax4.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax4.set_yticks([min(AUC),max(AUC)])
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    canvas.draw()
+    
+def plot_peaks(canvas,subject,data,options,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+    settings_dict[0]["subject"] = subject
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    dump_path,file_beginning = export_loc_data 
+    # get peak params from gui
+     # get peak params from gui
+    height = None
+    threshold = None
+    distance = None
+    prominence = None
+    width = None
+    wlen = None
+    relHeight = 0.5
+    plateau = None
+    # if export was false, check also last parameter from options
+    if export == False:
+        export = options[-1]
+        if export == True: # assume that user wants to plot as well
+            save_plots = True
+    
+    if len(options[0]) > 0 and options[0] !="None":
+        try:
+            height = float(options[0]) 
+        except:
+            print("height problem")
+    if len(options[1]) > 0 and options[1] !="None":
+        try:
+            threshold = float(options[1]) 
+        except:
+            print("threshold problem")
+    if len(options[2]) > 0 and options[2] !="None":
+        try:
+            distance = float(options[2]) 
+        except:
+            print("distance problem")
+    if len(options[3]) > 0 and options[3] !="None":
+        try:
+            prominence = float(options[3]) 
+        except:
+            print("prominence problem")
+    if len(options[4]) > 0 and options[4] !="None":
+        try:
+            width = float(options[4]) 
+            print("width",width)
+        except:
+            print("width problem")
+    if len(options[5]) > 0 and options[5] !="None":
+        try:
+            wlen = float(options[5]) 
+        except:
+            print("wlen problem")
+    if len(options[6]) > 0 and options[6] !="None":
+        try:
+            relHeight = float(options[6]) 
+        except:
+            print("relHeight problem")
+    if len(options[7]) > 0 and options[7] !="None":
+        try:
+            plateau = float(options[7]) 
+        except:
+            print("plateau problem")
+#    print(height,threshold,distance,prominence,width,wlen,relHeight,plateau)
+    
+    ts = data["ts"]
+    total_seconds = ts[-1]-ts[0]
+    normalized_signal = data["normalized_signal"]
+#    print("total seconds",total_seconds)
+#    print("total samples",len(normalized_signal))
+#    print("1 sample",total_seconds/len(normalized_signal))
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    # distance from seconds to samples
+    if distance != None and distance != "None":
+        # find how many samples are per second now
+        # since time is in second find when one starts
+        samples_in_second = 0
+        for i in range(len(ts_reset)):
+            if ts_reset[i] > 1:
+                samples_in_second = len(ts_reset[:i])
+                break
+        distance = distance*samples_in_second
+    #safety check if user entered 0 they probably mean no distance
+    if distance == 0:
+        distance = None
+#    print(ts_reset[-1])
+    peaks, _ = find_peaks(normalized_signal, height= height, threshold = threshold, distance = distance,
+                          prominence = prominence, width = width, wlen = wlen, rel_height = relHeight, plateau_size = plateau)
+#    print("peaks\n",peaks)
+    # adjust peaks results to the existing timestamps
+    translated_peaks = [el*total_seconds/len(normalized_signal) for el in peaks]
+    total_peaks = len(translated_peaks)
+#    print(translated_peaks)
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(3,1,(1, 2))
+    ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
+    
+    ax.plot(ts_reset,normalized_signal,
+             color='green',
+             linewidth=1,
+             label = "signal")
+#    ax.plot(peaks, normalized_signal[peaks], "xr")
+    ax.plot(translated_peaks, normalized_signal[peaks], "xr")
+    
+    total_label = str(total_peaks)+ " Spikes Found"
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax.set_ylabel('Z-Score', fontsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.xaxis.set_visible(False)
+    ax.xaxis.set_ticks_position('none')
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_ylabel('Peaks', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_yticks([])
+    
+    ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=0.95,  
+                    top=MY_TOP,  
+                    wspace=0,  
+                    hspace=0) 
+    
+    
+    # export
+    if export == True:
+        file_name = file_beginning + "_Spikes.csv"
+        if file_beginning != subject:
+            file_name = file_beginning +"_"+subject+ "_Spikes.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        raw_df= pd.DataFrame({"Time (sec)":translated_peaks,
+                                 "Value" : normalized_signal[peaks]})
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+             
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning + "_Spikes.png"
+        plot_file_name2 = file_beginning + "_Spikes.svg"
+        if file_beginning != subject:
+            plot_file_name = file_beginning +"_"+subject+ "_Spikes.png"
+            plot_file_name2 = file_beginning +"_"+subject+ "_Spikes.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    
+def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,event_data,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+    settings_dict[0]["subject"] = subject
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    dump_path,file_beginning = export_loc_data 
+    # get peak params from gui
+    height = None
+    threshold = None
+    distance = None
+    prominence = None
+    width = None
+    wlen = None
+    relHeight = 0.5
+    plateau = None
+    
+    # if export was false, check also last parameter from options
+    if export == False:
+        export = options[-1]
+        if export == True: # assume that user wants to plot as well
+            save_plots = True
+    
+    if len(options[0]) > 0 and options[0] !="None":
+        try:
+            height = float(options[0]) 
+        except:
+            print("height problem")
+    if len(options[1]) > 0 and options[1] !="None":
+        try:
+            threshold = float(options[1]) 
+        except:
+            print("threshold problem")
+    if len(options[2]) > 0 and options[2] !="None":
+        try:
+            distance = float(options[2]) 
+        except:
+            print("distance problem")
+    if len(options[3]) > 0 and options[3] !="None":
+        try:
+            prominence = float(options[3]) 
+        except:
+            print("prominence problem")
+    if len(options[4]) > 0 and options[4] !="None":
+        try:
+            width = float(options[4]) 
+            print("width",width)
+        except:
+            print("width problem")
+    if len(options[5]) > 0 and options[5] !="None":
+        try:
+            wlen = float(options[5]) 
+        except:
+            print("wlen problem")
+    if len(options[6]) > 0 and options[6] !="None":
+        try:
+            relHeight = float(options[6]) 
+        except:
+            print("relHeight problem")
+    if len(options[7]) > 0 and options[7] !="None":
+        try:
+            plateau = float(options[7]) 
+        except:
+            print("plateau problem")
+    print(height,threshold,distance,prominence,width,wlen,relHeight,plateau)
+    
+    ts = data["ts"]
+    total_seconds = ts[-1]-ts[0]
+    normalized_signal = data["normalized_signal"]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+    # distance from seconds to samples
+    if distance != None and distance != "None":
+        # find how many samples are per second now
+        # since time is in second find when one starts
+        samples_in_second = 0
+        for i in range(len(ts_reset)):
+            if ts_reset[i] > 1:
+                samples_in_second = len(ts_reset[:i])
+                break
+        distance = distance*samples_in_second
+    #safety check if user entered 0 they probably mean no distance
+    if distance == 0:
+        distance = None
+    peaks, _ = find_peaks(normalized_signal, height= height, threshold = threshold, distance = distance,
+                          prominence = prominence, width = width, wlen = wlen, rel_height = relHeight, plateau_size = plateau)
+    # adjust peaks results to the existing timestamps
+    translated_peaks = [el*total_seconds/len(normalized_signal) for el in peaks]
+    total_peaks = len(translated_peaks)
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(3,1,(1, 2))
+    ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
+    
+    ax.plot(ts_reset,normalized_signal,
+             color='green',
+             linewidth=1,
+             label = "normalized\nsignal")
+#    ax.plot(peaks, normalized_signal[peaks], "xr")
+    ax.plot(translated_peaks, normalized_signal[peaks], "xr")
+    
+    total_label = str(total_peaks)+ " Spikes Found"
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label=total_label)
+    
+    if len(event_data[0][0]) > 0:
+        # first event
+        first_evt_onset = event_data[0][0]
+        first_evt_onset_translated = [el-ts[0] for el in first_evt_onset]
+        first_evt_offset = event_data[0][1]
+        first_evt_offset_translated = [el-ts[0] for el in first_evt_offset]
+#        print(first_evt_onset)
+#        print(first_evt_onset_translated)
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)                   
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            second_evt_onset = event_data[1][0]
+            second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
+            second_evt_offset = event_data[1][1]
+            second_evt_offset_translated = [el-ts[0] for el in second_evt_offset]
+#            print(second_evt_onset)
+#            print(second_evt_onset_translated)
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)                   
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+    
+    my_title = 'Subject: ' + subject
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax.set_ylabel('Z-Score', fontsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.xaxis.set_visible(False)
+    ax.xaxis.set_ticks_position('none')
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_ylabel('Peaks', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_yticks([])
+    
+    ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=0,  
+                    hspace=0) 
+    
+    # export
+    if export == True:
+        if file_beginning != subject:
+            file_name = file_beginning + "_" + subject + "_" + event_name+"_Spikes.csv"
+        else: 
+            file_name = subject + "_" + event_name+"_Spikes.csv"
+        if event2_name != "---":
+            file_name = file_beginning + "_" + event_name+"_"+event2_name+"_Spikes.csv"  
+        dump_file_path = os.path.join(dump_path,file_name)
+        raw_df= pd.DataFrame({"Time (sec)":translated_peaks,
+                                 "Value" : normalized_signal[peaks]})
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+        event1_file = file_beginning + "_" + event_name+".csv"
+        dump_file_path = os.path.join(dump_path,event1_file)
+        # now save event data
+        evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
+                                    "offset (s)" : first_evt_offset_translated})
+        evt1_df.to_csv(dump_file_path, index=False)
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            event2_file = file_beginning + "_" + event2_name+".csv"
+            dump_file_path = os.path.join(dump_path,event2_file)
+            evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
+                                       "offset (s)" : second_evt_offset_translated})
+            evt2_df.to_csv(dump_file_path, index=False)
+             
+    if export == True and save_plots == True:
+        plot_file_name = file_beginning + "_" + subject + "_" + event_name+"_Spikes.png"
+        plot_file_name2 = file_beginning + "_" + subject + "_" + event_name+"_Spikes.svg"
+        if file_beginning == subject:
+            plot_file_name = file_beginning + "_" + event_name+"_Spikes.png"
+            plot_file_name2 = file_beginning + "_" + event_name+"_Spikes.svg"
+        if event2_name != "---":
+            plot_file_name = file_beginning + "_" + subject + "_" + event_name+"_"+event2_name+"_Spikes.png" 
+            plot_file_name2 = file_beginning + "_" + subject + "_" + event_name+"_"+event2_name+"_Spikes.svg" 
+            if file_beginning == subject:
+                plot_file_name = file_beginning + "_" + event_name+"_"+event2_name+"_Spikes.png"
+                plot_file_name2 = file_beginning + "_" + event_name+"_"+event2_name+"_Spikes.svg"  
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+
+# not used now  
+def get_batch_normalized(canvas,my_all_normalized,settings_dict,export,export_loc_data):
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    dump_path,file_beginning = export_loc_data 
+    all_normalized = copy.deepcopy(my_all_normalized)
+    # get signals and find shortest times
+    ts_lengths = []
+    all_ts = []
+    dfs = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for el in all_normalized:
+        subject,dictionary = el
+        subject_string = "_"+subject
+        subjects_end_file+=subject_string
+        signal = dictionary["normalized_signal"].tolist()
+        ts = dictionary["ts"].tolist()
+        all_ts.append(ts)
+        ts_lengths.append(len(ts))
+        df = pd.DataFrame({subject + " dF/F (%)":signal})
+        dfs.append(df)
+    all_signals_df = pd.concat(dfs, axis=1)
+    all_signals_df = all_signals_df.dropna()
+    transposed_df = all_signals_df.transpose()
+    means_df = transposed_df.mean(axis=0)
+    standard_devs_df = transposed_df.std(axis=0)
+    # get means and stds as list
+    means = means_df.tolist()
+    stds = standard_devs_df.tolist()
+#    print(all_signals_df)
+#    print(transposed_df)
+#    print(means_df)
+#    print(standard_devs_df)
+    idx = ts_lengths.index(min(ts_lengths))
+    ts_shortest = all_ts[idx]
+    total_seconds = ts_shortest[-1]-ts_shortest[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_shortest) for i in range(len(ts_shortest))]
+    # assumes that mean is always calculated on all selected subjects
+    se = [stds[i]/np.sqrt(all_signals_df.shape[1]) for i in range(len(stds))]
+    positive_std_err_plot = [means[i]+se[i] for i in range(len(se))]
+    negative_std_err_plot = [means[i]-se[i] for i in range(len(se))]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    ax.plot(ts_reset, means,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # plot standard error bands
+    ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
+                      facecolor='red', alpha=0.2,label = 'Standard error')
+    
+    my_title = 'Normalized batch'
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    my_pos = (0.94, 1)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=my_pos)
+    
+    # export
+    if export == True:
+        file_name = file_beginning + subjects_end_file+"normalized.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        time_df = pd.DataFrame({"Time (sec)":ts_reset})
+        means_se_df = pd.DataFrame({"Means":means,
+                                    "Standard error":se})
+        raw_df= pd.concat([time_df,all_signals_df,means_se_df],axis=1)
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+        # save plot
+        plot_file_name = file_beginning + subjects_end_file+"normalized.png"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        plot_file_name = file_beginning + subjects_end_file+"normalized.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+
+# not used now   
+def get_batch_normalized_with_event(canvas,my_all_normalized,event_name,event2_name,event_data,settings_dict,export,export_loc_data):
+    dump_path,file_beginning = export_loc_data 
+    all_normalized = copy.deepcopy(my_all_normalized)
+    # get signals and find shortest times
+    ts_lengths = []
+    all_ts = []
+    dfs = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for el in all_normalized:
+        subject,dictionary = el
+        subject_string = "_"+subject
+        subjects_end_file+=subject_string
+        signal = dictionary["normalized_signal"].tolist()
+        ts = dictionary["ts"].tolist()
+        all_ts.append(ts)
+        ts_lengths.append(len(ts))
+        df = pd.DataFrame({subject + " dF/F (%)":signal})
+        dfs.append(df)
+    all_signals_df = pd.concat(dfs, axis=1)
+    all_signals_df = all_signals_df.dropna()
+    transposed_df = all_signals_df.transpose()
+    means_df = transposed_df.mean(axis=0)
+    standard_devs_df = transposed_df.std(axis=0)
+    # get means and stds as list
+    means = means_df.tolist()
+    stds = standard_devs_df.tolist()
+#    print(all_signals_df)
+#    print(transposed_df)
+#    print(means_df)
+#    print(standard_devs_df)
+    idx = ts_lengths.index(min(ts_lengths))
+    ts_shortest = all_ts[idx]
+    total_seconds = ts_shortest[-1]-ts_shortest[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_shortest) for i in range(len(ts_shortest))]
+    # assumes that mean is always calculated on all selected subjects
+    se = [stds[i]/np.sqrt(all_signals_df.shape[1]) for i in range(len(stds))]
+    positive_std_err_plot = [means[i]+se[i] for i in range(len(se))]
+    negative_std_err_plot = [means[i]-se[i] for i in range(len(se))]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    ax.plot(ts_reset, means,
+             color='green',
+             linewidth=1,
+             label = "normalized")
+    # plot standard error bands
+    ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
+                      facecolor='red', alpha=0.2,label = 'Standard error')
+    
+    if len(event_data[0][0]) > 0:
+        # first event
+        first_evt_onset = event_data[0][0]
+        first_evt_onset_translated = [el-ts[0] for el in first_evt_onset]
+        first_evt_offset = event_data[0][1]
+        first_evt_offset_translated = [el-ts[0] for el in first_evt_offset]
+#        print(first_evt_onset)
+#        print(first_evt_onset_translated)
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)                   
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            second_evt_onset = event_data[1][0]
+            second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
+            second_evt_offset = event_data[1][1]
+            second_evt_offset_translated = [el-ts[0] for el in second_evt_offset]
+#            print(second_evt_onset)
+#            print(second_evt_onset_translated)
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)                   
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+    
+    my_title = 'Normalized batch'
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    my_pos = (0.94, 1)
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=my_pos)
+    
+    # export
+    if export == True:
+        file_name = file_beginning + subjects_end_file + "_" + event_name+"_normalized.csv"
+        if event2_name != "---":
+            file_name = file_beginning + subjects_end_file + "_" + event_name+"_"+event2_name+"_normalized.csv"  
+        dump_file_path = os.path.join(dump_path,file_name)
+        time_df = pd.DataFrame({"Time (sec)":ts_reset})
+        means_se_df = pd.DataFrame({"Means":means,
+                                    "Standard error":se})
+        raw_df= pd.concat([time_df,all_signals_df,means_se_df],axis=1)
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+        event1_file = file_beginning + subjects_end_file + "_" + event_name+"normalized.csv"
+        dump_file_path = os.path.join(dump_path,event1_file)
+        # now save event data
+        evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
+                                    "offset (s)" : first_evt_offset_translated})
+        evt1_df.to_csv(dump_file_path, index=False)
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            event2_file = file_beginning + subjects_end_file + "_" + event2_name+"normalized.csv"
+            dump_file_path = os.path.join(dump_path,event2_file)
+            evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
+                                       "offset (s)" : second_evt_offset_translated})
+            evt2_df.to_csv(dump_file_path, index=False)
+        # save plot
+        plot_file_name = file_beginning + subjects_end_file + "_" + event_name+"_normalized.png"
+        plot_file_name2 = file_beginning + subjects_end_file + "_" + event_name+"_normalized.svg"
+        if event2_name != "---":
+            plot_file_name = file_beginning + subjects_end_file + "_" + event_name+"_"+event2_name+"_normalized.png" 
+            plot_file_name2 = file_beginning + subjects_end_file + "_" + event_name+"_"+event2_name+"_normalized.svg"  
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name2)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+        
+# not used
+def get_batch_spikes(canvas,options,my_all_normalized,settings_dict,export,export_loc_data):
+    dump_path,file_beginning = export_loc_data 
+    all_normalized = copy.deepcopy(my_all_normalized)
+    # get peak params from gui
+     # get peak params from gui
+    height = None
+    threshold = None
+    distance = None
+    prominence = None
+    width = None
+    wlen = None
+    relHeight = 0.5
+    plateau = None
+
+    
+    if len(options[0]) > 0 and options[0] !="None":
+        try:
+            height = float(options[0]) 
+        except:
+            print("height problem")
+    if len(options[1]) > 0 and options[1] !="None":
+        try:
+            threshold = float(options[1]) 
+        except:
+            print("threshold problem")
+    if len(options[2]) > 0 and options[2] !="None":
+        try:
+            distance = float(options[2]) 
+        except:
+            print("distance problem")
+    if len(options[3]) > 0 and options[3] !="None":
+        try:
+            prominence = float(options[3]) 
+        except:
+            print("prominence problem")
+    if len(options[4]) > 0 and options[4] !="None":
+        try:
+            width = float(options[4]) 
+            print("width",width)
+        except:
+            print("width problem")
+    if len(options[5]) > 0 and options[5] !="None":
+        try:
+            wlen = float(options[5]) 
+        except:
+            print("wlen problem")
+    if len(options[6]) > 0 and options[6] !="None":
+        try:
+            relHeight = float(options[6]) 
+        except:
+            print("relHeight problem")
+    if len(options[7]) > 0 and options[7] !="None":
+        try:
+            plateau = float(options[7]) 
+        except:
+            print("plateau problem")
+        
+    # get signals and find shortest times
+    ts_lengths = []
+    all_ts = []
+    dfs = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for el in all_normalized:
+        subject,dictionary = el
+        subject_string = "_"+subject
+        subjects_end_file+=subject_string
+        signal = dictionary["normalized_signal"].tolist()
+        ts = dictionary["ts"].tolist()
+        all_ts.append(ts)
+        ts_lengths.append(len(ts))
+        df = pd.DataFrame({subject + "dF/F (%)":signal})
+        dfs.append(df)
+    all_signals_df = pd.concat(dfs, axis=1)
+    all_signals_df = all_signals_df.dropna()
+    transposed_df = all_signals_df.transpose()
+    means_df = transposed_df.mean(axis=0)
+    standard_devs_df = transposed_df.std(axis=0)
+    # get means and stds as list
+    means = means_df.tolist()
+    stds = standard_devs_df.tolist()
+#    print(all_signals_df)
+#    print(transposed_df)
+#    print(means_df)
+#    print(standard_devs_df)
+    idx = ts_lengths.index(min(ts_lengths))
+    ts_shortest = all_ts[idx]
+    total_seconds = ts_shortest[-1]-ts_shortest[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_shortest) for i in range(len(ts_shortest))]
+    # assumes that mean is always calculated on all selected subjects
+    se = [stds[i]/np.sqrt(all_signals_df.shape[1]) for i in range(len(stds))]
+    positive_std_err_plot = [means[i]+se[i] for i in range(len(se))]
+    negative_std_err_plot = [means[i]-se[i] for i in range(len(se))]
+    
+    # distance from seconds to samples
+    if distance != None and distance != "None":
+        # find how many samples are per second now
+        # since time is in second find when one starts
+        samples_in_second = 0
+        for i in range(len(ts_reset)):
+            if ts_reset[i] > 1:
+                samples_in_second = len(ts_reset[:i])
+                break
+        distance = distance*samples_in_second
+    #safety check if user entered 0 they probably mean no distance
+    if distance == 0:
+        distance = None
+#    print(ts_reset[-1])
+    peaks, _ = find_peaks(means, height= height, threshold = threshold, distance = distance,
+                          prominence = prominence, width = width, wlen = wlen, rel_height = relHeight, plateau_size = plateau)
+#    print("peaks\n",type(peaks[0]))
+    # adjust peaks results to the existing timestamps
+    translated_peaks = [el*total_seconds/len(means) for el in peaks]
+    total_peaks = len(translated_peaks)
+#    print(translated_peaks)
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(3,1,(1, 2))
+    ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
+    
+    ax.plot(ts_reset,means,
+             color='green',
+             linewidth=1,
+             label = "signal")
+
+    ax.plot(translated_peaks, np.array(means)[peaks], "xr")
+    # plot standard error bands
+    ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
+                      facecolor='red', alpha=0.2,label = 'Standard error')
+    
+    total_label = str(total_peaks)+ " Spikes Found"
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
+    
+    my_title = 'Batch Spikes'
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.xaxis.set_visible(False)
+    ax.xaxis.set_ticks_position('none')
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_ylabel('Peaks', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_yticks([])
+    
+    ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=0.95,  
+                    top=MY_TOP,  
+                    wspace=0,  
+                    hspace=0) 
+    
+    
+    # export
+    if export == True:
+        file_name = file_beginning + subjects_end_file+"_Spikes.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        raw_df= pd.DataFrame({"Time (sec)":translated_peaks,
+                                 "Value dF/F (%)" : np.array(means)[peaks]})
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+        # save plot
+        plot_file_name = file_beginning + subjects_end_file+"_Spikes.png"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        plot_file_name = file_beginning + subjects_end_file+"_Spikes.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+# not used       
+def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,event2_name,event_data,settings_dict,export,export_loc_data):
+    dump_path,file_beginning = export_loc_data 
+    all_normalized = copy.deepcopy(my_all_normalized)
+    # get peak params from gui
+     # get peak params from gui
+    height = None
+    threshold = None
+    distance = None
+    prominence = None
+    width = None
+    wlen = None
+    relHeight = 0.5
+    plateau = None
+
+    
+    if len(options[0]) > 0 and options[0] !="None":
+        try:
+            height = float(options[0]) 
+        except:
+            print("height problem")
+    if len(options[1]) > 0 and options[1] !="None":
+        try:
+            threshold = float(options[1]) 
+        except:
+            print("threshold problem")
+    if len(options[2]) > 0 and options[2] !="None":
+        try:
+            distance = float(options[2]) 
+        except:
+            print("distance problem")
+    if len(options[3]) > 0 and options[3] !="None":
+        try:
+            prominence = float(options[3]) 
+        except:
+            print("prominence problem")
+    if len(options[4]) > 0 and options[4] !="None":
+        try:
+            width = float(options[4]) 
+            print("width",width)
+        except:
+            print("width problem")
+    if len(options[5]) > 0 and options[5] !="None":
+        try:
+            wlen = float(options[5]) 
+        except:
+            print("wlen problem")
+    if len(options[6]) > 0 and options[6] !="None":
+        try:
+            relHeight = float(options[6]) 
+        except:
+            print("relHeight problem")
+    if len(options[7]) > 0 and options[7] !="None":
+        try:
+            plateau = float(options[7]) 
+        except:
+            print("plateau problem")
+        
+    # get signals and find shortest times
+    ts_lengths = []
+    all_ts = []
+    dfs = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for el in all_normalized:
+        subject,dictionary = el
+        subject_string = "_"+subject
+        subjects_end_file+=subject_string
+        signal = dictionary["normalized_signal"].tolist()
+        ts = dictionary["ts"].tolist()
+        all_ts.append(ts)
+        ts_lengths.append(len(ts))
+        df = pd.DataFrame({subject + "dF/F (%)":signal})
+        dfs.append(df)
+    all_signals_df = pd.concat(dfs, axis=1)
+    all_signals_df = all_signals_df.dropna()
+    transposed_df = all_signals_df.transpose()
+    means_df = transposed_df.mean(axis=0)
+    standard_devs_df = transposed_df.std(axis=0)
+    # get means and stds as list
+    means = means_df.tolist()
+    stds = standard_devs_df.tolist()
+#    print(all_signals_df)
+#    print(transposed_df)
+#    print(means_df)
+#    print(standard_devs_df)
+    idx = ts_lengths.index(min(ts_lengths))
+    ts_shortest = all_ts[idx]
+    total_seconds = ts_shortest[-1]-ts_shortest[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_shortest) for i in range(len(ts_shortest))]
+    # assumes that mean is always calculated on all selected subjects
+    se = [stds[i]/np.sqrt(all_signals_df.shape[1]) for i in range(len(stds))]
+    positive_std_err_plot = [means[i]+se[i] for i in range(len(se))]
+    negative_std_err_plot = [means[i]-se[i] for i in range(len(se))]
+    
+    # distance from seconds to samples
+    if distance != None and distance != "None":
+        # find how many samples are per second now
+        # since time is in second find when one starts
+        samples_in_second = 0
+        for i in range(len(ts_reset)):
+            if ts_reset[i] > 1:
+                samples_in_second = len(ts_reset[:i])
+                break
+        distance = distance*samples_in_second
+    #safety check if user entered 0 they probably mean no distance
+    if distance == 0:
+        distance = None
+#    print(ts_reset[-1])
+    peaks, _ = find_peaks(means, height= height, threshold = threshold, distance = distance,
+                          prominence = prominence, width = width, wlen = wlen, rel_height = relHeight, plateau_size = plateau)
+#    print("peaks\n",type(peaks[0]))
+    # adjust peaks results to the existing timestamps
+    translated_peaks = [el*total_seconds/len(means) for el in peaks]
+    total_peaks = len(translated_peaks)
+#    print(translated_peaks)
+    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(3,1,(1, 2))
+    ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
+    
+    ax.plot(ts_reset,means,
+             color='green',
+             linewidth=1,
+             label = "signal")
+
+    ax.plot(translated_peaks, np.array(means)[peaks], "xr")
+    # plot standard error bands
+    ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
+                      facecolor='red', alpha=0.2,label = 'Standard error')
+    
+    total_label = str(total_peaks)+ " Spikes Found"
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
+    
+    if len(event_data[0][0]) > 0:
+        # first event
+        first_evt_onset = event_data[0][0]
+        first_evt_onset_translated = [el-ts[0] for el in first_evt_onset]
+        first_evt_offset = event_data[0][1]
+        first_evt_offset_translated = [el-ts[0] for el in first_evt_offset]
+#        print(first_evt_onset)
+#        print(first_evt_onset_translated)
+        # plot tone onsets as vertical lines
+        # first element in tone_on_off is a list with onset times
+        ctr = 0
+        for i in range(len(first_evt_onset_translated)):
+            if first_evt_onset_translated[i] >= ts_reset[0] and first_evt_onset_translated[i] <= ts_reset[-1]:
+                if ctr == 0:  # label only first one for the legend
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)                   
+                else:
+                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
+                ctr+=1
+        # if there is more than one event, plot the second one as well
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            ctr = 0
+            second_evt_onset = event_data[1][0]
+            second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
+            second_evt_offset = event_data[1][1]
+            second_evt_offset_translated = [el-ts[0] for el in second_evt_offset]
+#            print(second_evt_onset)
+#            print(second_evt_onset_translated)
+            for i in range(len(second_evt_onset_translated)):
+                if second_evt_onset_translated[i] >= ts_reset[0] and second_evt_onset_translated[i] <= ts_reset[-1]:
+                    if ctr == 0:  # label only first one for the legend
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)                   
+                    else:
+                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+                    ctr+=1
+    
+    my_title = 'Batch Spikes Subjects: ' + " ".join(subjects_end_file.split("_"))
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.xaxis.set_visible(False)
+    ax.xaxis.set_ticks_position('none')
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.set_ylabel('Peaks', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_yticks([])
+    
+    ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=0.95,  
+                    top=MY_TOP,  
+                    wspace=0,  
+                    hspace=0) 
+    
+    
+    # export
+    if export == True:
+        file_name = file_beginning + subjects_end_file+"_Spikes.csv"
+        dump_file_path = os.path.join(dump_path,file_name)
+        raw_df= pd.DataFrame({"Time (sec)":translated_peaks,
+                                 "Value dF/F (%)" : np.array(means)[peaks]})
+        settings_df = get_settings_df(settings_dict)
+        settings_df.to_csv(dump_file_path,header=False)            
+        with open(dump_file_path,'a') as f:
+            f.write("\n")
+        raw_df.to_csv(dump_file_path, index=False,mode='a') 
+        event1_file = file_beginning + subjects_end_file + "_" + event_name+".csv"
+        dump_file_path = os.path.join(dump_path,event1_file)
+        # now save event data
+        evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
+                                    "offset (s)" : first_evt_offset_translated})
+        evt1_df.to_csv(dump_file_path, index=False)
+        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+            event2_file = file_beginning + subjects_end_file + "_" + event2_name+".csv"
+            dump_file_path = os.path.join(dump_path,event2_file)
+            evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
+                                       "offset (s)" : second_evt_offset_translated})
+            evt2_df.to_csv(dump_file_path, index=False)
+        # save plot
+        plot_file_name = file_beginning + subjects_end_file+"_Spikes.png"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path)
+        # also as svg
+        plot_file_name = file_beginning + subjects_end_file+"_Spikes.svg"
+        dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+        
+
+def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    dump_path,file_beginning = export_loc_data 
+    all_dfs = copy.deepcopy(my_all_dfs)
+    # contains single dataframe with time
+    ts_df = []
+     # contains a list of all subject's dataframe(with all normalized trials)
+    trials_dfs = []
+    # remember all subjects
+    subjects_end_file = ""
+    for el in all_dfs:
+        subject,df = el
+        subject_string = subject+" "
+        subjects_end_file+=subject_string
+        # if first dataframe keep time
+        if len(ts_df) == 0:
+            ts = df.iloc[:,:1]
+            ts_df.append(ts)
+        # remove time
+        del df['Time (sec)']
+        original_cols = list(df.columns)
+        new_columns = []
+        for col in original_cols:
+            new_name = subject+"_"+col
+            new_columns.append(new_name)
+        # replace old column names with new that contain subject name
+        df.columns = new_columns
+        trials_dfs.append(df)
+
+    # add subjects to settings
+    settings_dict[0]["subject"] = subjects_end_file
+    # create df with all subject info for csv
+    ts_df.extend(trials_dfs)
+    main_df = pd.concat(ts_df,axis=1)  
+    
+#    file_name = file_beginning +subjects_end_file+".csv"
+#    dump_file_path = os.path.join(dump_path,file_name)
+#    main_df.to_csv(dump_file_path)
+    
+    # calculate mean across all trials
+    means_form_all_trials_df = pd.concat(trials_dfs,axis=1)
+    transposed_df = means_form_all_trials_df.transpose()
+    mean_by_subject_df = transposed_df.mean(axis=0)
+    mean_by_subject = mean_by_subject_df.tolist()
+    mean_by_subject_df = pd.DataFrame({"Mean":mean_by_subject})
+    standard_devs_df = transposed_df.std(axis=0)
+    stds = standard_devs_df.tolist()
+    se = [stds[i]/np.sqrt(means_form_all_trials_df.shape[1]) for i in range(len(stds))]
+    se_df = pd.DataFrame({"Error":se})
+    # add to df
+    main_df = pd.concat([main_df,mean_by_subject_df,se_df],axis=1)
+    
+    positive_std_err_plot = [mean_by_subject[i]+se[i] for i in range(len(se))]
+    negative_std_err_plot = [mean_by_subject[i]-se[i] for i in range(len(se))]
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+    ts = main_df["Time (sec)"].tolist()
+    ax.plot(ts, mean_by_subject,
+             color='green',
+             linewidth=1,
+             label = "Average")
+    # plot a vertical line at t=0
+    ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
+    # plot standard error bands
+    ax.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
+                      facecolor='red', alpha=0.2,label = 'Standard error')
+    
+    my_title = 'Total Subjects: ' + str(len(all_dfs))
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.set_xlabel('Time (sec)', fontsize=12)
+    ax.set_ylabel('dF/F (%)', fontsize=12)
+    if show_norm_as == "Z-Score":
+        ax.set_ylabel("Z-Score")
+    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+
+    # save csv with data
+    file_name = file_beginning +"_perievent_avg.csv"
+    dump_file_path = os.path.join(dump_path,file_name)
+    settings_df = get_settings_df(settings_dict)
+    settings_df.to_csv(dump_file_path,header=False)            
+    with open(dump_file_path,'a') as f:
+        f.write("\n")
+    main_df.to_csv(dump_file_path, index=False,mode='a')
+      
+    # save plot
+    plot_file_name = file_beginning + "_perievent_avg.png"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path)
+    # also as svg
+    plot_file_name = file_beginning + subjects_end_file+"_perievent_avg.svg"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    
+def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    dump_path,file_beginning = export_loc_data 
+#    print(len(my_all_dfs))
+    all_dfs = copy.deepcopy(my_all_dfs)
+    # contains single dataframe with time
+    ts_df = []
+    # contains a list of all subject's dataframe(with all normalized trials)
+    zscore_all_dfs = []
+    zscores_means_by_subject = []
+    # each inner list will contain same trial from different subject
+    zscores_by_trials = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for i in range(len(all_dfs)):
+        subject,df = all_dfs[i]
+#        print(subject)
+#        print(df)
+        subject_string = subject + " "
+        subjects_end_file+=subject_string
+        # get means as list
+        means = df['Mean_zscore'].tolist()
+        zscores_means_by_subject.append(means)
+        del df['Mean_zscore']
+        del df['Error']
+        # if first dataframe keep time
+        if len(ts_df) == 0:
+            ts = df.iloc[:,:1]
+            ts_df.append(ts)
+        # remove time
+        del df['Time (sec)']
+        original_cols = list(df.columns)
+        new_columns = []
+        for col in original_cols:
+            new_name = subject+"_"+col
+            new_columns.append(new_name)
+        # replace old column names with new that contain subject name
+        df.columns = new_columns
+        # add to means list
+        zscore_all_dfs.append(df) 
+        # add each trial column to a separate list
+        for j in range(len(new_columns)):
+            trial_df = df[new_columns[j]]
+            try:
+                zscores_by_trials[j].append(trial_df)
+            except: # handle index out of range exception
+                # add empty list for trials
+               zscores_by_trials.append([]) 
+               zscores_by_trials[j].append(trial_df)
+
+    # add subjects to settings
+    settings_dict[0]["subject"] = subjects_end_file
+    # calculate means
+    # join all trials from all subjects to get means ans errors
+    df_all_trials = pd.concat(zscore_all_dfs,axis=1)
+    transposed_df = df_all_trials.transpose()
+    means_df = transposed_df.mean(axis=0)
+    means_df = pd.DataFrame({"Mean":means_df.tolist()})
+    standard_devs_df = transposed_df.std(axis=0)
+    stds = standard_devs_df.tolist()
+    se = [stds[i]/np.sqrt(df_all_trials.shape[1]) for i in range(len(stds))]
+    se_df = pd.DataFrame({"Error":se})
+    
+    # calculate means by trial for the heatmap
+    zscores_by_trials_list = []
+    for i in range(len(zscores_by_trials)):
+        single_trial_df = pd.concat(zscores_by_trials[i],axis=1)
+        transposed = single_trial_df.transpose()
+        means = transposed.mean(axis=0)
+        zscores_by_trials_list.append(means.tolist())       
+    
+    # create main dataframe
+    raw_df= pd.concat([ts_df[0],df_all_trials,means_df,se_df],axis=1)
+#    file_name = file_beginning +subjects_end_file+"_perievent_zscore.csv"
+#    dump_file_path = os.path.join(dump_path,file_name)
+#    raw_df.to_csv(dump_file_path)
+    # get data to plot
+    ts = ts_df[0]['Time (sec)'].tolist()
+    mean_zscore = means_df['Mean'].tolist()
+    positive_std_err_plot = [mean_zscore[i]+se[i] for i in range(len(se))]
+    negative_std_err_plot = [mean_zscore[i]-se[i] for i in range(len(se))]
+#    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212)
+    
+    # Heat Map based on z score of control fit subtracted signal
+#    cs = ax.imshow(zscores_means_by_subject, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+#                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+#                            len(zscores_means_by_subject),0])
+    cs = ax.imshow(zscores_by_trials_list, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(zscores_by_trials_list),0])
+    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Group Mean')
+    ax2.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
+                      facecolor='red', alpha=0.2,label = 'Standard error')
+
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+  
+    my_title = 'Total Subjects: ' + str(len(all_dfs)) + "; Event: " + event_name
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('z-Score Traces')
+    ax.set_ylabel('Trials')
+    ax.set_xlabel('Seconds from Event Onset')
+    # show only intiger yticks
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    
+    ax2.set_ylabel('z-Score')
+    ax2.set_xlabel('Seconds')
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    # save csv with data
+    file_name = file_beginning +"_perievent_zscore.csv"
+    dump_file_path = os.path.join(dump_path,file_name)
+    settings_df = get_settings_df(settings_dict)
+    settings_df.to_csv(dump_file_path,header=False)            
+    with open(dump_file_path,'a') as f:
+        f.write("\n")
+    raw_df.to_csv(dump_file_path, index=False,mode='a')
+      
+    # save plot
+    plot_file_name = file_beginning +"_perievent_zscore.png"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path)
+    # also as svg
+    plot_file_name = file_beginning + subjects_end_file+"_perievent_zscore.svg"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+#    # debug
+#    for el in my_all_dfs:
+#        subject,df = el
+#        print(subject)
+#        print(df)
+    
+def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    dump_path,file_beginning = export_loc_data 
+#    print(len(my_all_dfs))
+    all_dfs = copy.deepcopy(my_all_dfs)
+    # contains single dataframe with time
+    ts_df = []
+    # contains a list of all subject's dataframe(with all normalized trials)
+    zscore_all_dfs = []
+    zscores_means_by_subject = []
+    # each inner list will contain same trial from different subject
+    zscores_by_trials = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for el in all_dfs:
+        subject,df = el
+#        print(subject)
+#        print(df)
+        subject_string = subject + " "
+        subjects_end_file+=subject_string
+        # get means as list
+        means = df['Mean_zscore'].tolist()
+        zscores_means_by_subject.append(means)
+        del df['Mean_zscore']
+        del df['Error']
+        # if first dataframe keep time
+        if len(ts_df) == 0:
+            ts = df.iloc[:,:1]
+            ts_df.append(ts)
+        # remove time
+        del df['Time (sec)']
+        original_cols = list(df.columns)
+        new_columns = []
+        for col in original_cols:
+            new_name = subject+"_"+col
+            new_columns.append(new_name)
+        # replace old column names with new that contain subject name
+        df.columns = new_columns
+        # add to means list
+        zscore_all_dfs.append(df)  
+        # add each trial column to a separate list
+        for j in range(len(new_columns)):
+            trial_df = df[new_columns[j]]
+            try:
+                zscores_by_trials[j].append(trial_df)
+            except: # handle index out of range exception
+                # add empty list for trials
+               zscores_by_trials.append([]) 
+               zscores_by_trials[j].append(trial_df)
+
+    # add subjects to settings
+    settings_dict[0]["subject"] = subjects_end_file
+    # calculate means
+    # join all trials from all subjects to get means ans errors
+    df_all_trials = pd.concat(zscore_all_dfs,axis=1)
+    transposed_df = df_all_trials.transpose()
+    means_df = transposed_df.mean(axis=0)
+    means_df = pd.DataFrame({"Mean":means_df.tolist()})
+    standard_devs_df = transposed_df.std(axis=0)
+    stds = standard_devs_df.tolist()
+    se = [stds[i]/np.sqrt(df_all_trials.shape[1]) for i in range(len(stds))]
+    se_df = pd.DataFrame({"Error":se})
+    
+    # calculate means by trial for the heatmap
+    zscores_by_trials_list = []
+    for i in range(len(zscores_by_trials)):
+        single_trial_df = pd.concat(zscores_by_trials[i],axis=1)
+        transposed = single_trial_df.transpose()
+        means = transposed.mean(axis=0)
+        zscores_by_trials_list.append(means.tolist())
+    
+    # create main dataframe
+    raw_df= pd.concat([ts_df[0],df_all_trials,means_df,se_df],axis=1)
+#    file_name = file_beginning +subjects_end_file+"_perievent_zscore.csv"
+#    dump_file_path = os.path.join(dump_path,file_name)
+#    raw_df.to_csv(dump_file_path)
+    # get data to plot
+    ts = ts_df[0]['Time (sec)'].tolist()
+    mean_zscore = means_df['Mean'].tolist()
+#    positive_std_err_plot = [mean_zscore[i]+se[i] for i in range(len(se))]
+#    negative_std_err_plot = [mean_zscore[i]-se[i] for i in range(len(se))]
+#    
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(211)
+    ax2 = canvas.fig.add_subplot(212)
+    
+    # Heat Map based on z score of control fit subtracted signal
+    cs = ax.imshow(zscores_by_trials_list, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
+                            len(zscores_by_trials_list),0])
+    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # plot the z-score trace for the signal with std error bands
+    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Group Mean')
+#    ax2.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
+#                      facecolor='red', alpha=0.2,label = 'Standard error')
+    for i in range(len(zscores_means_by_subject)):
+        if i == 0:
+            ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color='green', label='Subject Mean')
+        else:
+            ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color='green')
+
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+  
+    my_title = 'Total Subjects: ' + str(len(all_dfs)) + "; Event: " + event_name
+    canvas.fig.suptitle(my_title, fontsize=14)
+    ax.set_title('z-Score Traces')
+    ax.set_ylabel('Trials')
+    ax.set_xlabel('Seconds from Event Onset')
+    # show only intiger yticks
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    
+    ax2.set_ylabel('z-Score')
+    ax2.set_xlabel('Seconds')
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+    # set the spacing between subplots 
+    canvas.fig.subplots_adjust(left=MY_LEFT, 
+                    bottom=MY_BOTTOM,  
+                    right=MY_RIGHT,  
+                    top=MY_TOP,  
+                    wspace=MY_WSPACE,  
+                    hspace=MY_HSPACE) 
+    # save csv with data
+    file_name = file_beginning +"_perievent_zscore.csv"
+    dump_file_path = os.path.join(dump_path,file_name)
+    settings_df = get_settings_df(settings_dict)
+    settings_df.to_csv(dump_file_path,header=False)            
+    with open(dump_file_path,'a') as f:
+        f.write("\n")
+    raw_df.to_csv(dump_file_path, index=False,mode='a')
+      
+    # save plot
+    plot_file_name = file_beginning +"_perievent_zscore.png"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path)
+    # also as svg
+    plot_file_name = file_beginning + subjects_end_file+"_perievent_zscore.svg"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    
+def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+    event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    dump_path,file_beginning = export_loc_data 
+    all_dfs = copy.deepcopy(my_all_dfs)
+    # contains single dataframe with time
+    ts_df = []
+    # contains a list of all subject's dataframe(with all normalized trials)
+    zscore_all_dfs = []
+    zscores_means_by_subject = []
+    # remember all subjects to include in file name
+    subjects_end_file = ""
+    for el in all_dfs:
+        subject,df = el
+        subject_string = subject + " "
+        subjects_end_file+=subject_string
+        # get means as list
+        means = df['Mean_zscore'].tolist()
+        zscores_means_by_subject.append(means)
+        del df['Mean_zscore']
+        del df['Error']
+        # if first dataframe keep time
+        if len(ts_df) == 0:
+            ts = df.iloc[:,:1]
+            ts_df.append(ts)
+        # remove time
+        del df['Time (sec)']
+        original_cols = list(df.columns)
+        new_columns = []
+        for col in original_cols:
+            new_name = subject+"_"+col
+            new_columns.append(new_name)
+        # replace old column names with new that contain subject name
+        df.columns = new_columns
+        # add to means list
+        zscore_all_dfs.append(df)    
+    # add subjects to settings
+    settings_dict[0]["subject"] = subjects_end_file
+    # calculate means
+    # join all trials from all subjects to get means ans errors
+    df_all_trials = pd.concat(zscore_all_dfs,axis=1)
+    # print(df_all_trials)
+    transposed_df = df_all_trials.transpose()
+    means_df = transposed_df.mean(axis=0)
+    means_df = pd.DataFrame({"Mean":means_df.tolist()})
+#    standard_devs_df = transposed_df.std(axis=0)
+#    stds = standard_devs_df.tolist()
+#    se = [stds[i]/np.sqrt(df_all_trials.shape[1]) for i in range(len(stds))]
+#    se_df = pd.DataFrame({"Error":se})
+    
+
+    mean_zscore = np.asarray(means_df['Mean'].tolist())
+    ts = np.asarray(ts_df[0]['Time (sec)'].tolist())
+    
+    # Quantify changes as an area under the curve
+    pre_ind = np.where((np.array(ts)<perievent_options_dict["auc_pre_to"]) & (np.array(ts)>perievent_options_dict["auc_pre_from"]))
+   
+    AUC_pre = auc(ts[pre_ind], mean_zscore[pre_ind])
+    post_ind = np.where((np.array(ts)>perievent_options_dict["auc_post_from"]) & (np.array(ts)<perievent_options_dict["auc_post_to"]))
+    AUC_post= auc(ts[post_ind], mean_zscore[post_ind])
+    AUC = [AUC_pre, AUC_post]   
+    # run a two-sample T-test
+    t_stat,p = stats.ttest_ind(mean_zscore[pre_ind],
+                               mean_zscore[post_ind], equal_var=False)
+
+    aucs_pre_by_trial =[]
+    aucs_post_by_trial = []
+    zscore_all = []
+    # get each trials zscores
+    for col in df_all_trials.columns:
+        zscore_all.append(np.asarray(df_all_trials[col].tolist()))
+    for i in range(len(zscore_all)):
+        pre = auc(ts[pre_ind], zscore_all[i][pre_ind])
+        aucs_pre_by_trial.append(pre)
+        post = auc(ts[post_ind], zscore_all[i][post_ind])
+        aucs_post_by_trial.append(post)
+
+    # print("pre mean",np.mean(np.asarray(aucs_pre_by_trial)),AUC_pre)
+    # print("post mean",np.mean(np.asarray(aucs_post_by_trial)),AUC_post)
+    AUC_pre_err = np.std(np.asarray(aucs_pre_by_trial)/np.sqrt(len(aucs_pre_by_trial)))
+    AUC_post_err = np.std(np.asarray(aucs_post_by_trial)/np.sqrt(len(aucs_post_by_trial)))
+    # print("errors",AUC_pre_err,AUC_post_err)
+        
+
+    # bin auc data in one second bins
+    # create indexes
+    aucs = []
+    start = -perievent_options_dict["sec_before"]
+    end = start + 1
+    while end < perievent_options_dict["sec_after"]:
+        ind = np.where((np.array(ts)<end) & (np.array(ts)>start))
+        my_auc = auc(ts[ind], mean_zscore[ind])
+        aucs.append(my_auc)
+        start = end
+        end = start+1
+        
+    # plot
+    # clear previous figure
+    canvas.fig.clf()
+    ax = canvas.fig.add_subplot(111)
+   
+    ax.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
+    ax.axhline(y=0,linewidth=0.5,color='k')
+    ax.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_pre_err,AUC_post_err], fmt='o',color='k',capsize=4)
+    x1, x2 = 0, 1 # columns indices for labels
+    # y, h, col = max(AUC) + 2, 2, 'k'
+    y, h, col = max(AUC) + max([AUC_pre_err,AUC_post_err]), 2, 'k'
+    # # plot significance bar if p < .05
+    # if p < 0.05:
+    #     ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
+    #     ax.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
+        
+    my_title = 'Total Subjects: ' + str(len(all_dfs))+ "; Event: "+event_name
+    canvas.fig.suptitle(my_title, fontsize=14)
+    # hide top and right border
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_ylim(min(AUC)-2*h, y+2*h)
+    ax.set_ylabel('AUC')
+    ax.set_title('Pre vs Post')
+    ax.set_xticks(np.arange(-1, len(AUC)+1))
+    ax.set_xticklabels(['', 'PRE', 'POST', ''])
+    ax.set_yticks([min(AUC),max(AUC)])
+    
+    # save csv with data
+    file_name = file_beginning+"_perievent_auc.csv"
+    dump_file_path = os.path.join(dump_path,file_name)
+    settings_df = get_settings_df(settings_dict)
+    settings_df.to_csv(dump_file_path,header=False)            
+    with open(dump_file_path,'a') as f:
+        f.write("\n")
+    # raw_df= pd.DataFrame({"pre_AUC":[AUC[0]],
+    #                              "post_AUC" : [AUC[1]]})
+    # save each trial's auc instead
+    raw_df= pd.DataFrame({"Trial":[i+1 for i in range(len(aucs_pre_by_trial))],
+                                 "Pre_AUC" : aucs_pre_by_trial,
+                                 "Post_AUC":aucs_post_by_trial})
+    raw_df.to_csv(dump_file_path, index=False,mode='a')
+    
+    # export also auc binned in one second bins
+    sec_auc_df = pd.DataFrame({"One second bins AUC":aucs})
+    auc_file_name = file_beginning+"_auc_one_second_bins.csv"
+    dump_file_path = os.path.join(dump_path,auc_file_name)
+    settings_df.to_csv(dump_file_path,header=False)            
+    with open(dump_file_path,'a') as f:
+        f.write("\n")
+    sec_auc_df.to_csv(dump_file_path, index=False,mode='a') 
+      
+    # save plot
+    plot_file_name = file_beginning +"_perievent_auc.png"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path)
+    # also as svg
+    plot_file_name = file_beginning + subjects_end_file+"_perievent_auc.svg"
+    dump_plot_file_path = os.path.join(dump_path,plot_file_name)
+    canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    
+def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,control_name,subject_name,save_plot,dump_path):
+    normalization = settings_dict["normalization"]
+    smooth = settings_dict["filter"]
+    smooth_fraq = settings_dict["filter_fraction"]
+    
+    # change lists to numpy array for calculations
+    ts_arr = np.asarray(downsampled["ts"])
+    signal_arr =np.asarray(downsampled["signal"])
+    control_arr = np.asarray(downsampled["control"])
+    # reset time to start from zero
+    total_seconds = ts_arr[-1]-ts_arr[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_arr) for i in range(len(ts_arr))]
+    if normalization == 'Standard Polynomial Fitting':        
+        if smooth == True:
+            print("Start smoothing",smooth_fraq)
+            signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+            control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+            print("Done smoothing")
+            
+        # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+        mu = np.mean(control_arr)
+        std = np.std(control_arr, ddof=0)
+        # Call np.polyfit(), using the shifted and scaled version of control_arr
+    #    cscaled = np.polyfit((control_arr - mu)/std, signal_arr, 1) # depreciated
+        cscaled = np.polynomial.polynomial.Polynomial.fit((control_arr - mu)/std, signal_arr, 1)
+        # Create a poly1d object that can be called
+    #    pscaled = np.poly1d(cscaled) # old obsolete function
+        # https://numpy.org/doc/stable/reference/routines.polynomials.html
+        pscaled = Polynomial(cscaled.convert().coef)
+        # Inputs to pscaled must be shifted and scaled using mu and std
+        F0 = pscaled((control_arr - mu)/std)
+#        dffnorm = (signal_arr - F0)/F0 * 100
+#        # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+#        # to make 0 the mean value for DF/F
+#        negative = dffnorm[dffnorm<0]
+#        dff=dffnorm-np.mean(negative)
+    
+        # plot
+        # clear previous figure
+        canvas.fig.clf()
+        ax = canvas.fig.add_subplot(111)
+        
+        ax.plot(ts_reset, signal_arr, linewidth=1, color='green', label='F'+signal_name)
+        ax.plot(ts_reset, F0, linewidth=1, color='k', label='F0')
+        
+        my_title = "Check polynomial fitting: " + normalization
+        ax.set_title(my_title,fontsize=14)
+#        canvas.fig.suptitle(my_title, fontsize=14)
+        ax.set_ylabel('mV')
+        ax.set_xlabel('Time (sec)', fontsize=12)
+        # show only intiger yticks
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # hide top and right border
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+        canvas.draw()
+    
+    if normalization == 'Modified Polynomial Fitting':
+        if smooth == True:
+            print("Start smoothing",smooth_fraq)
+            signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+            control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+            print("Done smoothing")
+            
+        # fit time axis to the 465nm stream  
+    #    bls_Ca = np.polyfit(ts_arr,signal_arr,1) # deprecieted
+        bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_reset,signal_arr,1)
+    #    print("bls_Ca",bls_Ca.convert().coef[::-1])
+    #    F0Ca = np.polyval(bls_Ca,ts_arr) # deprecieted
+        F0Ca = polyval(ts_reset,bls_Ca.convert().coef)
+        # dF/F for the 465 channel
+#        dFFCa = (signal_arr - F0Ca)/F0Ca *100
+        # fit time axis the 405nm stream
+    #    bls_ref = np.polyfit(ts_arr,control_arr,1) # depreciated
+        bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_reset,control_arr,1)
+    #    F0Ref = np.polyval(bls_ref,ts_arr) # deprecieted
+        F0Ref = polyval(ts_reset,bls_ref.convert().coef)
+        # dF/F for the 405 channel
+#        dFFRef = (control_arr - F0Ref)/F0Ref *100
+#    #    print(dFFRef)
+#        dFFnorm = dFFCa - dFFRef
+#        # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+#        # to make 0 the mean value for DF/F
+#        negative = dFFnorm[dFFnorm<0]
+#        dFF=dFFnorm-np.mean(negative)
+ 
+        # plot
+        # clear previous figure
+        canvas.fig.clf()
+        ax = canvas.fig.add_subplot(211)
+        ax2 = canvas.fig.add_subplot(212)
+        
+        ax.plot(ts_reset, signal_arr, linewidth=1, color='green', label='F'+signal_name)
+        ax.plot(ts_reset, F0Ca, linewidth=1, color='k', label='F0')
+        
+        ax2.plot(ts_reset, control_arr, linewidth=1, color='r', label='F'+control_name)
+        ax2.plot(ts_reset, F0Ref, linewidth=1, color='k', label='F0')
+        
+        my_title = "Check polynomial fitting: " + normalization
+#        ax.set_title(my_title,fontsize=14)
+        canvas.fig.suptitle(my_title, fontsize=14)
+        ax.set_ylabel('mV')
+        ax.set_xlabel('Time (sec)', fontsize=12)
+        # show only intiger yticks
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # hide top and right border
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+        ax2.set_ylabel('mV')
+        ax2.set_xlabel('Time (sec)', fontsize=12)
+        # show only intiger yticks
+        ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # hide top and right border
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+
+    if save_plot == True:
+        my_path = dump_path
+        file_name = subject_name+"_poly_fitting.png"
+        save_path = os.path.join(my_path,file_name)
+        canvas.fig.savefig(save_path)
+        # also as svg
+        file_name = subject_name+"_poly_fitting.svg"
+        dump_plot_file_path = os.path.join(dump_path,file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    
+   
+    
+    
