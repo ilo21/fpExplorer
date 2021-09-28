@@ -1,0 +1,6 @@
+*.Tbk filter=lfs diff=lfs merge=lfs -text
+*.Tdx filter=lfs diff=lfs merge=lfs -text
+*.tev filter=lfs diff=lfs merge=lfs -text
+*.tin filter=lfs diff=lfs merge=lfs -text
+*.tnt filter=lfs diff=lfs merge=lfs -text
+*.tsq filter=lfs diff=lfs merge=lfs -text
