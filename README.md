@@ -1,6 +1,6 @@
 # <div align="center">fpAT<br><br>![icon64x64](https://user-images.githubusercontent.com/87764674/126611941-34d2f3c2-0f24-4517-a82a-4c01ac82599f.png)<br>(Fiber Photometry Analysis Tool)<br> [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)<br></div>
 ## What is it?
-fpAT is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems. This is our attempt to standardize analysis approaches.<br>
+fpAT is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems. This is our attempt to standardize and simplify analysis approaches.<br>
 <br>![visualize](https://user-images.githubusercontent.com/87764674/134684805-b8c2564b-4e95-4837-a278-9ed875adcb3e.PNG)
 <br>
 ![batch-z-score-options](https://user-images.githubusercontent.com/87764674/134880894-ba74ccb2-c06d-445f-8d69-3ae24cbae589.PNG)
@@ -42,7 +42,7 @@ This application was developed to meet the needs of researchers at Linköping Un
 ## Contributors
 - Ilona Szczot (development and analytical expertise)
 - Joost Wiskerke (development and analytical expertise)
-- David Barker (we were inspired by his group's [pMAT](https://github.com/djamesbarker/pMAT) (Photometry Modular Analysis Tool))
+- [David Barker](https://www.thebarkerlab.com/) (we were inspired by his group's [pMAT](https://github.com/djamesbarker/pMAT) (Photometry Modular Analysis Tool))
 - Patrick Mulholland (provided a modified polynomial fitting method)
 
 
