@@ -35,15 +35,15 @@ The installation file for the desktop application is available [here](https://gi
 You can find more information about managing conda environments [here](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
 <br><br>*[Recent adjustments for the development on MacOS](https://github.com/ilo21/fpAT/tree/main/fpAT_MacOS)*<br>
 ## Limitations
-This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpAT easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's Synapse software). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
-- The application was developed and tested only on Windows 10 platform.
+This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpAT easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
+- The application was developed and extensively tested on Windows 10 platform. We have only minimally tested running it on MacOS and Linux systems.
 - Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software (Subject-> Experiment or Experiment->Structure)
 - Currently supported events are only the ones that start with Prt or Note (e.g., "PrtA 253", "Note 1")
 ## Contributors
-- Ilona Szczot (development and analytical expertise)
-- Joost Wiskerke (development and analytical expertise)
+- [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
+- [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
 - [David Barker](https://www.thebarkerlab.com/) (we were inspired by his group's [pMAT](https://github.com/djamesbarker/pMAT) (Photometry Modular Analysis Tool))
-- Patrick Mulholland (provided a modified polynomial fitting method)
+- [Patrick Mulholland](https://education.musc.edu/MUSCApps/facultydirectory/Mulholland-Patrick) (provided a modified polynomial fitting method)
 
 
 
