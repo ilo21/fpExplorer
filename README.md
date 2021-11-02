@@ -22,11 +22,11 @@ The installation file for the desktop application is available [here](https://gi
   ```
   - From [specification](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) file<br>Download the repository. Open cmd within environment_info folder where [spec-file](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) is located and type:
   ```
-    conda create --name FP --file win10FPspec-file.txt
+    conda create --name FP2 --file win10FPspec-file.txt
   ```
 - Lastly, change your working environment to the new environment:
 ```
-  conda activate FP
+  conda activate FP2
 ```
 - Navigate to fpExplorer_src folder and run:
 ```
