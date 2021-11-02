@@ -4048,7 +4048,7 @@ def get_batch_normalized(canvas,my_all_normalized,settings_dict,export,export_lo
              label = "normalized")
     # plot standard error bands
     ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='red', alpha=0.2,label = 'Standard error')
+                      facecolor='g', alpha=0.2,label = 'Standard error')
     
     my_title = 'Normalized batch'
     canvas.fig.suptitle(my_title, fontsize=14)
@@ -4135,7 +4135,7 @@ def get_batch_normalized_with_event(canvas,my_all_normalized,event_name,event2_n
              label = "normalized")
     # plot standard error bands
     ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='red', alpha=0.2,label = 'Standard error')
+                      facecolor='g', alpha=0.2,label = 'Standard error')
     
     if len(event_data[0][0]) > 0:
         # first event
@@ -4704,7 +4704,7 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,sett
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='red', alpha=0.2,label = 'Standard error')
+                      facecolor='g', alpha=0.2,label = 'Standard error')
     
     my_title = 'Total Subjects: ' + str(len(all_dfs))
     canvas.fig.suptitle(my_title, fontsize=14)
@@ -4834,7 +4834,7 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
     # plot the z-score trace for the signal with std error bands
     ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Group Mean')
     ax2.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='red', alpha=0.2,label = 'Standard error')
+                      facecolor='g', alpha=0.2,label = 'Standard error')
 
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
   

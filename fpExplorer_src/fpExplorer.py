@@ -231,7 +231,7 @@ class MyMainWidget(QMainWindow):
         doc_folder = os.path.join(os.path.abspath(os.getcwd()),"Documentation")
         doc_path = os.path.join(doc_folder,"docs.pdf")
         # open file dialog to ask for 
-        doc_save_folder = QtGui.QFileDialog.getExistingDirectory(self,"Select folder to save documentation file")
+        doc_save_folder = QFileDialog.getExistingDirectory(self,"Select folder to save documentation file")
         # copy pdf with documentation in the selected location
         if len(doc_save_folder) > 0:
             # check if it exists
@@ -591,7 +591,7 @@ class RunOnBatchWindow(QMainWindow):
                     
     def select_folder_btn_clicked(self):
         # set text field to the value of selected path
-        self.selected_folder_text.setText(QtGui.QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
+        self.selected_folder_text.setText(QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
         
         
     def read_and_validate(self):
@@ -4438,7 +4438,7 @@ class PeakSettingsWindow(QMainWindow):
         
     def select_folder_btn_clicked(self):
         # set text field to the value of selected path
-        self.selected_folder_text.setText(QtGui.QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
+        self.selected_folder_text.setText(QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
 
     def disable_buttons(self):
         self.save_settings_btn.setEnabled(False)
@@ -4981,7 +4981,7 @@ class PeriEventOptionsWindow(QMainWindow):
             
     def select_folder_btn_clicked(self):
         # set text field to the value of selected path
-        self.selected_folder_text.setText(QtGui.QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
+        self.selected_folder_text.setText(QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
             
         
     # show info popup
@@ -5126,7 +5126,7 @@ class ExportDataWindow(QMainWindow):
             
     def select_folder_btn_clicked(self):
         # set text field to the value of selected path
-        self.selected_folder_text.setText(QtGui.QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
+        self.selected_folder_text.setText(QFileDialog.getExistingDirectory(self,"Choose Folder to Export Data"))
             
     
     # read user options and sent to preview        
