@@ -25,7 +25,6 @@ The installation file for the desktop application is available [here](https://gi
     conda create --name FP2 --file win10FPspec-file.txt
   ```
   - From scratch:
-    - Create a separate environment for the development
       - Open Terminal and type:
       ```
       conda create --name FP2 python=3.7
