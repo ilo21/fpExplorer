@@ -16,15 +16,35 @@ The installation file for the desktop application is available [here](https://gi
 ## Development
 - Install [Anaconda](https://www.anaconda.com/products/individual) Python Distribution.
 - Create a separate environment for the development.
-  - From [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/FPenv.yml) file.<br>Download the repository. Open cmd within environment_info folder where [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/FPenv.yml) file is located and type:
+  - From [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/FPenv.yml) file:<br>Download the repository. Open cmd within environment_info folder where [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/FPenv.yml) file is located and type:
   ```
     conda env create -f FPenv.yml
   ```
-  - From [specification](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) file<br>Download the repository. Open cmd within environment_info folder where [spec-file](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) is located and type:
+  - From [specification](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) file:<br>Download the repository. Open cmd within environment_info folder where [spec-file](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) is located and type:
   ```
     conda create --name FP2 --file win10FPspec-file.txt
   ```
-- Lastly, change your working environment to the new environment:
+  - From scratch:
+    - Create a separate environment for the development
+      - Open Terminal and type:
+      ```
+      conda create --name FP2 python=3.7
+      ```
+      - Change change your working environment to the new environment:
+      ```
+        conda activate FP2
+      ```
+      - Install required packeges one by one:
+      ```
+      pip install tdt
+      pip install pandas
+      pip install scipy
+      pip install sklearn
+      pip install matplotlib
+      pip install PyQt5
+      pip install pyqtgraph
+      ```
+- Change your working environment to the new environment (if you haven't already):
 ```
   conda activate FP2
 ```
