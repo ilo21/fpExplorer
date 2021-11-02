@@ -69,6 +69,3 @@ This application was developed to meet the needs of researchers at Linköping Un
 
 
 
-
-
-
