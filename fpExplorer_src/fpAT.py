@@ -53,9 +53,9 @@ STYLESHEET = \
             + "padding: 7px;\n" \
             + "margin-left:20px;\n" \
             + "margin-right:20px;\n" \
-            + "margin-top:10px;\n" \
-            + "margin-bottom:10px;\n" \
-            + "font-size: large;\n" \
+            + "margin-top:5px;\n" \
+            + "margin-bottom:5px;\n" \
+            + "font-size: 14px;\n" \
             + "font-weight: bold;\n" \
             + "}" 
             
@@ -77,8 +77,8 @@ class MyMainWidget(QMainWindow):
     def __init__(self):
         super(MyMainWidget, self).__init__()
         self.name = "fpAT"
-        self.app_width = 1800
-        self.app_height = 1000
+        self.app_width = 1200
+        self.app_height = 600
         self.top_buttons_height = 50
         self.bottom_buttons_height = 50
         self.setWindowIcon(QtGui.QIcon(ICO))
@@ -142,7 +142,7 @@ class MyMainWidget(QMainWindow):
         self.run_on_batch_btn.setEnabled(False)
         
         # Create a layout to manage the buttons size and position
-        self.box_layout = QtGui.QHBoxLayout()
+        self.box_layout = QHBoxLayout()
         # set the spacing around the layout
         self.box_layout.setContentsMargins(10,10,10,10)
         # place widgets to the layout in their proper positions
@@ -157,7 +157,7 @@ class MyMainWidget(QMainWindow):
         self.top_widget.setLayout(self.box_layout)
         
         # Create a layout for preview area
-        self.preview_main_layout = QtGui.QHBoxLayout()
+        self.preview_main_layout = QHBoxLayout()
         
         # connect buttons to fpAT_functions
         self.select_data_btn.clicked.connect(self.select_data_btn_clicked)
@@ -526,13 +526,13 @@ class RunOnBatchWindow(QMainWindow):
         self.options_widget = QWidget()
         self.select_analysis_label = QLabel("Select Analysis:")
         self.options_layout.addWidget(self.select_analysis_label)
-        self.normalized_cb = QtGui.QCheckBox("Normalized Data (single subjects only)")
+        self.normalized_cb = QCheckBox("Normalized Data (single subjects only)")
         if "normalized" in self.batch_params_dict:
             self.normalized_cb.setChecked(self.batch_params_dict["normalized"])
-        self.perievent_cb = QtGui.QCheckBox("Perievent Data")
+        self.perievent_cb = QCheckBox("Perievent Data")
         if "perievent" in self.batch_params_dict:
             self.perievent_cb.setChecked(self.batch_params_dict["perievent"])
-        self.spike_cb = QtGui.QCheckBox("Spikes (single subjects only)")
+        self.spike_cb = QCheckBox("Spikes (single subjects only)")
         if "spikes" in self.batch_params_dict:
             self.spike_cb.setChecked(self.batch_params_dict["spikes"])
         self.options_layout.addWidget(self.normalized_cb)
@@ -540,10 +540,10 @@ class RunOnBatchWindow(QMainWindow):
             self.options_layout.addWidget(self.perievent_cb)
         self.options_layout.addWidget(self.spike_cb)
         self.options_layout.addWidget(QLabel(""))
-        self.export_for_single_subjects_cb = QtGui.QCheckBox("Export Each Subject Data")
+        self.export_for_single_subjects_cb = QCheckBox("Export Each Subject Data")
         if "export_for_single_subjects" in self.batch_params_dict:
             self.export_for_single_subjects_cb.setChecked(self.batch_params_dict["export_for_single_subjects"])
-        self.export_group_data_cb = QtGui.QCheckBox("Export Group Analysis Data")
+        self.export_group_data_cb = QCheckBox("Export Group Analysis Data")
         if "export_group_data" in self.batch_params_dict:
             self.export_group_data_cb.setChecked(self.batch_params_dict["export_group_data"])
         self.export_for_single_subjects_cb.setStyleSheet(self.bold_stylesheet)
@@ -987,10 +987,10 @@ class SignalControlWindow(QMainWindow):
         
         self.main_layout = QFormLayout()
         self.main_layout.setContentsMargins(10,10,10,10)
-        self.signal_name_cb = QtGui.QComboBox()
+        self.signal_name_cb = QComboBox()
         self.signal_name_cb.addItems(self.channel_names)
         self.main_layout.addRow("Signal channel name:",self.signal_name_cb)
-        self.control_name_cb = QtGui.QComboBox()
+        self.control_name_cb = QComboBox()
         self.control_name_cb.addItems(self.channel_names)
         self.main_layout.addRow("Control channel name:",self.control_name_cb)
         self.ok_btn = QPushButton("OK")
@@ -1096,11 +1096,11 @@ class PreviewContinuousWidget(QWidget):
         self.setupGUI()
         
     def setupGUI(self):
-        self.layout = QtGui.QVBoxLayout()
+        self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0,0,0,0)
         self.setLayout(self.layout)
         # area on the left with options
-        self.splitter = QtGui.QSplitter()
+        self.splitter = QSplitter()
         self.splitter.setOrientation(Qt.Horizontal)
         self.layout.addWidget(self.splitter)
 ###########################################
@@ -1118,7 +1118,7 @@ class PreviewContinuousWidget(QWidget):
         self.experiment_label.setStyleSheet(self.bold_label_stylesheet)
         self.options_layout.addRow(self.experiment_label,self.experiment_name_text)
         # add drop down menu for subjects from the list
-        self.subject_comboBox = QtGui.QComboBox()
+        self.subject_comboBox = QComboBox()
         self.subject_comboBox.addItems(self.preview_init_params[0][0]["subject_names"])
         # adjust trimming when subject changed
         self.subject_comboBox.currentIndexChanged.connect(self.on_subject_change)
@@ -1135,21 +1135,21 @@ class PreviewContinuousWidget(QWidget):
         self.trim_ending_sec.setValidator(QtGui.QIntValidator())
         self.options_layout.addRow("Trim beginning (seconds)",self.trim_beginning_sec)
         self.options_layout.addRow("Trim ending (seconds)",self.trim_ending_sec)
-        self.downsample_cb = QtGui.QCheckBox("Downsample")
+        self.downsample_cb = QCheckBox("Downsample")
         self.perform_label = QLabel("Perform:")
         self.perform_label.setStyleSheet(self.bold_label_stylesheet)
         self.downsample_cb.setStyleSheet(self.bold_cb_stylesheet)
         self.options_layout.addRow(self.perform_label,self.downsample_cb)
-        self.normalize_cb = QtGui.QCheckBox("Normalize Downsampled")
+        self.normalize_cb = QCheckBox("Normalize Downsampled")
         self.normalize_cb.setStyleSheet(self.bold_cb_stylesheet)
         self.options_layout.addRow("",self.normalize_cb)
         # choose what to show on the plot
-        self.raw_plot_cb = QtGui.QCheckBox("Raw data")
+        self.raw_plot_cb = QCheckBox("Raw data")
         # self.raw_plot_cb.setChecked(True)
-        self.separate_signal_contol_cb = QtGui.QCheckBox("Separate signal and control")
-        self.downsampled_plot_cb = QtGui.QCheckBox("Downsampled data")
+        self.separate_signal_contol_cb = QCheckBox("Separate signal and control")
+        self.downsampled_plot_cb = QCheckBox("Downsampled data")
         self.downsampled_plot_cb.setEnabled(False)
-        self.normalized_plot_cb = QtGui.QCheckBox("Normalized data")
+        self.normalized_plot_cb = QCheckBox("Normalized data")
         self.normalized_plot_cb.setEnabled(False)
         # self.options_layout.addRow("Show on the plot:",self.raw_plot_cb)
         self.show_label = QLabel("Show:")
@@ -1192,7 +1192,7 @@ class PreviewContinuousWidget(QWidget):
 #####################################################       
 # Plots; biggest part of preview (top right)
         # area on the top right for the plots
-        self.splitter2 = QtGui.QSplitter()
+        self.splitter2 = QSplitter()
         self.splitter2.setOrientation(Qt.Vertical)
         self.splitter.addWidget(self.splitter2)
         # Plot area widget
@@ -1217,7 +1217,7 @@ class PreviewContinuousWidget(QWidget):
         self.preview_buttons_layout = QHBoxLayout()
         self.preview_buttons_layout.setAlignment(Qt.AlignRight)
         self.preview_buttons_widget = QWidget()
-        self.include_cb = QtGui.QCheckBox("Include Subject")
+        self.include_cb = QCheckBox("Include Subject")
         self.next_btn = QPushButton("Next")
         self.previous_btn = QPushButton("Previous")
 #        self.previous_btn.setFixedWidth(120)
@@ -2096,11 +2096,11 @@ class PreviewEventBasedWidget(QWidget):
 
     # receives a list with dictionary of signal and control channel names 
     def setupGUI(self):
-        self.layout = QtGui.QVBoxLayout()
+        self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0,0,0,0)
         self.setLayout(self.layout)
         # area on the left with options
-        self.splitter = QtGui.QSplitter()
+        self.splitter = QSplitter()
         self.splitter.setOrientation(Qt.Horizontal)
         self.layout.addWidget(self.splitter)
 ###########################################
@@ -2118,7 +2118,7 @@ class PreviewEventBasedWidget(QWidget):
         self.experiment_label.setStyleSheet(self.bold_label_stylesheet)
         self.options_layout.addRow(self.experiment_label,self.experiment_name_text)
         # add drop down menu for subjects from the list
-        self.subject_comboBox = QtGui.QComboBox()
+        self.subject_comboBox = QComboBox()
         self.subject_comboBox.addItems(self.preview_init_params[0][0]["subject_names"])
 
         self.subject_comboBox.currentIndexChanged.connect(self.on_subject_change)
@@ -2130,20 +2130,20 @@ class PreviewEventBasedWidget(QWidget):
         self.last_raw_ts_text.setReadOnly(True)
         self.options_layout.addRow("Total seconds", self.last_raw_ts_text)
         # adjust trimming when subject changed
-        self.trim_beginning_select = QtGui.QComboBox()
+        self.trim_beginning_select = QComboBox()
         self.trim_beginning_select.addItems(["Trim first seconds", "Trim by event"])
         self.trim_beginning_select.currentIndexChanged.connect(self.begin_trim_changed)
         self.trim_beginning_sec = QLineEdit("0")
         self.trim_beginning_sec.setValidator(QtGui.QIntValidator())
-        self.trim_beginning_event = QtGui.QComboBox()
+        self.trim_beginning_event = QComboBox()
         self.trim_beginning_event.addItems(self.events_from_current_subject)
         self.trim_beginning_event.setEnabled(False)
-        self.trim_ending_select = QtGui.QComboBox()
+        self.trim_ending_select = QComboBox()
         self.trim_ending_select.addItems(["Trim last seconds", "Trim by event"])
         self.trim_ending_select.currentIndexChanged.connect(self.end_trim_changed)
         self.trim_ending_sec = QLineEdit("0")
         self.trim_ending_sec.setValidator(QtGui.QIntValidator())
-        self.trim_end_event = QtGui.QComboBox()
+        self.trim_end_event = QComboBox()
         self.trim_end_event.addItems(self.events_from_current_subject)
         self.trim_end_event.setEnabled(False)
         self.trim_begin_label = QLabel("Trim beginning")
@@ -2156,7 +2156,7 @@ class PreviewEventBasedWidget(QWidget):
         self.options_layout.addRow(self.trim_end_label,self.trim_ending_select)
         self.options_layout.addRow("Seconds",self.trim_ending_sec)
         self.options_layout.addRow("Event to trim",self.trim_end_event)
-        self.event_from_data_comboBox = QtGui.QComboBox()
+        self.event_from_data_comboBox = QComboBox()
         self.event_from_data_comboBox.addItems(["---",*self.events_from_current_subject])
         self.show_event_label = QLabel("Show Event")
         self.show_event_label.setStyleSheet(self.bold_label_stylesheet)
@@ -2164,7 +2164,7 @@ class PreviewEventBasedWidget(QWidget):
         self.event_name_text = QLineEdit("")
         self.event_name_text.setToolTip("i.e, Tone")
         self.options_layout.addRow("Event name (optional)",self.event_name_text)
-        self.event2_from_data_comboBox = QtGui.QComboBox()
+        self.event2_from_data_comboBox = QComboBox()
         self.event2_from_data_comboBox.addItems(["---",*self.events_from_current_subject])
         self.showevent2_label = QLabel("Show Event2")
         self.showevent2_label.setStyleSheet(self.bold_label_stylesheet)
@@ -2172,21 +2172,21 @@ class PreviewEventBasedWidget(QWidget):
         self.event2_name_text = QLineEdit("")
         self.event2_name_text.setToolTip("i.e, Tone")
         self.options_layout.addRow("Event2 name (optional)",self.event2_name_text)
-        self.downsample_cb = QtGui.QCheckBox("Downsampling")
+        self.downsample_cb = QCheckBox("Downsampling")
         self.downsample_cb.setStyleSheet(self.bold_cb_stylesheet)
         self.perform_label = QLabel("Perform:")
         self.options_layout.addRow(self.perform_label,self.downsample_cb)
         self.perform_label.setStyleSheet(self.bold_label_stylesheet)
-        self.normalize_cb = QtGui.QCheckBox("Normalization (+ Downsampling)")
+        self.normalize_cb = QCheckBox("Normalization (+ Downsampling)")
         self.normalize_cb.setStyleSheet(self.bold_cb_stylesheet)
         self.options_layout.addRow("",self.normalize_cb)
         # choose what to show on the plot
-        self.raw_plot_cb = QtGui.QCheckBox("Raw data")
+        self.raw_plot_cb = QCheckBox("Raw data")
         # self.raw_plot_cb.setChecked(True)
-        self.separate_signal_contol_cb = QtGui.QCheckBox("Separate signal and control")
-        self.downsampled_plot_cb = QtGui.QCheckBox("Downsampled data")
+        self.separate_signal_contol_cb = QCheckBox("Separate signal and control")
+        self.downsampled_plot_cb = QCheckBox("Downsampled data")
         self.downsampled_plot_cb.setEnabled(False)
-        self.normalized_plot_cb = QtGui.QCheckBox("Normalized data")
+        self.normalized_plot_cb = QCheckBox("Normalized data")
         self.normalized_plot_cb.setEnabled(False)
         self.show_on_plot_label = QLabel("Show:")
         self.show_on_plot_label.setStyleSheet(self.bold_label_stylesheet)
@@ -2216,10 +2216,10 @@ class PreviewEventBasedWidget(QWidget):
         self.check_btn_stylesheet = \
             ".QPushButton{\n" \
             + "padding: 7px;\n" \
-            + "margin-left:20px;\n" \
-            + "margin-right:20px;\n" \
-            + "margin-top:10px;\n" \
-            + "margin-bottom:10px;\n" \
+            + "margin-left:10px;\n" \
+            + "margin-right:10px;\n" \
+            + "margin-top:5px;\n" \
+            + "margin-bottom:5px;\n" \
             + "font-size: normal;\n" \
             + "font-weight: normal;\n" \
             + "}" 
@@ -2231,7 +2231,7 @@ class PreviewEventBasedWidget(QWidget):
 #####################################################       
 # Plots; biggest part of preview (top right)
         # area on the top right for the plots
-        self.splitter2 = QtGui.QSplitter()
+        self.splitter2 = QSplitter()
         self.splitter2.setOrientation(Qt.Vertical)
         self.splitter.addWidget(self.splitter2)
         # Plot area widget
@@ -2255,7 +2255,7 @@ class PreviewEventBasedWidget(QWidget):
         self.preview_buttons_layout = QHBoxLayout()
         self.preview_buttons_layout.setAlignment(Qt.AlignRight)
         self.preview_buttons_widget = QWidget()
-        self.include_cb = QtGui.QCheckBox("Include Subject")
+        self.include_cb = QCheckBox("Include Subject")
         self.next_btn = QPushButton("Next")
         self.previous_btn = QPushButton("Previous")
 #        self.previous_btn.setFixedWidth(120)
@@ -4529,15 +4529,15 @@ class SettingsWindow(QMainWindow):
         self.downsample_text.setValidator(QtGui.QIntValidator())
         self.downsample_text.setToolTip("Integers from 2 to "+str(MAX_DOWNSAMPLE))
         self.settings_layout.addRow("Downsample (How many samples to average)\nRecommended: 1-2% of sampling frequency",self.downsample_text)
-        self.normalization_method_comboBox = QtGui.QComboBox()
+        self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
         self.normalization_method_comboBox.setCurrentText(self.settings[0]["normalization"])
         self.settings_layout.addRow("Method of normalization",self.normalization_method_comboBox)
-        self.normalization_show_comboBox = QtGui.QComboBox()
+        self.normalization_show_comboBox = QComboBox()
         self.normalization_show_comboBox.addItems(["df/F ( in % )","Z-Score"])
         self.normalization_show_comboBox.setCurrentText(self.settings[0]["show_norm_as"])
         self.settings_layout.addRow("Show normalized data as",self.normalization_show_comboBox)
-        self.filter_cb = QtGui.QCheckBox("Gaussian filter")
+        self.filter_cb = QCheckBox("Gaussian filter")
         self.filter_cb.setChecked(self.settings[0]["filter"])
         self.settings_layout.addRow("Smooth data:",QLabel("The fraction (0-100%) of the data used when estimating each y-value:"))
         # The fraction of the data used when estimating each y-value
@@ -4672,7 +4672,7 @@ class PeriEventOptionsWindow(QMainWindow):
         self.event_layout = QHBoxLayout()
         self.event_layout.setContentsMargins(10,10,10,10)
         self.event_label = QLabel("Select Your Event:")
-        self.event_from_file_comboBox = QtGui.QComboBox()
+        self.event_from_file_comboBox = QComboBox()
         if self.batch == True:
             print(common_events)
             self.event_from_file_comboBox.addItems(common_events)
@@ -4778,17 +4778,17 @@ class PeriEventOptionsWindow(QMainWindow):
         self.baseline_layout.addWidget(self.auc_post_to_label,2,2)
         self.baseline_layout.addWidget(self.auc_post_to_text,2,3)      
         self.select_plot_label = QLabel("Show on plot:")
-        self.plot_average_cb = QtGui.QCheckBox("Average")
+        self.plot_average_cb = QCheckBox("Average")
         self.plot_average_cb.setChecked(True)
         if "plot_avg" in self.options_dict:
             self.plot_average_cb.setChecked(self.options_dict["plot_avg"])
-        self.plot_zscore_cb = QtGui.QCheckBox("Z-Score with error")
+        self.plot_zscore_cb = QCheckBox("Z-Score with error")
         if "plot_zscore" in self.options_dict:
             self.plot_zscore_cb.setChecked(self.options_dict["plot_zscore"])
-        self.plot_zscore_with_trials_cb = QtGui.QCheckBox("Z-Score with trials")
+        self.plot_zscore_with_trials_cb = QCheckBox("Z-Score with trials")
         if "plot_zscore_trials" in self.options_dict:
             self.plot_zscore_with_trials_cb.setChecked(self.options_dict["plot_zscore_trials"])
-        self.plot_auc_cb = QtGui.QCheckBox("Area Under the Curve (AUC)")  
+        self.plot_auc_cb = QCheckBox("Area Under the Curve (AUC)")  
         if "plot_auc" in self.options_dict:
             self.plot_auc_cb.setChecked(self.options_dict["plot_auc"])
         self.baseline_layout.addWidget(self.select_plot_label,3,0)
@@ -5067,17 +5067,17 @@ class ExportDataWindow(QMainWindow):
         
         self.select_label = QLabel("Select Data for Export:\n")
         self.selection_layout.addWidget(self.select_label)
-        self.raw_cb = QtGui.QCheckBox("Raw Data")
-#        self.trimmed_cb = QtGui.QCheckBox("Trimmed Data")
-        self.downsampled_cb = QtGui.QCheckBox("Downsampled Trimmed Data")
-        self.normalized_cb = QtGui.QCheckBox("Normalized Data")
-        self.perievent_cb = QtGui.QCheckBox("Perievent Data")
-        self.spike_cb = QtGui.QCheckBox("Spikes")
-        self.save_plots_cb = QtGui.QCheckBox("Save Plots")
+        self.raw_cb = QCheckBox("Raw Data")
+#        self.trimmed_cb = QCheckBox("Trimmed Data")
+        self.downsampled_cb = QCheckBox("Downsampled Trimmed Data")
+        self.normalized_cb = QCheckBox("Normalized Data")
+        self.perievent_cb = QCheckBox("Perievent Data")
+        self.spike_cb = QCheckBox("Spikes")
+        self.save_plots_cb = QCheckBox("Save Plots")
         self.bold_stylesheet = "QCheckBox {font-weight: bold}"
         self.save_plots_cb.setChecked(True)
         self.save_plots_cb.setStyleSheet(self.bold_stylesheet)
-        self.select_all_cb = QtGui.QCheckBox("Select All")
+        self.select_all_cb = QCheckBox("Select All")
         self.select_all_cb.setStyleSheet(self.bold_stylesheet)
         self.selection_layout.addWidget(self.raw_cb)
 #        self.selection_layout.addWidget(self.trimmed_cb)
