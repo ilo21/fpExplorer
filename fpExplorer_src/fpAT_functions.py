@@ -2590,14 +2590,14 @@ def plot_raw_perievents(canvas,subject,modified_data,perievent_options_dict,sett
             # find all values of the normalized DF/F that are negative so you can next shift up the curve 
             # to make 0 the mean value for DF/F
             negative = dFFnorm[dFFnorm<0]
-            dFF = dFFnorm-np.mean(negative)
+            dff = dFFnorm-np.mean(negative)
 
             if show_norm_as == "Z-Score":
                 median_all = np.median(dff)
                 mad = stats.median_absolute_deviation(dff)
                 dff = (dff - median_all)/mad
 
-            y_dff_all.append(dFF)
+            y_dff_all.append(dff)
     
     # plot
     # clear previous figure
