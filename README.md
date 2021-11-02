@@ -65,9 +65,6 @@ This application was developed to meet the needs of researchers at Linköping Un
 - [Patrick Mulholland](https://education.musc.edu/MUSCApps/facultydirectory/Mulholland-Patrick) (provided a modified polynomial fitting method)
 
 
-This is just Joost testing that he can edit :-)
-
-
 
 
 
