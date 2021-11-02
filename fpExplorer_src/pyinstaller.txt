@@ -4,6 +4,6 @@ Solved: using .spec file for conversion to exe
 import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 10)
 
 Pyinstaller:
-pyinstaller --clean --windowed --name "fpAT" --icon=app_icon.ico --add-data "Documentation/*.pdf;Documentation" fpAT.py
+pyinstaller --clean --windowed --name "fpExplorer" --icon=app_icon.ico --add-data "Documentation/*.pdf;Documentation" fpExplorer.py
 Then from spec file
-pyinstaller fpAT.spec
+pyinstaller fpExplorer.spec
