@@ -1568,7 +1568,7 @@ class PreviewContinuousWidget(QWidget):
                                     self.show_info_dialog("Problem creating subfolder")
                             else: # if subfolder already exists
                                 try:
-                                    fpAT_fpAT_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                    fpAT_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
                                                             self.recent_peak_values,
                                                             self.spikes_export,
                                                             self.save_plots,
@@ -1694,7 +1694,7 @@ class PreviewContinuousWidget(QWidget):
                 try: 
                     os.mkdir(export_options[0]["dump_path"])
                 except:
-                    if not os.path.exists(self.perievent_options_dict["export_path"]):
+                    if not os.path.exists(export_options[0]["dump_path"]):
                         self.show_info_dialog("Problem creating subfolder")
                   
             else:
@@ -3325,7 +3325,6 @@ class PreviewEventBasedWidget(QWidget):
                 except:
                     if not os.path.exists(self.perievent_options_dict["export_path"]):
                         self.show_info_dialog("Problem creating subfolder")
-                
                 self.export_path = self.perievent_options_dict["export_path"]
                 self.export_begining = self.perievent_options_dict["file_beginning"]
             
@@ -3553,8 +3552,7 @@ class PreviewEventBasedWidget(QWidget):
                 try: 
                     os.mkdir(export_options[0]["dump_path"])
                 except:
-                    if not os.path.exists(self.perievent_options_dict["export_path"]):
-                        print("Problem in export_options_received")
+                    if not os.path.exists(export_options[0]["dump_path"]):
                         self.show_info_dialog("Problem creating subfolder")
             else:
                 self.show_info_dialog("Please provide a valid export path!")
@@ -3717,7 +3715,6 @@ class PreviewEventBasedWidget(QWidget):
                                 try:
                                     os.mkdir(subject_subfolder)
                                 except:
-                                    print("Problem in peak options received")
                                     self.show_info_dialog("Problem creating subfolders")
                                     # save under main folder
                                     subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
@@ -3792,8 +3789,7 @@ class PreviewEventBasedWidget(QWidget):
                 try: 
                     os.mkdir(export_path)
                 except:
-                    if not os.path.exists(self.perievent_options_dict["export_path"]):
-                        print("Problem in peak options received not batch")
+                    if not os.path.exists(export_path):
                         self.show_info_dialog("Problem creating subfolder")
                    
                 self.export_path = export_path
@@ -3992,7 +3988,6 @@ class PreviewEventBasedWidget(QWidget):
                         try:
                             os.mkdir(subject_subfolder)
                         except:
-                            print("Problem in batch single subject")
                             self.show_info_dialog("Problem creating subfolder")
                             # save under main folder
                             subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
