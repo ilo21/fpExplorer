@@ -2435,7 +2435,7 @@ class PreviewEventBasedWidget(QWidget):
                 self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
             self.event_data.append(evt)
         # if downsample was selected
-        if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True:
+        if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True or self.separate_signal_contol_cb.isChecked():
             # add to downdampled dict
             self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                          self.settings_dict[0]["downsample"])
@@ -2646,7 +2646,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
               and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
             # if there is downsampled data, plot that, if not raw
-            downsampled_to_plot = {}
+            downsampled_to_plot = {}           
             if self.options["subject"] in self.downsampled_dict:
                 downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
                 self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
@@ -3030,11 +3030,11 @@ class PreviewEventBasedWidget(QWidget):
                                 # if subject data has not been trimmed
                                 # if it was not trimmed yet, add to dictionary with zero trimming
                                 self.trimmed_raw_data_dict[subject] = [(0,0),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
-                                                                                                                                            self.preview_init_params[0][0]["signal_name"],
-                                                                                                                                            self.preview_init_params[0][0]["control_name"],
-                                                                                                                                            0,
-                                                                                                                                            0
-                                                                                                                                            )]
+                                                                                                            self.preview_init_params[0][0]["signal_name"],
+                                                                                                            self.preview_init_params[0][0]["control_name"],
+                                                                                                            0,
+                                                                                                            0
+                                                                                                            )]
                             if subject not in self.trimmed_raw_data_dict: # if raw data read but not trimmed assume trimming 0
                                 # key is the subject name, value is a list
                                 # first element of that list is beginning and end seconds to trim
@@ -3554,6 +3554,7 @@ class PreviewEventBasedWidget(QWidget):
                     os.mkdir(export_options[0]["dump_path"])
                 except:
                     if not os.path.exists(self.perievent_options_dict["export_path"]):
+                        print("Problem in export_options_received")
                         self.show_info_dialog("Problem creating subfolder")
             else:
                 self.show_info_dialog("Please provide a valid export path!")
@@ -3716,6 +3717,7 @@ class PreviewEventBasedWidget(QWidget):
                                 try:
                                     os.mkdir(subject_subfolder)
                                 except:
+                                    print("Problem in peak options received")
                                     self.show_info_dialog("Problem creating subfolders")
                                     # save under main folder
                                     subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
@@ -3791,6 +3793,7 @@ class PreviewEventBasedWidget(QWidget):
                     os.mkdir(export_path)
                 except:
                     if not os.path.exists(self.perievent_options_dict["export_path"]):
+                        print("Problem in peak options received not batch")
                         self.show_info_dialog("Problem creating subfolder")
                    
                 self.export_path = export_path
@@ -3989,6 +3992,7 @@ class PreviewEventBasedWidget(QWidget):
                         try:
                             os.mkdir(subject_subfolder)
                         except:
+                            print("Problem in batch single subject")
                             self.show_info_dialog("Problem creating subfolder")
                             # save under main folder
                             subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]

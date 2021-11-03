@@ -2153,7 +2153,7 @@ def plot_downsampled_and_normalized_with_event(canvas,subject,downsampled_signal
     
 def plot_separate_only(canvas,subject,trimmed_signal_dict,downsampled_signal_dict):
     # if there is downsampled data plot that
-    if subject in downsampled_signal_dict:
+    if len(downsampled_signal_dict) > 0:
         GCaMP_data = downsampled_signal_dict["signal"]
         control_data = downsampled_signal_dict["control"]
         ts = downsampled_signal_dict["ts"]
