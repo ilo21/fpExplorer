@@ -100,15 +100,17 @@ def get_channel_names(raw_data):
 
 def get_events(raw_data):
     '''
-    Returns a list of unique events from file that start with Prt
-    i.e. PrtA 253, PrtA 249
+    Returns a list of unique events from file that
+    don't start with cam
     '''
     # tdt StructTypes are dictionaries
     all_epocs_list = [key for key in raw_data.epocs.keys()]
     my_event_list = []
     # iterate over all events that start with Ptr
     for evt in all_epocs_list:
-        if evt.startswith("Prt") or evt.startswith("Note"):
+        # exclude cam from events
+        if evt.lower().startswith("cam") == False:
+        # if evt.startswith("Prt") or evt.startswith("Note"):
             # create set of unique events
             unique_events = set(raw_data.epocs[evt].data)
             for el in unique_events:
@@ -463,12 +465,18 @@ def filter_data_around_event(raw_data,trimmed_data,perievent_options_dict,settin
     
     return modified_data
 
-def analyze_perievent_data(data,perievent_options_dict,settings_dict,signal_name,control_name):
+def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_dict,signal_name,control_name):
     # create a dictionary with analysed data for plotting
     analyzed_perievent_dict = {}
     # get downsampled data from around event 
     GCaMP_perievent_data = data.streams[signal_name].filtered_downsampled
     control_perievent_data = data.streams[control_name].filtered_downsampled
+
+    # only selected trials
+    if len(current_trials) > 0:
+        GCaMP_perievent_data = [GCaMP_perievent_data[trial-1] for trial in current_trials]
+        control_perievent_data = [control_perievent_data[trial-1] for trial in current_trials]
+
     
     # Create a mean signal, standard error(median absolute deviation in pMat) of signal, and DC offset
     mean_signal = np.mean(GCaMP_perievent_data, axis=0)
@@ -2502,7 +2510,7 @@ def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,
     canvas.draw()
     
 # plot rwa but downsampled perievents
-def plot_raw_perievents(canvas,subject,modified_data,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,subject_data_path,export_loc_data):
+def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,subject_data_path,export_loc_data):
     settings_dict[0]["subject"] = subject
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data
@@ -2510,6 +2518,11 @@ def plot_raw_perievents(canvas,subject,modified_data,perievent_options_dict,sett
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     GCaMP_perievent_data = modified_data.streams[signal_name].filtered_downsampled
     control_perievent_data = modified_data.streams[control_name].filtered_downsampled
+    if len(current_trials) > 0:
+        # only those trials that are selected
+        # print(current_trials)
+        GCaMP_perievent_data = [GCaMP_perievent_data[trial-1] for trial in current_trials]
+        control_perievent_data = [control_perievent_data[trial-1] for trial in current_trials]
     # debug to assert that all perievent data is the same lenght
 #    for i in range(len(GCaMP_perievent_data)):
 #        print(len(GCaMP_perievent_data[i]))
@@ -2621,10 +2634,10 @@ def plot_raw_perievents(canvas,subject,modified_data,perievent_options_dict,sett
     # create subplots
     for i in range(len(coord)):
         if i == 0: # remember for sharing axis
-            ax = canvas.fig.add_subplot(coord[i])
+            ax = canvas.fig.add_subplot(int(coord[i]))
             first_ax = ax
         else:
-            ax = canvas.fig.add_subplot(coord[i],sharex=first_ax, sharey=first_ax)
+            ax = canvas.fig.add_subplot(int(coord[i]),sharex=first_ax, sharey=first_ax)
 
         ax.plot(ts1,y_dff_all[i],color='green',linewidth=1,label = "normalized\nsignal")
         # plot event as vertical line
@@ -2632,7 +2645,10 @@ def plot_raw_perievents(canvas,subject,modified_data,perievent_options_dict,sett
         # hide top and right border
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.title.set_text('Trial: '+str(i+1))
+        if len(current_trials) > 0:
+            ax.title.set_text('Trial: '+str(current_trials[i]))
+        else:
+            ax.title.set_text('Trial: '+str(i+1))
         ax.set_xlabel('Time (sec)', fontsize=12)
         ax.set_ylabel('dF/F (%)', fontsize=12)
         if show_norm_as == "Z-Score":
@@ -2776,7 +2792,7 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     # Heat Map based on z score of control fit subtracted signal
     cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     mean_zscore = np.mean(zscore_all, axis=0)
@@ -2790,6 +2806,8 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     ax.set_title('Individual z-Score Traces')
     ax.set_ylabel('Trials')
     ax.set_xlabel('Seconds from Event Onset')
+    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
@@ -2867,7 +2885,7 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     # Heat Map based on z score of control fit subtracted signal
     cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     mean_zscore = np.mean(zscore_all, axis=0)
@@ -2886,6 +2904,8 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     ax.set_title('Individual z-Score Traces')
     ax.set_ylabel('Trials')
     ax.set_xlabel('Seconds from Event Onset')
+    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
@@ -2987,7 +3007,7 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
     # Heat Map based on z score of control fit subtracted signal
     cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
@@ -3007,6 +3027,8 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
     ax2.set_title('Individual z-Score Traces')
     ax2.set_ylabel('Trials')
     ax2.set_xlabel('Seconds from Event Onset')
+    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -3066,7 +3088,7 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
     # Heat Map based on z score of control fit subtracted signal
     cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
@@ -3090,6 +3112,8 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
     ax2.set_title('Individual z-Score Traces')
     ax2.set_ylabel('Trials')
     ax2.set_xlabel('Seconds from Event Onset')
+    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -3282,7 +3306,7 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     # Heat Map based on z score of control fit subtracted signal
     cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
@@ -3311,6 +3335,8 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax.set_title('Individual z-Score Traces')
     ax.set_ylabel('Trials')
     ax.set_xlabel('Seconds from Event Onset')
+    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     ax2.set_ylabel('z-Score')
     ax2.set_xlabel('Seconds')
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
@@ -3356,7 +3382,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     # Heat Map based on z score of control fit subtracted signal
     cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
@@ -3388,6 +3414,8 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     ax.set_title('Individual z-Score Traces')
     ax.set_ylabel('Trials')
     ax.set_xlabel('Seconds from Event Onset')
+    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     ax2.set_ylabel('z-Score')
     ax2.set_xlabel('Seconds')
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
@@ -3457,7 +3485,7 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     # Heat Map based on z score of control fit subtracted signal
     cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
@@ -3489,6 +3517,8 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax2.set_title('Individual z-Score Traces')
     ax2.set_ylabel('Trials')
+    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
 #    ax2.set_xlabel('Seconds from Event Onset')
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -3559,7 +3589,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     # Heat Map based on z score of control fit subtracted signal
     cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-                            len(data.streams[signal_name].filtered_downsampled),0])
+                            len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
@@ -3595,6 +3625,8 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax2.set_title('Individual z-Score Traces')
     ax2.set_ylabel('Trials')
+    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
 #    ax2.set_xlabel('Seconds from Event Onset')
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -4731,7 +4763,8 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,sett
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path)
     # also as svg
-    plot_file_name = file_beginning + subjects_end_file+"_perievent_avg.svg"
+    # plot_file_name = file_beginning + subjects_end_file+"_perievent_avg.svg"
+    plot_file_name = file_beginning +"_perievent_avg.svg"
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
     
@@ -4843,6 +4876,8 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
     ax.set_title('z-Score Traces')
     ax.set_ylabel('Trials')
     ax.set_xlabel('Seconds from Event Onset')
+    ax.set_yticks(np.arange(0,len(zscores_by_trials_list), 1))
+    ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
     # show only intiger yticks
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
@@ -4874,7 +4909,8 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path)
     # also as svg
-    plot_file_name = file_beginning + subjects_end_file+"_perievent_zscore.svg"
+    # plot_file_name = file_beginning + subjects_end_file+"_perievent_zscore.svg"
+    plot_file_name = file_beginning +"_perievent_zscore.svg"
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
 #    # debug
@@ -4993,6 +5029,8 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_
     ax.set_title('z-Score Traces')
     ax.set_ylabel('Trials')
     ax.set_xlabel('Seconds from Event Onset')
+    ax.set_yticks(np.arange(0,len(zscores_by_trials_list), 1))
+    ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
     # show only intiger yticks
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
@@ -5024,7 +5062,8 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path)
     # also as svg
-    plot_file_name = file_beginning + subjects_end_file+"_perievent_zscore.svg"
+    # plot_file_name = file_beginning + subjects_end_file+"_perievent_zscore.svg"
+    plot_file_name = file_beginning +"_perievent_zscore.svg"
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
     
@@ -5181,7 +5220,8 @@ def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_di
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path)
     # also as svg
-    plot_file_name = file_beginning + subjects_end_file+"_perievent_auc.svg"
+    # plot_file_name = file_beginning + subjects_end_file+"_perievent_auc.svg"
+    plot_file_name = file_beginning +"_perievent_auc.svg"
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
     
