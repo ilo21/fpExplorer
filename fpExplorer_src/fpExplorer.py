@@ -22,7 +22,7 @@ Created on Thu Jan  7 12:08:47 2021
 @author: ilosz01
 """
 
-import fpAT_functions
+import fpExplorer_functions
 import os
 import shutil
 import math
@@ -62,7 +62,7 @@ STYLESHEET = \
 MAX_DOWNSAMPLE = 1000
 MAX_SMOOTH_FRAQ = 100
 DEFAULT_SMOOTH_FRAQ = 1
-DEFAULT_EXPORT_FOLDER = "_fpATanalysis"
+DEFAULT_EXPORT_FOLDER = "_fpExplorerAnalysis"
 ###############################
 # CLASS FORM MAIN GUI WINDOW  #
 ###############################
@@ -76,7 +76,7 @@ class MyMainWidget(QMainWindow):
     app_closed = pyqtSignal() 
     def __init__(self):
         super(MyMainWidget, self).__init__()
-        self.name = "fpAT"
+        self.name = "fpExplorer"
         self.app_width = 1200
         self.app_height = 600
         self.top_buttons_height = 50
@@ -159,7 +159,7 @@ class MyMainWidget(QMainWindow):
         # Create a layout for preview area
         self.preview_main_layout = QHBoxLayout()
         
-        # connect buttons to fpAT_functions
+        # connect buttons to fpExplorer_functions
         self.select_data_btn.clicked.connect(self.select_data_btn_clicked)
         self.settings_btn.clicked.connect(self.settings_btn_clicked)
         self.run_on_batch_btn.clicked.connect(self.run_on_batch_btn_clicked)
@@ -274,7 +274,7 @@ class MyMainWidget(QMainWindow):
         if self.select_data_window_content[0]["event_based"] == True:
             # try reading the first data tank on the list 
             # to verify if there are indeed events
-            if fpAT_functions.check_events(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]]):
+            if fpExplorer_functions.check_events(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]]):
                 self.preview_widget = PreviewEventBasedWidget(self,self.preview_params)
                 self.preview_widget.done_batch_processing_sig.connect(self.close_batch_window)
                 # add widget to dock
@@ -326,7 +326,7 @@ class MyMainWidget(QMainWindow):
 
         self.select_data_window_content = user_input       
         if self.select_data_window_content[0]["subject_experiment"] == True:
-            self.batch_paths_dict = fpAT_functions.create_list_of_paths(self.select_data_window_content[0]["main_path"],
+            self.batch_paths_dict = fpExplorer_functions.create_list_of_paths(self.select_data_window_content[0]["main_path"],
                                                                    self.select_data_window_content[0]["subject_names"],
                                                                    self.select_data_window_content[0]["selected_experiment"])
             # if path doesn't exist remove it
@@ -341,7 +341,7 @@ class MyMainWidget(QMainWindow):
                 del self.batch_paths_dict[key]
             self.select_data_window_content[0]["subject_names"] = remaining
         elif self.select_data_window_content[0]["experiment_subject"] == True:
-            valid_subjects,self.batch_paths_dict = fpAT_functions.create_list_of_paths_experiment_subjects(self.select_data_window_content[0]["main_path"],
+            valid_subjects,self.batch_paths_dict = fpExplorer_functions.create_list_of_paths_experiment_subjects(self.select_data_window_content[0]["main_path"],
                                                                     self.select_data_window_content[0]["subject_names"],
                                                                     self.select_data_window_content[0]["selected_experiment"])
             # update subject list for that experiment
@@ -349,8 +349,8 @@ class MyMainWidget(QMainWindow):
             
        
         # ask user for signal and control channels
-        data = fpAT_functions.get_raw_data(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]])
-        self.signal_control_window = SignalControlWindow(self,fpAT_functions.get_channel_names(data))
+        data = fpExplorer_functions.get_raw_data(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]])
+        self.signal_control_window = SignalControlWindow(self,fpExplorer_functions.get_channel_names(data))
         self.signal_control_window.got_signal_name_sig.connect(self.got_signal_name_sig)
         self.signal_control_window.show()    
             
@@ -434,7 +434,7 @@ class RunOnBatchWindow(QMainWindow):
         self.events_present = False
         # check if there are any events
         for v in self.all_paths_dict.values():
-            if fpAT_functions.check_events(v)==True:
+            if fpExplorer_functions.check_events(v)==True:
                 self.events_present = True
             break
         
@@ -1053,7 +1053,7 @@ class PreviewContinuousWidget(QWidget):
                           self.preview_init_params[1][self.preview_init_params[0][0]["subject_names"][0]])
         
         # get last timestamp in seconds
-        self.last_raw_ts = fpAT_functions.get_last_timestamp(
+        self.last_raw_ts = fpExplorer_functions.get_last_timestamp(
                                      self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],
                                      self.preview_init_params[0][0]["signal_name"],
                                      )
@@ -1228,7 +1228,7 @@ class PreviewContinuousWidget(QWidget):
         self.preview_buttons_widget.setLayout(self.preview_buttons_layout)
         self.splitter2.addWidget(self.preview_buttons_widget)
         
-        # connect buttons to fpAT_functions
+        # connect buttons to fpExplorer_functions
         self.downsample_cb.stateChanged.connect(self.adjust_downsampled_plot_cb)
         self.normalize_cb.stateChanged.connect(self.adjust_normalized_plot_cb)
         self.downsampled_plot_cb.stateChanged.connect(self.adjuct_separate)
@@ -1286,7 +1286,7 @@ class PreviewContinuousWidget(QWidget):
             # key is the subject name, value is a list
             # first element of that list is beginning and end seconds to trim
             # second element is trimmed data dict ts:timestamps, signal:data,control:data
-            self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+            self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                       self.preview_init_params[0][0]["signal_name"],
                                                                                                                       self.preview_init_params[0][0]["control_name"],
                                                                                                                       trim_beginning,
@@ -1297,7 +1297,7 @@ class PreviewContinuousWidget(QWidget):
             begin,end = trimmed[0]
             if trim_beginning != begin or trim_end != end:
                 # if new trimming params, replace the lists in dict
-                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                       self.preview_init_params[0][0]["signal_name"],
                                                                                                                       self.preview_init_params[0][0]["control_name"],
                                                                                                                       trim_beginning,
@@ -1319,25 +1319,25 @@ class PreviewContinuousWidget(QWidget):
         # if downsample was selected
         if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True:
             # add to downdampled dict
-            self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                          self.settings_dict[0]["downsample"])
         # if normalize was selected
         if self.normalize_cb.isChecked() or self.normalized_export == True:
             # always downsample first before normalizing
             # downsample
-            self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                      self.settings_dict[0]["downsample"])
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
                                                                                     self.downsampled_dict[self.options["subject"]],
                                                                                     self.settings_dict[0]["show_norm_as"],
                                                                                     self.settings_dict[0]["filter"],
                                                                                     self.settings_dict[0]["filter_fraction"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                     self.downsampled_dict[self.options["subject"]],
                                                                                     self.settings_dict[0]["show_norm_as"],
                                                                                     self.settings_dict[0]["filter"],
@@ -1361,7 +1361,7 @@ class PreviewContinuousWidget(QWidget):
         # 1 if just raw was checked
         if (self.options["plot_raw"]==True and self.options["plot_separate"]==False
             and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
-            fpAT_functions.plot_trimmed(self.canvas,
+            fpExplorer_functions.plot_trimmed(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.raw_export,
@@ -1373,14 +1373,14 @@ class PreviewContinuousWidget(QWidget):
         elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False
             and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
             and self.options["plot_normalized"]==False):
-            fpAT_functions.plot_with_downsampled(self.canvas,
+            fpExplorer_functions.plot_with_downsampled(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.downsampled_dict[self.options["subject"]])
         # 3 if raw and normalized was checked
         elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpAT_functions.plot_with_normalized(self.canvas,
+            fpExplorer_functions.plot_with_normalized(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.normalized_dict[self.options["subject"]],
@@ -1388,7 +1388,7 @@ class PreviewContinuousWidget(QWidget):
         # 4 if raw and downsampled and normalized were checked
         elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
                         and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpAT_functions.plot_with_downsampled_with_normalized(self.canvas,
+            fpExplorer_functions.plot_with_downsampled_with_normalized(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.downsampled_dict[self.options["subject"]],
@@ -1397,7 +1397,7 @@ class PreviewContinuousWidget(QWidget):
         # 5 if only downsampled was checked
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
               and self.options["plot_normalized"]==False):
-            fpAT_functions.plot_downsampled_alone(self.canvas,
+            fpExplorer_functions.plot_downsampled_alone(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.downsampled_export,
@@ -1409,7 +1409,7 @@ class PreviewContinuousWidget(QWidget):
         # 6 if only normalized was checked
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpAT_functions.plot_normalized_alone(self.canvas,
+            fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                self.options["subject"],
                                                self.normalized_dict[self.options["subject"]],
                                                self.normalized_export,
@@ -1419,7 +1419,7 @@ class PreviewContinuousWidget(QWidget):
         # if downsampled and normalized were selected
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpAT_functions.plot_downsampled_and_normalized_alone(self.canvas,
+            fpExplorer_functions.plot_downsampled_and_normalized_alone(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.normalized_dict[self.options["subject"]],
@@ -1433,7 +1433,7 @@ class PreviewContinuousWidget(QWidget):
                 downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
                 self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
             
-            fpAT_functions.plot_separate_only(self.canvas,
+            fpExplorer_functions.plot_separate_only(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            downsampled_to_plot)
@@ -1442,7 +1442,7 @@ class PreviewContinuousWidget(QWidget):
               and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
               and self.options["plot_normalized"]==False):
             self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            fpAT_functions.plot_separate_only(self.canvas,
+            fpExplorer_functions.plot_separate_only(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            self.downsampled_dict[self.options["subject"]])
@@ -1455,7 +1455,7 @@ class PreviewContinuousWidget(QWidget):
             if self.options["subject"] in self.downsampled_dict:
                 downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
                 self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            fpAT_functions.plot_separate_with_normalized(self.canvas,
+            fpExplorer_functions.plot_separate_with_normalized(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            downsampled_to_plot,
@@ -1466,7 +1466,7 @@ class PreviewContinuousWidget(QWidget):
               and self.options["plot_downsampled"]==True and  self.options["subject"] in self.downsampled_dict
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
             self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            fpAT_functions.plot_separate_with_normalized(self.canvas,
+            fpExplorer_functions.plot_separate_with_normalized(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            self.downsampled_dict[self.options["subject"]],
@@ -1517,7 +1517,7 @@ class PreviewContinuousWidget(QWidget):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
             self.read_options()
-            fpAT_functions.show_polynomial_fitting(self.canvas,
+            fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                               self.settings_dict[0], 
                                               self.downsampled_dict[self.options["subject"]],
                                               self.preview_init_params[0][0]["signal_name"],
@@ -1555,7 +1555,7 @@ class PreviewContinuousWidget(QWidget):
                                 try:
                                     os.mkdir(subject_subfolder)
                                     try:
-                                        fpAT_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                        fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
                                                             self.recent_peak_values,
                                                             self.spikes_export,
                                                             self.save_plots,
@@ -1568,7 +1568,7 @@ class PreviewContinuousWidget(QWidget):
                                     self.show_info_dialog("Problem creating subfolder")
                             else: # if subfolder already exists
                                 try:
-                                    fpAT_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                    fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
                                                             self.recent_peak_values,
                                                             self.spikes_export,
                                                             self.save_plots,
@@ -1581,7 +1581,7 @@ class PreviewContinuousWidget(QWidget):
                         pass # single subjects only
                         # spikes for averaged signal
 #                        try:
-                        # fpAT_functions.get_batch_spikes(self.canvas,
+                        # fpExplorer_functions.get_batch_spikes(self.canvas,
                         #                                        self.recent_peak_values,
                         #                                        self.all_normalized,
                         #                                        self.settings_dict,
@@ -1620,7 +1620,7 @@ class PreviewContinuousWidget(QWidget):
                 # key is the subject name, value is a list
                 # first element of that list is beginning and end seconds to trim
                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                           self.preview_init_params[0][0]["signal_name"],
                                                                                                                           self.preview_init_params[0][0]["control_name"],
                                                                                                                           trim_beginning,
@@ -1631,7 +1631,7 @@ class PreviewContinuousWidget(QWidget):
                 begin,end = trimmed[0]
                 if trim_beginning != begin or trim_end != end:
                     # if new trimming params, replace the lists in dict
-                    self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                    self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                           self.preview_init_params[0][0]["signal_name"],
                                                                                                                           self.preview_init_params[0][0]["control_name"],
                                                                                                                           trim_beginning,
@@ -1639,19 +1639,19 @@ class PreviewContinuousWidget(QWidget):
                                                                                                                           )]
             # always downsample first before normalizing
             # downsample
-            self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                          self.settings_dict[0]["downsample"])
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_fraction"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
@@ -1661,7 +1661,7 @@ class PreviewContinuousWidget(QWidget):
             # close popup window
             self.peak_options_window.close()
             try:
-                fpAT_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
+                fpExplorer_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
                                      self.recent_peak_values,
                                      self.spikes_export,
                                      self.save_plots,
@@ -1723,7 +1723,7 @@ class PreviewContinuousWidget(QWidget):
         self.read_options()
         # save fittings if save all plots was selected
         if self.save_plots == True:
-            fpAT_functions.show_polynomial_fitting(self.canvas,
+            fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                               self.settings_dict[0], 
                                               self.downsampled_dict[self.options["subject"]],
                                               self.preview_init_params[0][0]["signal_name"],
@@ -1735,7 +1735,7 @@ class PreviewContinuousWidget(QWidget):
         if self.raw_export == True:
             self.plot_bare_raw_data(self.options["subject"],self.raw_data_dict[self.options["subject"]])
         if self.downsampled_export == True:           
-            fpAT_functions.plot_downsampled_alone(self.canvas,
+            fpExplorer_functions.plot_downsampled_alone(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.downsampled_export,
@@ -1745,7 +1745,7 @@ class PreviewContinuousWidget(QWidget):
                                            self.preview_init_params[0][0]["signal_name"],
                                            self.preview_init_params[0][0]["control_name"])
         if self.normalized_export == True:
-            fpAT_functions.plot_normalized_alone(self.canvas,
+            fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                self.options["subject"],
                                                self.normalized_dict[self.options["subject"]],
                                                self.normalized_export,
@@ -1763,11 +1763,11 @@ class PreviewContinuousWidget(QWidget):
         
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
-        self.raw_data_dict[subject] = fpAT_functions.get_raw_data(my_path)
+        self.raw_data_dict[subject] = fpExplorer_functions.get_raw_data(my_path)
         
     # when app starts plot just raw data  
     def plot_bare_raw_data(self,subject,raw_data):
-        fpAT_functions.plot_raw(self.canvas,
+        fpExplorer_functions.plot_raw(self.canvas,
                            subject,
                            raw_data,
                            self.preview_init_params[0][0]["signal_name"],
@@ -1884,7 +1884,7 @@ class PreviewContinuousWidget(QWidget):
                 # key is the subject name, value is a list
                 # first element of that list is beginning and end seconds to trim
                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
+                self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
                                                                                   self.preview_init_params[0][0]["signal_name"],
                                                                                   self.preview_init_params[0][0]["control_name"],
                                                                                   new_trim_start,
@@ -1893,19 +1893,19 @@ class PreviewContinuousWidget(QWidget):
                 
                 # always downsample first before normalizing
                 # downsample
-                self.downsampled_dict[subject] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
+                self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
                                                                              self.settings_dict[0]["downsample"])
                 # check settings for method to normalize
                 if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                     # normalize from downsampled
-                    self.normalized_dict[subject] = fpAT_functions.normalize_dff(self.raw_data_dict[subject],
+                    self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
                                                                                             self.settings_dict[0]["filter_fraction"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
-                    self.normalized_dict[subject] = fpAT_functions.normalize_pMat(self.raw_data_dict[subject],
+                    self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
@@ -1917,7 +1917,7 @@ class PreviewContinuousWidget(QWidget):
                         try:
                             os.mkdir(subject_subfolder)
                             # save also polynomial fitting by default
-                            fpAT_functions.show_polynomial_fitting(self.canvas,
+                            fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                                     self.settings_dict[0], 
                                                     self.downsampled_dict[subject],
                                                     self.preview_init_params[0][0]["signal_name"],
@@ -1927,7 +1927,7 @@ class PreviewContinuousWidget(QWidget):
                                                     subject_subfolder)
                             
                             if self.parent_window.batch_export_settings_dict["normalized"] == True:
-                                fpAT_functions.plot_normalized_alone(self.canvas,
+                                fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                             subject,
                                                             self.normalized_dict[subject],
                                                             True,
@@ -1937,7 +1937,7 @@ class PreviewContinuousWidget(QWidget):
                         except:
                             self.show_info_dialog("Problem creating subfolder")
                     else: # if subfolder already folder exists
-                        fpAT_functions.show_polynomial_fitting(self.canvas,
+                        fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                                     self.settings_dict[0], 
                                                     self.downsampled_dict[subject],
                                                     self.preview_init_params[0][0]["signal_name"],
@@ -1947,7 +1947,7 @@ class PreviewContinuousWidget(QWidget):
                                                     subject_subfolder)
                             
                         if self.parent_window.batch_export_settings_dict["normalized"] == True:
-                            fpAT_functions.plot_normalized_alone(self.canvas,
+                            fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                             subject,
                                                             self.normalized_dict[subject],
                                                             True,
@@ -1966,7 +1966,7 @@ class PreviewContinuousWidget(QWidget):
     #            print(all_normalized)
                 if self.parent_window.batch_export_settings_dict["normalized"] == True:
                     pass # only for single subjects
-                    # fpAT_functions.get_batch_normalized(self.canvas,
+                    # fpExplorer_functions.get_batch_normalized(self.canvas,
                     #                                    self.all_normalized,
                     #                                    self.settings_dict,
                     #                                    self.parent_window.batch_export_settings_dict["normalized"],
@@ -2035,7 +2035,7 @@ class PreviewEventBasedWidget(QWidget):
         self.get_raw_data(self.preview_init_params[0][0]["subject_names"][0],
                           self.preview_init_params[1][self.preview_init_params[0][0]["subject_names"][0]])
         # get last timestamp in seconds
-        self.last_raw_ts = fpAT_functions.get_last_timestamp(
+        self.last_raw_ts = fpExplorer_functions.get_last_timestamp(
                                      self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],
                                      self.preview_init_params[0][0]["signal_name"],
                                      )
@@ -2046,7 +2046,7 @@ class PreviewEventBasedWidget(QWidget):
         self.trimmed_raw_data_dict = {}
         
         # create a list of available events for current subject
-        self.events_from_current_subject = fpAT_functions.get_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
+        self.events_from_current_subject = fpExplorer_functions.get_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
             
         # store downsampled data key (subject): dict("ts","signal","control")
         self.downsampled_dict = {}
@@ -2060,6 +2060,15 @@ class PreviewEventBasedWidget(QWidget):
         self.export_window = None
         self.peak_options_window = None
         self.recent_peak_values = []
+        # # dictionary of complete (all trials) data around event
+        # # key is subject name and value is a dictionary of key: event value: trials
+        # self.filtered_data = {}
+        # remember previous event from perievent window
+        self.current_perievent = None
+        # remember selected trials (integers indicating trial number)
+        self.current_trials = []
+        # remember how many were there
+        self.total_current_trials = 0
         
         # initialize export settings
         self.raw_export = False
@@ -2245,6 +2254,16 @@ class PreviewEventBasedWidget(QWidget):
         self.plot_area_widget_layout.addWidget(self.canvas)
         self.plot_area_widget.setLayout(self.plot_area_widget_layout)
         self.splitter2.addWidget(self.plot_area_widget)
+        # create widget for available trials
+        self.trials_widget = QWidget()
+        self.trials_layout = QHBoxLayout()
+        self.trials_widget.setLayout(self.trials_layout)
+        self.current_trials_widget = QWidget()
+        # self.current_trials_layout = QHBoxLayout()
+        # self.current_trials_widget.setLayout(self.current_trials_layout)
+        # self.trials_layout.addWidget(self.current_trials_widget)
+        self.splitter2.addWidget(self.trials_widget)
+        self.trials_button_group = []
         
         # plot initial plot of raw data of the first subject
         self.plot_bare_raw_data(self.preview_init_params[0][0]["subject_names"][0],
@@ -2268,7 +2287,7 @@ class PreviewEventBasedWidget(QWidget):
         
 #        self.splitter2.setSizes([int(self.height()*0.95), int(self.height()*0.05)])
         
-        # connect buttons to fpAT_functions
+        # connect buttons to fpExplorer_functions
         self.downsample_cb.stateChanged.connect(self.adjust_downsampled_plot_cb)
         self.normalize_cb.stateChanged.connect(self.adjust_normalized_plot_cb)
         self.downsampled_plot_cb.stateChanged.connect(self.adjuct_separate)
@@ -2358,7 +2377,7 @@ class PreviewEventBasedWidget(QWidget):
                 self.trim_beginning_sec.setText("0")
         else:
             trim_begin_event = self.trim_beginning_event.currentText()
-            begin_evt_data_onsets = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_begin_event)[0]
+            begin_evt_data_onsets = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_begin_event)[0]
             trim_beginning = 0 # assign zero in case there is no such event
             if len(begin_evt_data_onsets) > 0:
                 # use the first onset as trim begin
@@ -2372,7 +2391,7 @@ class PreviewEventBasedWidget(QWidget):
                 self.trim_ending_sec.setText("0")
         else:
             trim_end_event = self.trim_end_event.currentText()
-            end_evt_data_onsets = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_end_event)[0]
+            end_evt_data_onsets = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_end_event)[0]
             print(end_evt_data_onsets)
             trim_end = 0 # assign zero in case there is no such event
             if len(end_evt_data_onsets) > 0:
@@ -2384,7 +2403,7 @@ class PreviewEventBasedWidget(QWidget):
             # key is the subject name, value is a list
             # first element of that list is beginning and end seconds to trim
             # second element is trimmed data dict ts:timestamps, signal:data,control:data
-            self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+            self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                       self.preview_init_params[0][0]["signal_name"],
                                                                                                                       self.preview_init_params[0][0]["control_name"],
                                                                                                                       trim_beginning,
@@ -2395,7 +2414,7 @@ class PreviewEventBasedWidget(QWidget):
             begin,end = trimmed[0]
             if trim_beginning != begin or trim_end != end:
                 # if new trimming params, replace the lists in dict
-                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                       self.preview_init_params[0][0]["signal_name"],
                                                                                                                       self.preview_init_params[0][0]["control_name"],
                                                                                                                       trim_beginning,
@@ -2425,37 +2444,37 @@ class PreviewEventBasedWidget(QWidget):
         # reset the event list to make sure it always has current events
         self.event_data = []
         if self.options["event"] != "---":
-            evt = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+            evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
             if len(evt[0]) == 0:
                 self.show_info_dialog("Some "+self.options["event"]+" event data is missing.")
             self.event_data.append(evt)
         if self.options["event2"] != "---":
-            evt = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
+            evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
             if len(evt[0])==0:
                 self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
             self.event_data.append(evt)
         # if downsample was selected
         if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True or self.separate_signal_contol_cb.isChecked():
             # add to downdampled dict
-            self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                          self.settings_dict[0]["downsample"])
         # if normalize was selected
         if self.normalize_cb.isChecked() or self.normalized_export == True:
             # always downsample first before normalizing
             # downsample
-            self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                      self.settings_dict[0]["downsample"])
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
                                                                                     self.downsampled_dict[self.options["subject"]],
                                                                                     self.settings_dict[0]["show_norm_as"],
                                                                                     self.settings_dict[0]["filter"],
                                                                                     self.settings_dict[0]["filter_fraction"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                     self.downsampled_dict[self.options["subject"]],
                                                                                     self.settings_dict[0]["show_norm_as"],
                                                                                     self.settings_dict[0]["filter"],
@@ -2472,6 +2491,15 @@ class PreviewEventBasedWidget(QWidget):
         # self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
         # self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
         # self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
+
+    def clear_include_trials_bar(self):
+        new_trials_widget = QWidget()
+        new_trials_layout = QHBoxLayout()
+        new_trials_widget.setLayout(new_trials_layout)
+        # replace with updated widget
+        self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+        self.current_trials_widget.deleteLater()
+        self.current_trials_widget = new_trials_widget
             
         
     # function to plot with user selected options       
@@ -2487,7 +2515,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False
             and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
             if self.options["event"] == "---":
-                fpAT_functions.plot_trimmed(self.canvas,
+                fpExplorer_functions.plot_trimmed(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.raw_export,
@@ -2498,7 +2526,7 @@ class PreviewEventBasedWidget(QWidget):
             else:
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_with_event(self.canvas,
+                fpExplorer_functions.plot_with_event(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        custom_event_name,
@@ -2514,14 +2542,14 @@ class PreviewEventBasedWidget(QWidget):
             and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
             and self.options["plot_normalized"]==False):
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_with_downsampled(self.canvas,
+                fpExplorer_functions.plot_with_downsampled(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.downsampled_dict[self.options["subject"]])
             else:   # plot event as well
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_with_downsampled_with_event(self.canvas,
+                fpExplorer_functions.plot_with_downsampled_with_event(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.downsampled_dict[self.options["subject"]],
@@ -2532,7 +2560,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_with_normalized(self.canvas,
+                fpExplorer_functions.plot_with_normalized(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.normalized_dict[self.options["subject"]],
@@ -2540,7 +2568,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_with_normalized_with_event(self.canvas,
+                fpExplorer_functions.plot_with_normalized_with_event(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.normalized_dict[self.options["subject"]],
@@ -2552,7 +2580,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
                         and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_with_downsampled_with_normalized(self.canvas,
+                fpExplorer_functions.plot_with_downsampled_with_normalized(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.downsampled_dict[self.options["subject"]],
@@ -2561,7 +2589,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_with_downsampled_with_normalized_with_event(self.canvas,
+                fpExplorer_functions.plot_with_downsampled_with_normalized_with_event(self.canvas,
                                        self.options["subject"],
                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
                                        self.downsampled_dict[self.options["subject"]],
@@ -2574,7 +2602,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
               and self.options["plot_normalized"]==False):
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_downsampled_alone(self.canvas,
+                fpExplorer_functions.plot_downsampled_alone(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.downsampled_export,
@@ -2586,7 +2614,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_downsampled_alone_with_event(self.canvas,
+                fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            custom_event_name,
@@ -2602,7 +2630,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_normalized_alone(self.canvas,
+                fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                self.options["subject"],
                                                self.normalized_dict[self.options["subject"]],
                                                self.normalized_export,
@@ -2612,7 +2640,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_normalized_alone_with_event(self.canvas,
+                fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
                                            self.options["subject"],
                                            self.normalized_dict[self.options["subject"]],
                                            custom_event_name,
@@ -2626,7 +2654,7 @@ class PreviewEventBasedWidget(QWidget):
         elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_downsampled_and_normalized_alone(self.canvas,
+                fpExplorer_functions.plot_downsampled_and_normalized_alone(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.normalized_dict[self.options["subject"]],
@@ -2634,7 +2662,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_downsampled_and_normalized_with_event(self.canvas,
+                fpExplorer_functions.plot_downsampled_and_normalized_with_event(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.normalized_dict[self.options["subject"]],
@@ -2651,14 +2679,14 @@ class PreviewEventBasedWidget(QWidget):
                 downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
                 self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_separate_only(self.canvas,
+                fpExplorer_functions.plot_separate_only(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            downsampled_to_plot)
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_separate_with_event(self.canvas,
+                fpExplorer_functions.plot_separate_with_event(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            downsampled_to_plot,
@@ -2671,14 +2699,14 @@ class PreviewEventBasedWidget(QWidget):
               and self.options["plot_normalized"]==False):
             self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_separate_only(self.canvas,
+                fpExplorer_functions.plot_separate_only(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            self.downsampled_dict[self.options["subject"]])
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_separate_with_event(self.canvas,
+                fpExplorer_functions.plot_separate_with_event(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            self.downsampled_dict[self.options["subject"]],
@@ -2695,7 +2723,7 @@ class PreviewEventBasedWidget(QWidget):
                 downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
                 self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_separate_with_normalized(self.canvas,
+                fpExplorer_functions.plot_separate_with_normalized(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            downsampled_to_plot,
@@ -2704,7 +2732,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_separate_with_normalized_with_event(self.canvas,
+                fpExplorer_functions.plot_separate_with_normalized_with_event(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            downsampled_to_plot,
@@ -2719,7 +2747,7 @@ class PreviewEventBasedWidget(QWidget):
               and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
             self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_separate_with_normalized(self.canvas,
+                fpExplorer_functions.plot_separate_with_normalized(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            self.downsampled_dict[self.options["subject"]],
@@ -2728,7 +2756,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_separate_with_normalized_with_event(self.canvas,
+                fpExplorer_functions.plot_separate_with_normalized_with_event(self.canvas,
                                            self.options["subject"],
                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
                                            self.downsampled_dict[self.options["subject"]],
@@ -2737,6 +2765,7 @@ class PreviewEventBasedWidget(QWidget):
                                            custom_event_name,
                                            custom_event_name2,
                                            self.event_data)
+        self.clear_include_trials_bar()
         self.enable_buttons_signal.emit()
 
     def next_btn_clicked(self):
@@ -2802,7 +2831,7 @@ class PreviewEventBasedWidget(QWidget):
         # check events for new data
         # first check if there are the same events
         previous_events = self.events_from_current_subject
-        self.events_from_current_subject = fpAT_functions.get_events(self.raw_data_dict[self.options["subject"]])  
+        self.events_from_current_subject = fpExplorer_functions.get_events(self.raw_data_dict[self.options["subject"]])  
         same = True
         if len(previous_events) != self.events_from_current_subject:
             same = False
@@ -2913,6 +2942,19 @@ class PreviewEventBasedWidget(QWidget):
         self.normalize_cb.setChecked(False)
         # plot raw by default
         self.raw_plot_cb.setChecked(True)
+        # clear "include trials
+        # # create new buttons
+        new_trials_widget = QWidget()
+        new_trials_layout = QHBoxLayout()
+        new_trials_widget.setLayout(new_trials_layout)
+        # replace with updated widget
+        self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+        self.current_trials_widget.deleteLater()
+        self.current_trials_widget = new_trials_widget
+        # self.current_perievent = None
+        self.current_trials = []
+        self.trials_button_group = []
+        self.total_current_trials = 0
         # plot raw, trimmed data with or without event
         self.apply_btn_clicked()
             
@@ -2948,7 +2990,7 @@ class PreviewEventBasedWidget(QWidget):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
             self.read_options()
-            fpAT_functions.show_polynomial_fitting(self.canvas,
+            fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                               self.settings_dict[0], 
                                               self.downsampled_dict[self.options["subject"]],
                                               self.preview_init_params[0][0]["signal_name"],
@@ -2981,7 +3023,7 @@ class PreviewEventBasedWidget(QWidget):
             for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
                 if subject not in self.raw_data_dict:
                     self.get_raw_data(subject,self.parent_window.preview_params[1][subject])
-                evt_list = fpAT_functions.get_events(self.raw_data_dict[subject])
+                evt_list = fpExplorer_functions.get_events(self.raw_data_dict[subject])
                 subjects_event_sets.append(set(evt_list))
             # find intersection of all subjects events (common events)  
             common_events = list(set.intersection(*subjects_event_sets))    
@@ -2996,10 +3038,10 @@ class PreviewEventBasedWidget(QWidget):
             
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
-        self.raw_data_dict[subject] = fpAT_functions.get_raw_data(my_path)
+        self.raw_data_dict[subject] = fpExplorer_functions.get_raw_data(my_path)
     # when app starts plot just raw data  
     def plot_bare_raw_data(self,subject,raw_data):
-        fpAT_functions.plot_raw(self.canvas,
+        fpExplorer_functions.plot_raw(self.canvas,
                            subject,
                            raw_data,
                            self.preview_init_params[0][0]["signal_name"],
@@ -3008,13 +3050,49 @@ class PreviewEventBasedWidget(QWidget):
                            self.save_plots,
                            (self.export_path,self.export_begining)
                            )
-        
+
+    def read_trials(self):
+        checked = []
+        for btn in self.trials_button_group:
+            # print(btn.text(),btn.isChecked())
+            if btn.isChecked():
+                checked.append(int(btn.text()))
+        # print("trials",checked)
+        return checked
+
+
     @pyqtSlot(list) 
     # receives a list with perievent options read from perievent window
     def get_perievent_options(self,perievent_options):
         self.perievent_options_dict = perievent_options[0]
         print("perievent options",self.perievent_options_dict)
-        if self.batch_perievent == True:            
+        if self.current_perievent == self.perievent_options_dict['event'] and len(self.current_trials)>0: 
+            # read the trials radio buttons
+            try:
+                self.current_trials = self.read_trials()
+            except:
+                self.trials_button_group = []
+                # create new buttons
+                new_trials_widget = QWidget()
+                new_trials_layout = QHBoxLayout()
+                new_trials_widget.setLayout(new_trials_layout)
+                text_label = QLabel("Include Trials:")
+                new_trials_layout.addWidget(text_label)
+                for i in range(self.total_current_trials):
+                        # create btn
+                        # add button to a group
+                        # add to list
+                        # add to layout
+                        btn = QCheckBox(str(i+1))
+                        if i+1 in self.current_trials:
+                            btn.setChecked(True)
+                        new_trials_layout.addWidget(btn)
+                        self.trials_button_group.append(btn)                        
+                # replace with updated widget
+                self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                self.current_trials_widget.deleteLater()
+                self.current_trials_widget = new_trials_widget
+        if self.batch_perievent == True:     
             if "perievent" in self.parent_window.batch_export_settings_dict:
                 if self.parent_window.batch_export_settings_dict["perievent"] == True:
                     # collect subject data if possible: list of tuples: subject+each all trials as dataframe
@@ -3029,7 +3107,7 @@ class PreviewEventBasedWidget(QWidget):
                                                   self.parent_window.preview_params[1][subject])
                                 # if subject data has not been trimmed
                                 # if it was not trimmed yet, add to dictionary with zero trimming
-                                self.trimmed_raw_data_dict[subject] = [(0,0),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
+                                self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
                                                                                                             self.preview_init_params[0][0]["signal_name"],
                                                                                                             self.preview_init_params[0][0]["control_name"],
                                                                                                             0,
@@ -3039,20 +3117,21 @@ class PreviewEventBasedWidget(QWidget):
                                 # key is the subject name, value is a list
                                 # first element of that list is beginning and end seconds to trim
                                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                                self.trimmed_raw_data_dict[subject] = [(0,0),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
+                                self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
                                                                                                             self.preview_init_params[0][0]["signal_name"],
                                                                                                             self.preview_init_params[0][0]["control_name"],
                                                                                                             0,
                                                                                                             0
                                                                                                             )]
                             # filter around trimmed
-                            data = fpAT_functions.filter_data_around_event(self.raw_data_dict[subject],self.trimmed_raw_data_dict[subject],
+                            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],self.trimmed_raw_data_dict[subject],
                                                     self.perievent_options_dict,
                                                     self.settings_dict,
                                                     self.preview_init_params[0][0]["signal_name"],
                                                     self.preview_init_params[0][0]["control_name"])
                             # analyze
-                            analyzed_perievent_dict = fpAT_functions.analyze_perievent_data(data,
+                            analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                self.current_trials,
                                                                                self.perievent_options_dict,
                                                                                self.settings_dict,self.preview_init_params[0][0]["signal_name"],
                                                                                self.preview_init_params[0][0]["control_name"])
@@ -3068,9 +3147,10 @@ class PreviewEventBasedWidget(QWidget):
                                         # save under main folder then
                                         subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
                                 # plot and save normalized preview
-                                all_trials_df = fpAT_functions.plot_raw_perievents(self.canvas,
+                                all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
                                                       subject,
                                                       data,
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       self.settings_dict,
                                                       self.preview_init_params[0][0]["signal_name"],
@@ -3082,7 +3162,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
                                     all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
                                 if self.perievent_options_dict["plot_avg"] == True:
-                                    fpAT_functions.plot_perievent_average_alone(self.canvas,
+                                    fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                                   subject,
                                                                   self.perievent_options_dict,
                                                                   analyzed_perievent_dict,
@@ -3096,7 +3176,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
                                     or self.perievent_options_dict["plot_auc"] == True): # we need zcsore data for auc
                                     if self.perievent_options_dict["plot_zscore"] == True:
-                                        z_score_df = fpAT_functions.plot_perievent_zscore_alone(self.canvas,
+                                        z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                                       subject,
                                                                       data,
                                                                       self.perievent_options_dict,
@@ -3109,7 +3189,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                       (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                     else:
 #                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                        z_score_df = fpAT_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                                        z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                                       subject,
                                                                       data,
                                                                       self.perievent_options_dict,
@@ -3123,7 +3203,7 @@ class PreviewEventBasedWidget(QWidget):
                                     if self.parent_window.batch_export_settings_dict["export_group_data"] == True: # save for later in order to not repeat tasks
                                         all_subjects_zscored_dfs.append((subject,z_score_df))
                                 if self.perievent_options_dict["plot_auc"] == True:
-                                    fpAT_functions.plot_perievent_auc_alone(self.canvas,
+                                    fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
                                                                   subject,
                                                                   self.perievent_options_dict,
                                                                   analyzed_perievent_dict,
@@ -3140,28 +3220,28 @@ class PreviewEventBasedWidget(QWidget):
                         if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
                             if self.perievent_options_dict["plot_avg"] == True:
                                 if len(all_subjects_peri_normalized_dfs) > 0: # if there already is data from single subjects
-                                    fpAT_functions.get_batch_perievent_normalized(self.canvas,
+                                    fpExplorer_functions.get_batch_perievent_normalized(self.canvas,
                                                                                  all_subjects_peri_normalized_dfs,
                                                                                  self.perievent_options_dict,
                                                                                  self.settings_dict,
                                                                                  (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                             if self.perievent_options_dict["plot_zscore"] == True:
                                 if len(all_subjects_zscored_dfs) > 0: # if there already is data from single subjects
-                                    fpAT_functions.get_batch_perievent_zscored(self.canvas,
+                                    fpExplorer_functions.get_batch_perievent_zscored(self.canvas,
                                                                           all_subjects_zscored_dfs,
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                             if self.perievent_options_dict["plot_zscore_trials"] == True:
                                 if len(all_subjects_zscored_dfs) > 0: # if there already is data from single subjects
-                                    fpAT_functions.get_batch_perievent_zscored_with_trials(self.canvas,
+                                    fpExplorer_functions.get_batch_perievent_zscored_with_trials(self.canvas,
                                                                           all_subjects_zscored_dfs,
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                             if self.perievent_options_dict["plot_auc"] == True:
                                 if len(all_subjects_zscored_dfs) > 0: # if there already is data from single subjects
-                                    fpAT_functions.get_batch_perievent_auc(self.canvas,
+                                    fpExplorer_functions.get_batch_perievent_auc(self.canvas,
                                                                   all_subjects_zscored_dfs,
                                                                  self.perievent_options_dict,
                                                                  self.settings_dict,
@@ -3179,7 +3259,7 @@ class PreviewEventBasedWidget(QWidget):
                                                           self.parent_window.preview_params[1][subject])
                                         # if subject data has not been trimmed
                                         # if it was not trimmed yet, add to dictionary with zero trimming
-                                        self.trimmed_raw_data_dict[subject] = [(0,0),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
+                                        self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
                                                                                                                     self.preview_init_params[0][0]["signal_name"],
                                                                                                                     self.preview_init_params[0][0]["control_name"],
                                                                                                                     0,
@@ -3189,14 +3269,14 @@ class PreviewEventBasedWidget(QWidget):
                                         # key is the subject name, value is a list
                                         # first element of that list is beginning and end seconds to trim
                                         # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                                        self.trimmed_raw_data_dict[subject] = [(0,0),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
+                                        self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
                                                                                                                     self.preview_init_params[0][0]["signal_name"],
                                                                                                                     self.preview_init_params[0][0]["control_name"],
                                                                                                                     0,
                                                                                                                     0
                                                                                                                     )]
                                     # filter around trimmed
-                                    data = fpAT_functions.filter_data_around_event(self.raw_data_dict[subject],self.trimmed_raw_data_dict[subject],
+                                    data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],self.trimmed_raw_data_dict[subject],
                                                                 self.perievent_options_dict,
                                                                 self.settings_dict,
                                                                 self.preview_init_params[0][0]["signal_name"],
@@ -3206,16 +3286,18 @@ class PreviewEventBasedWidget(QWidget):
                                         if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
                                             or self.perievent_options_dict["plot_auc"] == True):
                                             # analyze
-                                            analyzed_perievent_dict = fpAT_functions.analyze_perievent_data(data,
+                                            analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                            self.current_trials,
                                                                                            self.perievent_options_dict,
                                                                                            self.settings_dict,
                                                                                            self.preview_init_params[0][0]["signal_name"],
                                                                                            self.preview_init_params[0][0]["control_name"])
                                         if self.perievent_options_dict["plot_avg"] == True:
                                             # perieventnormalized preview
-                                            all_trials_df = fpAT_functions.plot_raw_perievents(self.canvas,
+                                            all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
                                                                       subject,
                                                                       data,
+                                                                      self.current_trials,
                                                                       self.perievent_options_dict,
                                                                       self.settings_dict,
                                                                       self.preview_init_params[0][0]["signal_name"],
@@ -3228,7 +3310,7 @@ class PreviewEventBasedWidget(QWidget):
                                         if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
                                             or self.perievent_options_dict["plot_auc"] == True):
                                             if self.perievent_options_dict["plot_zscore"] == True:
-                                                z_score_df = fpAT_functions.plot_perievent_zscore_alone(self.canvas,
+                                                z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                                           subject,
                                                                           data,
                                                                           self.perievent_options_dict,
@@ -3242,7 +3324,7 @@ class PreviewEventBasedWidget(QWidget):
                                                 all_subjects_zscored_dfs.append((subject,z_score_df))
                                             else:
 #                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                                z_score_df = fpAT_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                                                z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                                           subject,
                                                                           data,
                                                                           self.perievent_options_dict,
@@ -3261,26 +3343,26 @@ class PreviewEventBasedWidget(QWidget):
                                 
                                 if self.perievent_options_dict["plot_avg"] == True:
                                     if len(all_subjects_peri_normalized_dfs) > 0:
-                                        fpAT_functions.get_batch_perievent_normalized(self.canvas,
+                                        fpExplorer_functions.get_batch_perievent_normalized(self.canvas,
                                                                                  all_subjects_peri_normalized_dfs,
                                                                                  self.perievent_options_dict,
                                                                                  self.settings_dict,
                                                                                  (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                                 if len(all_subjects_zscored_dfs) > 0:
                                     if self.perievent_options_dict["plot_zscore"] == True:
-                                        fpAT_functions.get_batch_perievent_zscored(self.canvas,
+                                        fpExplorer_functions.get_batch_perievent_zscored(self.canvas,
                                                                           all_subjects_zscored_dfs,
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                                     if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                        fpAT_functions.get_batch_perievent_zscored_with_trials(self.canvas,
+                                        fpExplorer_functions.get_batch_perievent_zscored_with_trials(self.canvas,
                                                                           all_subjects_zscored_dfs,
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                                     if self.perievent_options_dict["plot_auc"] == True:
-                                        fpAT_functions.get_batch_perievent_auc(self.canvas,
+                                        fpExplorer_functions.get_batch_perievent_auc(self.canvas,
                                                                       all_subjects_zscored_dfs,
                                                                      self.perievent_options_dict,
                                                                      self.settings_dict,
@@ -3305,18 +3387,19 @@ class PreviewEventBasedWidget(QWidget):
                 # key is the subject name, value is a list
                 # first element of that list is beginning and end seconds to trim
                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[self.options["subject"]] = [(0,0),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                self.trimmed_raw_data_dict[self.options["subject"]] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                         self.preview_init_params[0][0]["signal_name"],
                                                                                                         self.preview_init_params[0][0]["control_name"],
                                                                                                         0,
                                                                                                         0
                                                                                                         )]
             # filter around trimmed
-            data = fpAT_functions.filter_data_around_event(self.raw_data_dict[self.options["subject"]],self.trimmed_raw_data_dict[self.options["subject"]],
+            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[self.options["subject"]],self.trimmed_raw_data_dict[self.options["subject"]],
                                                     self.perievent_options_dict,
                                                     self.settings_dict,
                                                     self.preview_init_params[0][0]["signal_name"],
                                                     self.preview_init_params[0][0]["control_name"])
+
             # update export path settings
             if len(self.perievent_options_dict["export_path"]) > 0 and os.path.split(self.perievent_options_dict["export_path"])[1]==DEFAULT_EXPORT_FOLDER:
                 # check if folder exists first
@@ -3330,12 +3413,89 @@ class PreviewEventBasedWidget(QWidget):
             
             # check if there is any data to plot 
             if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
+
+                # show buttons of available trials
+                print("How many trials are there?",len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))
+                self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                if self.current_perievent == None:
+                    self.current_perievent = self.perievent_options_dict['event']
+                    # add trials to view
+                    self.current_trials_layout = QHBoxLayout()
+                    self.current_trials_widget.setLayout(self.current_trials_layout)
+                    text_label = QLabel("Include Trials:")
+                    self.current_trials_layout.addWidget(text_label)
+                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                        # create btn
+                        # add button to a group
+                        # add to list
+                        # add to layout
+                        btn = QCheckBox(str(i+1))
+                        btn.setChecked(True)
+                        self.current_trials_layout.addWidget(btn)
+                        self.trials_button_group.append(btn)
+                        self.current_trials.append(i+1)
+                    self.trials_layout.addWidget(self.current_trials_widget)
+                elif self.current_perievent != self.perievent_options_dict['event']:  # if new event different from previous       
+                    # clear current trials and buttons group
+                    self.current_trials = []
+                    self.trials_button_group = []
+                    # create new buttons
+                    new_trials_widget = QWidget()
+                    new_trials_layout = QHBoxLayout()
+                    new_trials_widget.setLayout(new_trials_layout)
+                    text_label = QLabel("Include Trials:")
+                    new_trials_layout.addWidget(text_label)
+                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                        # create btn
+                        # add button to a group
+                        # add to list
+                        # add to layout
+                        btn = QCheckBox(str(i+1))
+                        btn.setChecked(True)
+                        new_trials_layout.addWidget(btn)
+                        self.trials_button_group.append(btn)
+                        self.current_trials.append(i+1)
+                    # replace with updated widget
+                    self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                    self.current_trials_widget.deleteLater()
+                    self.current_trials_widget = new_trials_widget
+
+                    # set new event
+                    self.current_perievent = self.perievent_options_dict['event']
+                else: # if same event and/or new subject
+                    # create new buttons
+                    new_trials_widget = QWidget()
+                    new_trials_layout = QHBoxLayout()
+                    new_trials_widget.setLayout(new_trials_layout)
+                    text_label = QLabel("Include Trials:")
+                    new_trials_layout.addWidget(text_label)
+                    if len(self.trials_button_group) > 0:
+                        for btn in self.trials_button_group:
+                            new_trials_layout.addWidget(btn)
+                    else:
+                        for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                            # create btn
+                            # add button to a group
+                            # add to list
+                            # add to layout
+                            btn = QCheckBox(str(i+1))
+                            btn.setChecked(True)
+                            new_trials_layout.addWidget(btn)
+                            self.trials_button_group.append(btn)
+                            self.current_trials.append(i+1)
+                    # replace with updated widget
+                    self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                    self.current_trials_widget.deleteLater()
+                    self.current_trials_widget = new_trials_widget
+            ##########################################
+
                 # if user clicked on preview in perievent options window, show preview
                 if self.perievent_options_dict["preview"] == True:
                     # plot normalized preview
-                    fpAT_functions.plot_raw_perievents(self.canvas,
+                    fpExplorer_functions.plot_raw_perievents(self.canvas,
                                                   self.options["subject"],
                                                   data,
+                                                  self.current_trials,
                                                   self.perievent_options_dict,
                                                   self.settings_dict,
                                                   self.preview_init_params[0][0]["signal_name"],
@@ -3346,7 +3506,8 @@ class PreviewEventBasedWidget(QWidget):
                                                   (self.export_path,self.export_begining))  
                 # if user clicked on analyze in perievent options window, analyze
                 if self.perievent_options_dict["analyze"] == True:
-                    analyzed_perievent_dict = fpAT_functions.analyze_perievent_data(data,
+                    analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                self.current_trials,
                                                                                self.perievent_options_dict,
                                                                                self.settings_dict,self.preview_init_params[0][0]["signal_name"],
                                                                                self.preview_init_params[0][0]["control_name"])
@@ -3354,7 +3515,7 @@ class PreviewEventBasedWidget(QWidget):
                     # only average
                     if (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                         and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
-                        fpAT_functions.plot_perievent_average_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                       self.options["subject"],
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3368,7 +3529,7 @@ class PreviewEventBasedWidget(QWidget):
                     # only zscore with error
                     elif (self.perievent_options_dict["plot_avg"] == False and self.perievent_options_dict["plot_zscore"] == True
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
-                        fpAT_functions.plot_perievent_zscore_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3382,7 +3543,7 @@ class PreviewEventBasedWidget(QWidget):
                     # only zscore with trials
                     elif (self.perievent_options_dict["plot_avg"] == False and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == False):
-                        fpAT_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3396,7 +3557,7 @@ class PreviewEventBasedWidget(QWidget):
                     # only auc
                     elif (self.perievent_options_dict["plot_avg"] == False and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
-                        fpAT_functions.plot_perievent_auc_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
                                                       self.options["subject"],
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3408,7 +3569,7 @@ class PreviewEventBasedWidget(QWidget):
                     # avg and zscore with error
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == True
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
-                        fpAT_functions.plot_perievent_avg_zscore(self.canvas,
+                        fpExplorer_functions.plot_perievent_avg_zscore(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3417,7 +3578,7 @@ class PreviewEventBasedWidget(QWidget):
                     # avg and zscore with trials
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == False):
-                        fpAT_functions.plot_perievent_avg_zscore_trials(self.canvas,
+                        fpExplorer_functions.plot_perievent_avg_zscore_trials(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3426,14 +3587,14 @@ class PreviewEventBasedWidget(QWidget):
                     # avg and auc
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
-                        fpAT_functions.plot_perievent_avg_auc(self.canvas,
+                        fpExplorer_functions.plot_perievent_avg_auc(self.canvas,
                                                       self.options["subject"],
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict)
                     #zscore with error and auc
                     elif (self.perievent_options_dict["plot_avg"] == False and self.perievent_options_dict["plot_zscore"] == True
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
-                        fpAT_functions.plot_perievent_zscore_auc(self.canvas,
+                        fpExplorer_functions.plot_perievent_zscore_auc(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3442,7 +3603,7 @@ class PreviewEventBasedWidget(QWidget):
                     #zscore with trials and auc
                     elif (self.perievent_options_dict["plot_avg"] == False and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == True):
-                        fpAT_functions.plot_perievent_zscore_trials_auc(self.canvas,
+                        fpExplorer_functions.plot_perievent_zscore_trials_auc(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3451,7 +3612,7 @@ class PreviewEventBasedWidget(QWidget):
                     # all 4 plots (zscore with error)
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == True
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
-                        fpAT_functions.plot_all_perievent(self.canvas,
+                        fpExplorer_functions.plot_all_perievent(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3460,7 +3621,7 @@ class PreviewEventBasedWidget(QWidget):
                     # all 4 plots (zscore with trials)
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == True):
-                        fpAT_functions.plot_all_perievent_zscore_trials(self.canvas,
+                        fpExplorer_functions.plot_all_perievent_zscore_trials(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3468,14 +3629,16 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["signal_name"])
                 # if user clicked on analyze in perievent options window, analyze
                 if self.perievent_options_dict["export"] == True:
-                    analyzed_perievent_dict = fpAT_functions.analyze_perievent_data(data,
+                    analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                self.current_trials,
                                                                                self.perievent_options_dict,
                                                                                self.settings_dict,self.preview_init_params[0][0]["signal_name"],
                                                                                self.preview_init_params[0][0]["control_name"])
                     # save downsampled preview
-                    fpAT_functions.plot_raw_perievents(self.canvas,
+                    fpExplorer_functions.plot_raw_perievents(self.canvas,
                                                   self.options["subject"],
                                                   data,
+                                                  self.current_trials,
                                                   self.perievent_options_dict,
                                                   self.settings_dict,
                                                   self.preview_init_params[0][0]["signal_name"],
@@ -3485,7 +3648,7 @@ class PreviewEventBasedWidget(QWidget):
                                                   self.parent_window.preview_params[1][self.options["subject"]],
                                                   (self.export_path,self.export_begining))  
                     if self.perievent_options_dict["plot_avg"] == True:
-                        fpAT_functions.plot_perievent_average_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                       self.options["subject"],
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3497,7 +3660,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["control_name"],
                                                       (self.export_path,self.export_begining))
                     if self.perievent_options_dict["plot_zscore"] == True:
-                        fpAT_functions.plot_perievent_zscore_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3509,7 +3672,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     if self.perievent_options_dict["plot_zscore_trials"] == True:
-                        fpAT_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                       self.options["subject"],
                                                       data,
                                                       self.perievent_options_dict,
@@ -3521,7 +3684,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     if self.perievent_options_dict["plot_auc"] == True:
-                        fpAT_functions.plot_perievent_auc_alone(self.canvas,
+                        fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
                                                       self.options["subject"],
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3588,7 +3751,7 @@ class PreviewEventBasedWidget(QWidget):
             self.show_info_dialog(wrong_event_order_info)
         # save fittings if save all plots was selected
         if self.save_plots == True:
-            fpAT_functions.show_polynomial_fitting(self.canvas,
+            fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                               self.settings_dict[0], 
                                               self.downsampled_dict[self.options["subject"]],
                                               self.preview_init_params[0][0]["signal_name"],
@@ -3603,7 +3766,7 @@ class PreviewEventBasedWidget(QWidget):
             else:
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_with_event(self.canvas,
+                fpExplorer_functions.plot_with_event(self.canvas,
                                        self.options["subject"],
                                        self.raw_data_dict[self.options["subject"]],
                                        custom_event_name,
@@ -3616,7 +3779,7 @@ class PreviewEventBasedWidget(QWidget):
                                        self.preview_init_params[0][0]["control_name"])
         if self.downsampled_export == True:
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_downsampled_alone(self.canvas,
+                fpExplorer_functions.plot_downsampled_alone(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            self.downsampled_export,
@@ -3628,7 +3791,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_downsampled_alone_with_event(self.canvas,
+                fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
                                            self.options["subject"],
                                            self.downsampled_dict[self.options["subject"]],
                                            custom_event_name,
@@ -3642,7 +3805,7 @@ class PreviewEventBasedWidget(QWidget):
                                            self.preview_init_params[0][0]["control_name"])
         if self.normalized_export == True:
             if self.options["event"] == "---": # no event selected
-                fpAT_functions.plot_normalized_alone(self.canvas,
+                fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                self.options["subject"],
                                                self.normalized_dict[self.options["subject"]],
                                                self.normalized_export,
@@ -3652,7 +3815,7 @@ class PreviewEventBasedWidget(QWidget):
             else:   # with event
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpAT_functions.plot_normalized_alone_with_event(self.canvas,
+                fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
                                                            self.options["subject"],
                                                            self.normalized_dict[self.options["subject"]],
                                                            custom_event_name,
@@ -3720,7 +3883,7 @@ class PreviewEventBasedWidget(QWidget):
                                     subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
                             if self.options["event"] == "---":
                                 try:
-                                    fpAT_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                    fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
                                                          self.recent_peak_values,
                                                          self.spikes_export,
                                                          self.save_plots,
@@ -3733,7 +3896,7 @@ class PreviewEventBasedWidget(QWidget):
                                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                                 try:
-                                    fpAT_functions.plot_peaks_with_event(self.canvas,subject,self.normalized_dict[subject],
+                                    fpExplorer_functions.plot_peaks_with_event(self.canvas,subject,self.normalized_dict[subject],
                                                                     self.recent_peak_values,
                                                                     custom_event_name,
                                                                     custom_event_name2,
@@ -3750,7 +3913,7 @@ class PreviewEventBasedWidget(QWidget):
                         # # spikes for averaged signal
                         # if self.options["event"] == "---":
                         #     try:
-                        #         fpAT_functions.get_batch_spikes(self.canvas,
+                        #         fpExplorer_functions.get_batch_spikes(self.canvas,
                         #                                        self.recent_peak_values,
                         #                                        self.all_normalized,
                         #                                        self.settings_dict,
@@ -3762,7 +3925,7 @@ class PreviewEventBasedWidget(QWidget):
                         #     custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                         #     custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                             
-                        #     fpAT_functions.get_batch_spikes_with_event(self.canvas,
+                        #     fpExplorer_functions.get_batch_spikes_with_event(self.canvas,
                         #                                           self.recent_peak_values,
                         #                                           self.all_normalized,
                         #                                           custom_event_name,
@@ -3813,7 +3976,7 @@ class PreviewEventBasedWidget(QWidget):
                 # key is the subject name, value is a list
                 # first element of that list is beginning and end seconds to trim
                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                           self.preview_init_params[0][0]["signal_name"],
                                                                                                                           self.preview_init_params[0][0]["control_name"],
                                                                                                                           trim_beginning,
@@ -3824,7 +3987,7 @@ class PreviewEventBasedWidget(QWidget):
                 begin,end = trimmed[0]
                 if trim_beginning != begin or trim_end != end:
                     # if new trimming params, replace the lists in dict
-                    self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                    self.trimmed_raw_data_dict[self.options["subject"]] = [(trim_beginning,trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
                                                                                                                           self.preview_init_params[0][0]["signal_name"],
                                                                                                                           self.preview_init_params[0][0]["control_name"],
                                                                                                                           trim_beginning,
@@ -3832,19 +3995,19 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                                           )]
             # always downsample first before normalizing
             # downsample
-            self.downsampled_dict[self.options["subject"]] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                          self.settings_dict[0]["downsample"])
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_fraction"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpAT_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
@@ -3857,12 +4020,12 @@ class PreviewEventBasedWidget(QWidget):
             # reset the event list to make sure it always has current events
             self.event_data = []
             if self.options["event"] != "---":
-                evt = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+                evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
                 if len(evt[0]) == 0:
                     self.show_info_dialog("Some "+self.options["event"]+" event data is missing.")
                 self.event_data.append(evt)
             if self.options["event2"] != "---":
-                evt = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
+                evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
                 if len(evt[0])==0:
                     self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
                 self.event_data.append(evt)
@@ -3875,7 +4038,7 @@ class PreviewEventBasedWidget(QWidget):
               
             if self.options["event"] == "---":
                 try:
-                    fpAT_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
+                    fpExplorer_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
                                          self.recent_peak_values,
                                          self.spikes_export,
                                          self.save_plots,
@@ -3888,7 +4051,7 @@ class PreviewEventBasedWidget(QWidget):
                 custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                 custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                 try:
-                    fpAT_functions.plot_peaks_with_event(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
+                    fpExplorer_functions.plot_peaks_with_event(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
                                                     self.recent_peak_values,
                                                     custom_event_name,
                                                     custom_event_name2,
@@ -3927,12 +4090,12 @@ class PreviewEventBasedWidget(QWidget):
         # reset the event list to make sure it always has current events
         self.event_data = []
         if self.options["event"] != "---":
-            evt = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+            evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
             if len(evt[0]) == 0:
                 self.show_info_dialog("Some "+self.options["event"]+" event data is missing.")
             self.event_data.append(evt)
         if self.options["event2"] != "---":
-            evt = fpAT_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
+            evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
             if len(evt[0])==0:
                 self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
             self.event_data.append(evt)
@@ -3955,7 +4118,7 @@ class PreviewEventBasedWidget(QWidget):
                 # key is the subject name, value is a list
                 # first element of that list is beginning and end seconds to trim
                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpAT_functions.trim_raw_data(self.raw_data_dict[subject],
+                self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
                                                                                   self.preview_init_params[0][0]["signal_name"],
                                                                                   self.preview_init_params[0][0]["control_name"],
                                                                                   new_trim_start,
@@ -3964,19 +4127,19 @@ class PreviewEventBasedWidget(QWidget):
                 
                 # always downsample first before normalizing
                 # downsample
-                self.downsampled_dict[subject] = fpAT_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
+                self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
                                                                              self.settings_dict[0]["downsample"])
                 # check settings for method to normalize
                 if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                     # normalize from downsampled
-                    self.normalized_dict[subject] = fpAT_functions.normalize_dff(self.raw_data_dict[subject],
+                    self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
                                                                                             self.settings_dict[0]["filter_fraction"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
-                    self.normalized_dict[subject] = fpAT_functions.normalize_pMat(self.raw_data_dict[subject],
+                    self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
@@ -3992,7 +4155,7 @@ class PreviewEventBasedWidget(QWidget):
                             # save under main folder
                             subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
                     # save also polynomial fitting by default
-                    fpAT_functions.show_polynomial_fitting(self.canvas,
+                    fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                               self.settings_dict[0], 
                                               self.downsampled_dict[subject],
                                               self.preview_init_params[0][0]["signal_name"],
@@ -4002,7 +4165,7 @@ class PreviewEventBasedWidget(QWidget):
                                               subject_subfolder)
                     if self.parent_window.batch_export_settings_dict["normalized"] == True:
                         if self.options["event"] == "---":
-                            fpAT_functions.plot_normalized_alone(self.canvas,
+                            fpExplorer_functions.plot_normalized_alone(self.canvas,
                                                        subject,
                                                        self.normalized_dict[subject],
                                                        True,
@@ -4012,7 +4175,7 @@ class PreviewEventBasedWidget(QWidget):
                         else:
                             custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                             custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                            fpAT_functions.plot_normalized_alone_with_event(self.canvas,
+                            fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
                                                            subject,
                                                            self.normalized_dict[subject],
                                                            custom_event_name,
@@ -4034,7 +4197,7 @@ class PreviewEventBasedWidget(QWidget):
                 if self.parent_window.batch_export_settings_dict["normalized"] == True:
                     if self.options["event"] == "---":
                         pass # only for single subjects
-                        # fpAT_functions.get_batch_normalized(self.canvas,
+                        # fpExplorer_functions.get_batch_normalized(self.canvas,
                         #                                self.all_normalized,
                         #                                self.settings_dict,
                         #                                self.parent_window.batch_export_settings_dict["normalized"],
@@ -4043,7 +4206,7 @@ class PreviewEventBasedWidget(QWidget):
                         pass # only for single subjects
                         # custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                         # custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                        # fpAT_functions.get_batch_normalized_with_event(self.canvas,
+                        # fpExplorer_functions.get_batch_normalized_with_event(self.canvas,
                         #                                           self.all_normalized,
                         #                                           custom_event_name,
                         #                                           custom_event_name2,
