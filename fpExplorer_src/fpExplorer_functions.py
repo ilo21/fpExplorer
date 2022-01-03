@@ -80,6 +80,10 @@ MY_BOTTOM = 0.1
 MY_WSPACE = 0.2
 MY_HSPACE = 0.5
 
+AXIS_LABEL_FONTSIZE = 14
+TITLE_FONT_SIZE = 15
+FIGURE_TITLE_FONT_SIZE = 16
+
 DPI4SVG = 1200
 ################################
 # return raw data structure
@@ -746,9 +750,9 @@ def plot_raw(canvas,subject,raw_data,signal_name,control_name,export,save_plots,
 
     # create title, axis labels, and legend
     my_title = 'Raw data: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -831,9 +835,9 @@ def plot_trimmed(canvas,subject,signal_dict,export,save_plots,export_loc_data,si
     
     # create title, axis labels, and legend
     my_title = 'Raw data: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -864,71 +868,6 @@ def plot_trimmed(canvas,subject,signal_dict,export,save_plots,export_loc_data,si
     else:
         canvas.draw()
     
-def plot_with_downsampled(canvas,subject,trimmed_signal_dict,downsampled_signal_dict):
-    # trimmed raw data
-    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
-    control_trimmed_data = trimmed_signal_dict["control"]
-    ts_trimmed = trimmed_signal_dict["ts"]
-    # downsampled data
-    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
-    control_downsampled_data = downsampled_signal_dict["control"]
-    ts_downsampled = downsampled_signal_dict["ts"]
-    
-    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
-    # start time from zero
-    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
-    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
-    # start time from zero
-    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
-    
-    # plot
-    # clear previous figure
-    canvas.fig.clf()
-    ax = canvas.fig.add_subplot(211)
-    ax2 = canvas.fig.add_subplot(212,sharex=ax,sharey=ax)
-
-    # plot the trimmed 
-    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax.plot(ts_reset_trimmed,control_trimmed_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # plot downsampled
-    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax2.plot(ts_reset_downsampled,control_downsampled_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Raw')
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
-    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    # hide top and right border
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Downsampled')
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('mV', fontsize=12)
-    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
-    canvas.draw()
 
 def plot_with_event(canvas,subject,signal_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,signal_name,control_name):
     # a tuple path+file beginning
@@ -1012,9 +951,9 @@ def plot_with_event(canvas,subject,signal_dict,event_name,event2_name,event_data
     
     # create title, axis labels, and legend
     my_title = 'Raw data: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -1073,527 +1012,6 @@ def plot_with_event(canvas,subject,signal_dict,event_name,event2_name,event_data
         canvas.draw() 
     
 
-def plot_with_downsampled_with_event(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,event_name,event2_name,event_data):
-    # trimmed raw data
-    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
-    control_trimmed_data = trimmed_signal_dict["control"]
-    ts_trimmed = trimmed_signal_dict["ts"]
-    # downsampled data
-    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
-    control_downsampled_data = downsampled_signal_dict["control"]
-    ts_downsampled = downsampled_signal_dict["ts"]
-    
-    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
-    # start time from zero
-    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
-    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
-    # start time from zero
-    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
-    
-    # plot
-    canvas.fig.clf()
-    ax = canvas.fig.add_subplot(211)
-    ax2 = canvas.fig.add_subplot(212,sharex=ax,sharey=ax)
-
-    # plot the trimmed 
-    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax.plot(ts_reset_trimmed,control_trimmed_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # plot downsampled
-    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax2.plot(ts_reset_downsampled,control_downsampled_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    
-    # get accurate event data timing
-    first_evt_onset = event_data[0][0]
-    first_evt_onset_translated = [el-ts_trimmed[0] for el in first_evt_onset]
-    first_evt_offset = event_data[0][1]
-    first_evt_offset_translated = [el-ts_trimmed[0] for el in first_evt_offset]
-    if len(event_data) > 1 and len(event_data[1][0]) > 0:
-        second_evt_onset = event_data[1][0]
-        second_evt_onset_translated = [el-ts_trimmed[0] for el in second_evt_onset]
-        second_evt_offset = event_data[1][1]
-        second_evt_offset_translated = [el-ts_trimmed[0] for el in second_evt_offset]
-        
-    if len(first_evt_onset) > 0:
-        # first event
-        # plot tone onsets as vertical lines
-        # first element in tone_on_off is a list with onset times
-        ctr = 0
-        ctr1 = 0
-        for i in range(len(first_evt_onset_translated)):
-            if first_evt_onset_translated[i] >= ts_reset_trimmed[0] and first_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
-                if ctr == 0:  # label only first one for the legend
-                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr+=1
-            if first_evt_onset_translated[i] >= ts_reset_downsampled[0] and first_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
-                if ctr1 == 0:  # label only first one for the legend
-                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr1+=1
-        # if there is more than one event, plot the second one as well
-        if len(event_data) > 1 and len(event_data[1][0]) > 0:
-            ctr = 0
-            ctr1 = 0
-            for i in range(len(second_evt_onset_translated)):
-                if second_evt_onset_translated[i] >= ts_reset_trimmed[0] and second_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
-                    if ctr == 0:  # label only first one for the legend
-                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr+=1
-                if second_evt_onset_translated[i] >= ts_reset_downsampled[0] and second_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
-                    if ctr1 == 0:  # label only first one for the legend
-                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr1+=1
-                    
-    # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Raw')
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
-    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    # hide top and right border
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Downsampled')
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('mV', fontsize=12)
-    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
-    canvas.draw()
-    
-def plot_with_downsampled_with_normalized(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,normalized_dict,show_norm_as):
-    # trimmed raw data
-    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
-    control_trimmed_data = trimmed_signal_dict["control"]
-    ts_trimmed = trimmed_signal_dict["ts"]
-    # downsampled data
-    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
-    control_downsampled_data = downsampled_signal_dict["control"]
-    ts_downsampled = downsampled_signal_dict["ts"]
-    # normalized
-    normalized_data = normalized_dict["normalized_signal"]
-    ts_normalized = normalized_dict["ts"]
-    
-    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
-    # start time from zero
-    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
-    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
-    # start time from zero
-    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
-    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
-    # start time from zero
-    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
-     
-    # plot
-    # clear previous figure
-    canvas.fig.clf()
-    ax = canvas.fig.add_subplot(311)
-    ax2 = canvas.fig.add_subplot(312,sharex=ax,sharey=ax)
-    ax3 = canvas.fig.add_subplot(313,sharex=ax)
-
-    # plot the trimmed 
-    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax.plot(ts_reset_trimmed,control_trimmed_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # plot downsampled
-    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax2.plot(ts_reset_downsampled,control_downsampled_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    ax3.plot(ts_reset_normalized,normalized_data,
-             color='green',
-             linewidth=1,
-             label = "normalized")
-    # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Raw')
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
-    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    # hide top and right border
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Downsampled')
-    ax2.set_ylabel('mV', fontsize=12)
-    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    ax3.title.set_text("Normalized")
-    ax3.set_ylabel('dF/F (%)', fontsize=12)
-    if show_norm_as == "Z-Score":
-        ax3.set_ylabel("Z-Score",fontsize=12)
-    ax3.set_xlabel('Time (sec)', fontsize=12)
-    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax3.spines['top'].set_visible(False)
-    ax3.spines['right'].set_visible(False)
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
-    canvas.draw()
-    
-def plot_with_downsampled_with_normalized_with_event(canvas,subject,trimmed_signal_dict,downsampled_signal_dict,normalized_dict,show_norm_as,event_name,event2_name,event_data):
-    # trimmed raw data
-    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
-    control_trimmed_data = trimmed_signal_dict["control"]
-    ts_trimmed = trimmed_signal_dict["ts"]
-    # downsampled data
-    GCaMP_downsampled_data = downsampled_signal_dict["signal"]
-    control_downsampled_data = downsampled_signal_dict["control"]
-    ts_downsampled = downsampled_signal_dict["ts"]
-    # normalized
-    normalized_data = normalized_dict["normalized_signal"]
-    ts_normalized = normalized_dict["ts"]
-    
-    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
-    # start time from zero
-    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
-    total_seconds_downsampled = ts_downsampled[-1]-ts_downsampled[0]
-    # start time from zero
-    ts_reset_downsampled = [i*total_seconds_downsampled/len(ts_downsampled) for i in range(len(ts_downsampled))]
-    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
-    # start time from zero
-    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
-    
-    # plot
-    # clear previous figure
-    canvas.fig.clf()
-    ax = canvas.fig.add_subplot(311)
-    ax2 = canvas.fig.add_subplot(312,sharex=ax,sharey=ax)
-    ax3 = canvas.fig.add_subplot(313,sharex=ax)
-
-    # plot the trimmed 
-    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax.plot(ts_reset_trimmed,control_trimmed_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # plot downsampled
-    ax2.plot(ts_reset_downsampled,GCaMP_downsampled_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax2.plot(ts_reset_downsampled,control_downsampled_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    ax3.plot(ts_reset_normalized,normalized_data,
-             color='green',
-             linewidth=1,
-             label = "normalized")
-    
-    # get accurate event data timing
-    first_evt_onset = event_data[0][0]
-    first_evt_onset_translated = [el-ts_trimmed[0] for el in first_evt_onset]
-    first_evt_offset = event_data[0][1]
-    first_evt_offset_translated = [el-ts_trimmed[0] for el in first_evt_offset]
-    if len(event_data) > 1 and len(event_data[1][0]) > 0:
-        second_evt_onset = event_data[1][0]
-        second_evt_onset_translated = [el-ts_trimmed[0] for el in second_evt_onset]
-        second_evt_offset = event_data[1][1]
-        second_evt_offset_translated = [el-ts_trimmed[0] for el in second_evt_offset]
-        
-    if len(first_evt_onset) > 0:
-        # first event
-        # plot tone onsets as vertical lines
-        # first element in tone_on_off is a list with onset times
-        ctr = 0
-        ctr1 = 0
-        ctr2 = 0
-        for i in range(len(first_evt_onset_translated)):
-            if first_evt_onset_translated[i] >= ts_reset_trimmed[0] and first_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
-                if ctr == 0:  # label only first one for the legend
-                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr+=1
-            if first_evt_onset_translated[i] >= ts_reset_downsampled[0] and first_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
-                if ctr1 == 0:  # label only first one for the legend
-                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr1+=1
-            if first_evt_onset_translated[i] >= ts_reset_normalized[0] and first_evt_onset_translated[i] <= ts_reset_normalized[-1]:
-                if ctr2 == 0:  # label only first one for the legend
-                    ax3.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax3.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr2+=1
-        # if there is more than one event, plot the second one as well
-        if len(event_data) > 1 and len(event_data[1][0]) > 0:
-            ctr = 0
-            ctr1 = 0
-            for i in range(len(second_evt_onset_translated)):
-                if second_evt_onset_translated[i] >= ts_reset_trimmed[0] and second_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
-                    if ctr == 0:  # label only first one for the legend
-                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr+=1
-                if second_evt_onset_translated[i] >= ts_reset_downsampled[0] and second_evt_onset_translated[i] <= ts_reset_downsampled[-1]:
-                    if ctr1 == 0:  # label only first one for the legend
-                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr1+=1
-                if second_evt_onset_translated[i] >= ts_reset_normalized[0] and second_evt_onset_translated[i] <= ts_reset_normalized[-1]:
-                    if ctr2 == 0:  # label only first one for the legend
-                        ax3.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax3.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr2+=1
-    
-    # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Raw')
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
-    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    # hide top and right border
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Downsampled')
-    ax2.set_ylabel('mV', fontsize=12)
-    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    ax3.title.set_text("Normalized")
-    ax3.set_ylabel('dF/F (%)', fontsize=12)
-    if show_norm_as == "Z-Score":
-        ax3.set_ylabel("Z-Score",fontsize=12)
-    ax3.set_xlabel('Time (sec)', fontsize=12)
-    ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax3.spines['top'].set_visible(False)
-    ax3.spines['right'].set_visible(False)
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
-    canvas.draw()
-    
-def plot_with_normalized(canvas,subject,trimmed_signal_dict,normalized_dict,show_norm_as):
-    # trimmed raw data
-    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
-    control_trimmed_data = trimmed_signal_dict["control"]
-    ts_trimmed = trimmed_signal_dict["ts"]
-    # downsampled data
-    # normalized
-    normalized_data = normalized_dict["normalized_signal"]
-    ts_normalized = normalized_dict["ts"]
-    
-    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
-    # start time from zero
-    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
-    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
-    # start time from zero
-    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
-    
-    # plot
-    # clear previous figure
-    canvas.fig.clf()
-    ax = canvas.fig.add_subplot(211)
-    ax2 = canvas.fig.add_subplot(212,sharex=ax)
-
-    # plot the trimmed 
-    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax.plot(ts_reset_trimmed,control_trimmed_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # plot downsampled
-    ax2.plot(ts_reset_normalized,normalized_data,
-             color='green',
-             linewidth=1,
-             label = "normalized")
-    # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Raw')
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
-    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    # hide top and right border
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Normalized')
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('dF/F (%)', fontsize=12)
-    if show_norm_as == "Z-Score":
-        ax2.set_ylabel("Z-Score",fontsize=12)
-    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
-    canvas.draw()
-    
-def plot_with_normalized_with_event(canvas,subject,trimmed_signal_dict,normalized_dict,show_norm_as,event_name,event2_name,event_data):
-    # trimmed raw data
-    GCaMP_trimmed_data = trimmed_signal_dict["signal"]
-    control_trimmed_data = trimmed_signal_dict["control"]
-    ts_trimmed = trimmed_signal_dict["ts"]
-    # downsampled data
-    # normalized
-    normalized_data = normalized_dict["normalized_signal"]
-    ts_normalized = normalized_dict["ts"]
-    
-    total_seconds_trimmed = ts_trimmed[-1]-ts_trimmed[0]
-    # start time from zero
-    ts_reset_trimmed = [i*total_seconds_trimmed/len(ts_trimmed) for i in range(len(ts_trimmed))]
-    total_seconds_normalized = ts_normalized[-1]-ts_normalized[0]
-    # start time from zero
-    ts_reset_normalized = [i*total_seconds_normalized/len(ts_normalized) for i in range(len(ts_normalized))]
-    
-    # plot
-    # clear previous figure
-    canvas.fig.clf()
-    ax = canvas.fig.add_subplot(211)
-    ax2 = canvas.fig.add_subplot(212,sharex=ax)
-
-    # plot the trimmed 
-    ax.plot(ts_reset_trimmed, GCaMP_trimmed_data,
-             color='green',
-             linewidth=1,
-             label = "signal")
-    ax.plot(ts_reset_trimmed,control_trimmed_data,
-             color='red',
-             linewidth=1,
-             label = "control")
-    # plot downsampled
-    ax2.plot(ts_reset_normalized,normalized_data,
-             color='green',
-             linewidth=1,
-             label = "normalized")
-    
-    # get accurate event data timing
-    first_evt_onset = event_data[0][0]
-    first_evt_onset_translated = [el-ts_trimmed[0] for el in first_evt_onset]
-    first_evt_offset = event_data[0][1]
-    first_evt_offset_translated = [el-ts_trimmed[0] for el in first_evt_offset]
-    if len(event_data) > 1 and len(event_data[1][0]) > 0:
-        second_evt_onset = event_data[1][0]
-        second_evt_onset_translated = [el-ts_trimmed[0] for el in second_evt_onset]
-        second_evt_offset = event_data[1][1]
-        second_evt_offset_translated = [el-ts_trimmed[0] for el in second_evt_offset]
-        
-    if len(first_evt_onset) > 0:
-        # first event
-        # plot tone onsets as vertical lines
-        # first element in tone_on_off is a list with onset times
-        ctr = 0
-        ctr1 = 0
-        for i in range(len(first_evt_onset_translated)):
-            if first_evt_onset_translated[i] >= ts_reset_trimmed[0] and first_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
-                if ctr == 0:  # label only first one for the legend
-                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr+=1
-            if first_evt_onset_translated[i] >= ts_reset_normalized[0] and first_evt_onset_translated[i] <= ts_reset_normalized[-1]:
-                if ctr1 == 0:  # label only first one for the legend
-                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1,label=event_name)
-                else:
-                    ax2.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
-                ctr1+=1
-        # if there is more than one event, plot the second one as well
-        if len(event_data) > 1 and len(event_data[1][0]) > 0:
-            ctr = 0
-            ctr1 = 0
-            for i in range(len(second_evt_onset_translated)):
-                if second_evt_onset_translated[i] >= ts_reset_trimmed[0] and second_evt_onset_translated[i] <= ts_reset_trimmed[-1]:
-                    if ctr == 0:  # label only first one for the legend
-                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr+=1
-                if second_evt_onset_translated[i] >= ts_reset_normalized[0] and second_evt_onset_translated[i] <= ts_reset_normalized[-1]:
-                    if ctr1 == 0:  # label only first one for the legend
-                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1,label=event2_name)
-                    else:
-                        ax2.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
-                    ctr1+=1
-    
-    # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Raw')
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
-    ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    # hide top and right border
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Normalized')
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('dF/F (%)', fontsize=12)
-    if show_norm_as == "Z-Score":
-        ax2.set_ylabel("Z-Score",fontsize=12)
-    ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE)  
-    canvas.draw()
-    
 def plot_downsampled_alone(canvas,subject,downsampled_signal_dict,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
     settings_dict[0]["subject"] = subject
     # a tuple path+file beginning
@@ -1621,10 +1039,10 @@ def plot_downsampled_alone(canvas,subject,downsampled_signal_dict,export,save_pl
              label = "control")
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Downsampled')
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Downsampled',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
@@ -1727,10 +1145,10 @@ def plot_downsampled_alone_with_event(canvas,subject,downsampled_signal_dict,eve
     
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Downsampled')
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Downsampled',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
@@ -1810,12 +1228,12 @@ def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,expor
              label = "normalized")
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Normalized')
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Normalized',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax.set_ylabel("Z-Score",fontsize=12)
+        ax.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
@@ -1921,12 +1339,12 @@ def plot_normalized_alone_with_event(canvas,subject,normalized_dict,event_name,e
     
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Normalized')
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Normalized',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax.set_ylabel("Z-Score",fontsize=12)
+        ax.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
@@ -2024,19 +1442,19 @@ def plot_downsampled_and_normalized_alone(canvas,subject,downsampled_signal_dict
              label = "normalized")
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Downsampled')
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Downsampled',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Normalized')
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('dF/F (%)', fontsize=12)
+    ax2.set_title('Normalized',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax2.set_ylabel("Z-Score",fontsize=12)
+        ax2.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
@@ -2136,19 +1554,19 @@ def plot_downsampled_and_normalized_with_event(canvas,subject,downsampled_signal
     
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.title.set_text('Downsampled')
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Downsampled',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax2.title.set_text('Normalized')
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('dF/F (%)', fontsize=12)
+    ax2.set_title('Normalized',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax2.set_ylabel("Z-Score",fontsize=12)
+        ax2.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
@@ -2196,15 +1614,15 @@ def plot_separate_only(canvas,subject,trimmed_signal_dict,downsampled_signal_dic
     
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('mV', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
@@ -2291,15 +1709,15 @@ def plot_separate_with_event(canvas,subject,trimmed_signal_dict,downsampled_sign
                            
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('mV', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
@@ -2358,23 +1776,23 @@ def plot_separate_with_normalized(canvas,subject,trimmed_signal_dict,downsampled
              label = "normalized")
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('mV', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax3.set_ylabel('dF/F (%)', fontsize=12)
+    ax3.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax3.set_ylabel("Z-Score",fontsize=12)
-    ax3.set_xlabel('Time (sec)', fontsize=12)
+        ax3.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
+    ax3.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -2483,23 +1901,23 @@ def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,
     
     # create title, axis labels, and legend
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
-    ax2.set_ylabel('mV', fontsize=12)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax3.set_ylabel('dF/F (%)', fontsize=12)
+    ax3.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax3.set_ylabel("Z-Score",fontsize=12)
-    ax3.set_xlabel('Time (sec)', fontsize=12)
+        ax3.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
+    ax3.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -2620,7 +2038,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
     canvas.fig.clf()
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     
     # plot 3 in the same row. Idea for layout from:
     # https://towardsdatascience.com/customizing-multiple-subplots-in-matplotlib-a3e1c2e099bc
@@ -2649,13 +2067,13 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         if len(current_trials) > 0:
-            ax.title.set_text('Trial: '+str(current_trials[i]))
+            ax.set_title('Trial: '+str(current_trials[i]),fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
         else:
-            ax.title.set_text('Trial: '+str(i+1))
-        ax.set_xlabel('Time (sec)', fontsize=12)
-        ax.set_ylabel('dF/F (%)', fontsize=12)
+            ax.set_title('Trial: '+str(i+1),fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
+        ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+        ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
         if show_norm_as == "Z-Score":
-            ax.set_ylabel('Z-Score', fontsize=12)
+            ax.set_ylabel('Z-Score', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
         
     # set the spacing between subplots 
@@ -2737,12 +2155,12 @@ def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_
                       facecolor='red', alpha=0.1)
     
     my_title = 'Average From All Trials. Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # create subfolder in current subject folder
@@ -2805,17 +2223,17 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
   
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Individual z-Score Traces')
-    ax.set_ylabel('Trials')
-    ax.set_xlabel('Seconds from Event Onset')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax2.set_ylabel('z-Score')
-    ax2.set_xlabel('Seconds')
+    ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # set the spacing between subplots 
@@ -2903,17 +2321,17 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
   
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Individual z-Score Traces')
-    ax.set_ylabel('Trials')
-    ax.set_xlabel('Seconds from Event Onset')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax2.set_ylabel('z-Score')
-    ax2.set_xlabel('Seconds')
+    ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # set the spacing between subplots 
@@ -3019,24 +2437,24 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
     ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label='Event Onset')
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Average From All Trials')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.set_title('Individual z-Score Traces')
-    ax2.set_ylabel('Trials')
-    ax2.set_xlabel('Seconds from Event Onset')
+    ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks(np.arange(0,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
-    ax3.set_ylabel('z-Score')
-    ax3.set_xlabel('Seconds')
+    ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax3.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # set the spacing between subplots 
@@ -3104,24 +2522,24 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
     ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label='Event Onset')
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Average From All Trials')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.set_title('Individual z-Score Traces')
-    ax2.set_ylabel('Trials')
-    ax2.set_xlabel('Seconds from Event Onset')
+    ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks(np.arange(0,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
-    ax3.set_ylabel('z-Score')
-    ax3.set_xlabel('Seconds')
+    ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax3.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # set the spacing between subplots 
@@ -3167,8 +2585,8 @@ def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_peri
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
     ax.set_ylim(min(AUC)-2*h, y+2*h)
-    ax.set_ylabel('AUC')
-    ax.set_title('Pre vs Post')
+    ax.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax.set_xticks(np.arange(-1, len(AUC)+1))
     ax.set_xticklabels(['', 'PRE', 'POST', ''])
     ax.set_yticks([min(AUC),max(AUC)])
@@ -3265,13 +2683,13 @@ def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_periev
     #     ax2.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
         
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Average From All Trials')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # hide top and right border
@@ -3279,8 +2697,8 @@ def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_periev
     ax2.spines['right'].set_visible(False)
     ax2.spines['bottom'].set_visible(False)
     ax2.set_ylim(min(AUC)-2*h, y+2*h)
-    ax2.set_ylabel('AUC')
-    ax2.set_title('Pre vs Post')
+    ax2.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax2.set_xticks(np.arange(-1, len(AUC)+1))
     ax2.set_xticklabels(['', 'PRE', 'POST', ''])
     ax2.set_yticks([min(AUC),max(AUC)])
@@ -3331,25 +2749,25 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     #     ax3.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
   
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax.set_title('Individual z-Score Traces')
-    ax.set_ylabel('Trials')
-    ax.set_xlabel('Seconds from Event Onset')
+    ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
-    ax2.set_ylabel('z-Score')
-    ax2.set_xlabel('Seconds')
+    ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
     ax3.spines['bottom'].set_visible(False)
     ax3.set_ylim(min(AUC)-2*h, y+2*h)
-    ax3.set_ylabel('AUC')
-    ax3.set_title('Pre vs Post')
+    ax3.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax3.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
     ax3.set_xticklabels(['', 'PRE', 'POST', ''])
     ax3.set_yticks([min(AUC),max(AUC)])
@@ -3410,25 +2828,25 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     #     ax3.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
   
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax.set_title('Individual z-Score Traces')
-    ax.set_ylabel('Trials')
-    ax.set_xlabel('Seconds from Event Onset')
+    ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
-    ax2.set_ylabel('z-Score')
-    ax2.set_xlabel('Seconds')
+    ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
     ax3.spines['bottom'].set_visible(False)
     ax3.set_ylim(min(AUC)-2*h, y+2*h)
-    ax3.set_ylabel('AUC')
-    ax3.set_title('Pre vs Post')
+    ax3.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax3.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
     ax3.set_xticklabels(['', 'PRE', 'POST', ''])
     ax3.set_yticks([min(AUC),max(AUC)])
@@ -3510,22 +2928,22 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
         
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Average From All Trials')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+#    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.set_title('Individual z-Score Traces')
-    ax2.set_ylabel('Trials')
+    ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks(np.arange(0,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
 #    ax2.set_xlabel('Seconds from Event Onset')
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
-    ax3.set_ylabel('z-Score')
+    ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
 #    ax3.set_xlabel('Seconds')
     # hide top and right border
@@ -3533,8 +2951,8 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     ax4.spines['right'].set_visible(False)
     ax4.spines['bottom'].set_visible(False)
     ax4.set_ylim(min(AUC)-2*h, y+2*h)
-    ax4.set_ylabel('AUC')
-    ax4.set_title('Pre vs Post')
+    ax4.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax4.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
     ax4.set_xticklabels(['', 'PRE', 'POST', ''])
     ax4.set_yticks([min(AUC),max(AUC)])
@@ -3618,22 +3036,22 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
         
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('Average From All Trials')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-#    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('mV', fontsize=12)
+#    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-    ax2.set_title('Individual z-Score Traces')
-    ax2.set_ylabel('Trials')
+    ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks(np.arange(0,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
 #    ax2.set_xlabel('Seconds from Event Onset')
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
-    ax3.set_ylabel('z-Score')
+    ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
 #    ax3.set_xlabel('Seconds')
     # hide top and right border
@@ -3641,8 +3059,8 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     ax4.spines['right'].set_visible(False)
     ax4.spines['bottom'].set_visible(False)
     ax4.set_ylim(min(AUC)-2*h, y+2*h)
-    ax4.set_ylabel('AUC')
-    ax4.set_title('Pre vs Post')
+    ax4.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax4.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
     ax4.set_xticklabels(['', 'PRE', 'POST', ''])
     ax4.set_yticks([min(AUC),max(AUC)])
@@ -3765,10 +3183,10 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,subject_data_path,s
     ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax.set_ylabel('Z-Score', fontsize=12)
+        ax.set_ylabel('Z-Score', fontsize=AXIS_LABEL_FONTSIZE)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
@@ -3776,8 +3194,8 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,subject_data_path,s
     ax.xaxis.set_ticks_position('none')
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax2.set_ylabel('Peaks', fontsize=12)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('Peaks', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks([])
     
     ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
@@ -3957,10 +3375,10 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
                     ctr+=1
     
     my_title = 'Subject: ' + subject
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax.set_ylabel('Z-Score', fontsize=12)
+        ax.set_ylabel('Z-Score', fontsize=AXIS_LABEL_FONTSIZE)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
@@ -3969,8 +3387,8 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax2.set_ylabel('Peaks', fontsize=12)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('Peaks', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks([])
     
     ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
@@ -4086,12 +3504,12 @@ def get_batch_normalized(canvas,my_all_normalized,settings_dict,export,export_lo
                       facecolor='g', alpha=0.2,label = 'Standard error')
     
     my_title = 'Normalized batch'
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     my_pos = (0.94, 1)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=my_pos)
     
@@ -4208,12 +3626,12 @@ def get_batch_normalized_with_event(canvas,my_all_normalized,event_name,event2_n
                     ctr+=1
     
     my_title = 'Normalized batch'
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     my_pos = (0.94, 1)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=my_pos)
     
@@ -4396,8 +3814,8 @@ def get_batch_spikes(canvas,options,my_all_normalized,settings_dict,export,expor
     ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
     
     my_title = 'Batch Spikes'
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
@@ -4405,8 +3823,8 @@ def get_batch_spikes(canvas,options,my_all_normalized,settings_dict,export,expor
     ax.xaxis.set_ticks_position('none')
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax2.set_ylabel('Peaks', fontsize=12)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('Peaks', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks([])
     
     ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
@@ -4613,8 +4031,8 @@ def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,even
                     ctr+=1
     
     my_title = 'Batch Spikes Subjects: ' + " ".join(subjects_end_file.split("_"))
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
@@ -4622,8 +4040,8 @@ def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,even
     ax.xaxis.set_ticks_position('none')
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
-    ax2.set_ylabel('Peaks', fontsize=12)
-    ax2.set_xlabel('Time (sec)', fontsize=12)
+    ax2.set_ylabel('Peaks', fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks([])
     
     ax2.legend(loc='lower left', bbox_to_anchor=(0.85, 0))
@@ -4742,14 +4160,14 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,sett
                       facecolor='g', alpha=0.2,label = 'Standard error')
     
     my_title = 'Total Subjects: ' + str(len(all_dfs))
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.set_xlabel('Time (sec)', fontsize=12)
-    ax.set_ylabel('dF/F (%)', fontsize=12)
+    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
     if show_norm_as == "Z-Score":
-        ax.set_ylabel("Z-Score")
+        ax.set_ylabel("Z-Score",fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
 
     # save csv with data
@@ -4875,17 +4293,17 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
   
     my_title = 'Total Subjects: ' + str(len(all_dfs)) + "; Event: " + event_name
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('z-Score Traces')
-    ax.set_ylabel('Trials')
-    ax.set_xlabel('Seconds from Event Onset')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
     # show only intiger yticks
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
-    ax2.set_ylabel('z-Score')
-    ax2.set_xlabel('Seconds')
+    ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
@@ -5028,17 +4446,17 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
   
     my_title = 'Total Subjects: ' + str(len(all_dfs)) + "; Event: " + event_name
-    canvas.fig.suptitle(my_title, fontsize=14)
-    ax.set_title('z-Score Traces')
-    ax.set_ylabel('Trials')
-    ax.set_xlabel('Seconds from Event Onset')
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+    ax.set_title('z-Score Traces',fontsize=TITLE_FONT_SIZE)
+    ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
     # show only intiger yticks
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
-    ax2.set_ylabel('z-Score')
-    ax2.set_xlabel('Seconds')
+    ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     # hide top and right border
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
@@ -5182,14 +4600,14 @@ def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_di
     #     ax.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
         
     my_title = 'Total Subjects: ' + str(len(all_dfs))+ "; Event: "+event_name
-    canvas.fig.suptitle(my_title, fontsize=14)
+    canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
     ax.set_ylim(min(AUC)-2*h, y+2*h)
-    ax.set_ylabel('AUC')
-    ax.set_title('Pre vs Post')
+    ax.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
+    ax.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax.set_xticks(np.arange(-1, len(AUC)+1))
     ax.set_xticklabels(['', 'PRE', 'POST', ''])
     ax.set_yticks([min(AUC),max(AUC)])
@@ -5275,10 +4693,10 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
         ax.plot(ts_reset, F0, linewidth=1, color='k', label='F0')
         
         my_title = "Check polynomial fitting: " + normalization
-        ax.set_title(my_title,fontsize=14)
-#        canvas.fig.suptitle(my_title, fontsize=14)
-        ax.set_ylabel('mV')
-        ax.set_xlabel('Time (sec)', fontsize=12)
+        ax.set_title(my_title,fontsize=FIGURE_TITLE_FONT_SIZE)
+#        canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+        ax.set_ylabel('mV',fontsize=AXIS_LABEL_FONTSIZE)
+        ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
         # show only intiger yticks
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         # hide top and right border
@@ -5331,17 +4749,17 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
         
         my_title = "Check polynomial fitting: " + normalization
 #        ax.set_title(my_title,fontsize=14)
-        canvas.fig.suptitle(my_title, fontsize=14)
-        ax.set_ylabel('mV')
-        ax.set_xlabel('Time (sec)', fontsize=12)
+        canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+        ax.set_ylabel('mV',fontsize=AXIS_LABEL_FONTSIZE)
+        ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
         # show only intiger yticks
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         # hide top and right border
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
-        ax2.set_ylabel('mV')
-        ax2.set_xlabel('Time (sec)', fontsize=12)
+        ax2.set_ylabel('mV',fontsize=AXIS_LABEL_FONTSIZE)
+        ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
         # show only intiger yticks
         ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
         # hide top and right border
