@@ -101,7 +101,7 @@ def get_channel_names(raw_data):
 def get_events(raw_data):
     '''
     Returns a list of unique events from file that
-    don't start with cam
+    don't start with cam or tick
     '''
     # tdt StructTypes are dictionaries
     all_epocs_list = [key for key in raw_data.epocs.keys()]
@@ -109,7 +109,7 @@ def get_events(raw_data):
     # iterate over all events that start with Ptr
     for evt in all_epocs_list:
         # exclude cam from events
-        if evt.lower().startswith("cam") == False:
+        if evt.lower().startswith("cam") == False and evt.lower().startswith("tick") == False:
         # if evt.startswith("Prt") or evt.startswith("Note"):
             # create set of unique events
             unique_events = set(raw_data.epocs[evt].data)
@@ -158,6 +158,9 @@ def create_timestamps(raw_data,chnl_name,channel_data):
     num_samples = len(channel_data)
     times = np.linspace(1, num_samples, num_samples) / raw_data.streams[chnl_name].fs
     return times
+
+def get_frequency(raw_data,chnl_name):
+    return raw_data.streams[chnl_name].fs
 
 def trim_raw_data(raw_data,signal_name,control_name,beginning_sec,ending_sec):
     # return numpy array for all GCaMP channel raw data
@@ -3148,7 +3151,7 @@ def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_peri
     ax.bar(np.arange(len(AUC)), AUC,
            color=[.8, .8, .8], align='center', alpha=0.5)
     ax.axhline(y=0, linewidth=0.5, color='k')
-    ax.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    ax.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
@@ -3252,7 +3255,7 @@ def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_periev
     # polt bars with error bars
     ax2.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax2.axhline(y=0, linewidth=0.5, color='k')
-    ax2.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    ax2.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
@@ -3318,7 +3321,7 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     # polt bars with error bars
     ax3.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax3.axhline(y=0,linewidth=0.5, color='k')
-    ax3.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    ax3.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
@@ -3397,7 +3400,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     # AUC
     ax3.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax3.axhline(y=0,linewidth=0.5,color='k')
-    ax3.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    ax3.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
@@ -3496,7 +3499,7 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     # AUC
     ax4.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax4.axhline(y=0,linewidth=0.5,color='k')
-    ax4.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    ax4.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
@@ -3604,7 +3607,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     # AUC
     ax4.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax4.axhline(y=0,linewidth=0.5,color='k')
-    ax4.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='o',color='k',capsize=4)
+    ax4.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_err_pre,AUC_err_post], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_err_pre,AUC_err_post]), 2, 'k'
@@ -5169,7 +5172,7 @@ def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_di
    
     ax.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax.axhline(y=0,linewidth=0.5,color='k')
-    ax.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_pre_err,AUC_post_err], fmt='o',color='k',capsize=4)
+    ax.errorbar(np.arange(len(AUC)), AUC, yerr=[AUC_pre_err,AUC_post_err], fmt='none',color='k',capsize=4)
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_pre_err,AUC_post_err]), 2, 'k'

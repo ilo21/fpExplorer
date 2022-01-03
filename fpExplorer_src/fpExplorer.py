@@ -1812,6 +1812,12 @@ class PreviewContinuousWidget(QWidget):
             
     def on_subject_change(self):
         self.options_pre_check()
+        # update last timestamp
+        # get last timestamp in seconds
+        self.last_raw_ts = fpExplorer_functions.get_last_timestamp(
+                                     self.raw_data_dict[self.options["subject"]],
+                                     self.preview_init_params[0][0]["signal_name"],
+                                     )
         # clear long lasting check boxes to start faster
         self.downsample_cb.setChecked(False)
         self.normalize_cb.setChecked(False)
@@ -2375,7 +2381,7 @@ class PreviewEventBasedWidget(QWidget):
             except:
                 trim_beginning = 0
                 self.trim_beginning_sec.setText("0")
-        else:
+        else: # if trim by event
             trim_begin_event = self.trim_beginning_event.currentText()
             begin_evt_data_onsets = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_begin_event)[0]
             trim_beginning = 0 # assign zero in case there is no such event
@@ -2389,13 +2395,12 @@ class PreviewEventBasedWidget(QWidget):
             except:                
                 trim_end = 0
                 self.trim_ending_sec.setText("0")
-        else:
+        else: # if trim by event
             trim_end_event = self.trim_end_event.currentText()
             end_evt_data_onsets = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_end_event)[0]
-            print(end_evt_data_onsets)
             trim_end = 0 # assign zero in case there is no such event
             if len(end_evt_data_onsets) > 0:
-                # use first onset as trim begin
+                # use last onset as trim begin
                 trim_end = math.ceil(self.last_raw_ts - end_evt_data_onsets[-1])
             self.trim_ending_sec.setText(str(trim_end))
         # if it was not trimmed yet, add to dictionary
@@ -2937,6 +2942,12 @@ class PreviewEventBasedWidget(QWidget):
             
     def on_subject_change(self):
         self.options_pre_check()
+        # update last timestamp
+        # get last timestamp in seconds
+        self.last_raw_ts = fpExplorer_functions.get_last_timestamp(
+                                     self.raw_data_dict[self.options["subject"]],
+                                     self.preview_init_params[0][0]["signal_name"],
+                                     )
         # clear long lasting check boxes to start faster
         self.downsample_cb.setChecked(False)
         self.normalize_cb.setChecked(False)
@@ -3137,6 +3148,29 @@ class PreviewEventBasedWidget(QWidget):
                                                                                self.preview_init_params[0][0]["control_name"])
                             # check if there is any data to plot 
                             if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
+
+                                # show buttons of available trials
+                                self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                                if self.current_perievent == None:
+                                    self.current_perievent = self.perievent_options_dict['event']
+                                    # add trials to view
+                                    self.current_trials_layout = QHBoxLayout()
+                                    self.current_trials_widget.setLayout(self.current_trials_layout)
+                                    text_label = QLabel("Include Trials:")
+                                    self.current_trials_layout.addWidget(text_label)
+                                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                        # create btn
+                                        # add button to a group
+                                        # add to list
+                                        # add to layout
+                                        btn = QCheckBox(str(i+1))
+                                        btn.setChecked(True)
+                                        self.current_trials_layout.addWidget(btn)
+                                        self.trials_button_group.append(btn)
+                                        self.current_trials.append(i+1)
+                                    self.trials_layout.addWidget(self.current_trials_widget)
+
+
                                 # create subfolder with subject name
                                 subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
                                 if not os.path.exists(subject_subfolder):
@@ -3292,6 +3326,28 @@ class PreviewEventBasedWidget(QWidget):
                                                                                            self.settings_dict,
                                                                                            self.preview_init_params[0][0]["signal_name"],
                                                                                            self.preview_init_params[0][0]["control_name"])
+
+                                            # show buttons of available trials
+                                            self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                                            if self.current_perievent == None:
+                                                self.current_perievent = self.perievent_options_dict['event']
+                                                # add trials to view
+                                                self.current_trials_layout = QHBoxLayout()
+                                                self.current_trials_widget.setLayout(self.current_trials_layout)
+                                                text_label = QLabel("Include Trials:")
+                                                self.current_trials_layout.addWidget(text_label)
+                                                for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                                    # create btn
+                                                    # add button to a group
+                                                    # add to list
+                                                    # add to layout
+                                                    btn = QCheckBox(str(i+1))
+                                                    btn.setChecked(True)
+                                                    self.current_trials_layout.addWidget(btn)
+                                                    self.trials_button_group.append(btn)
+                                                    self.current_trials.append(i+1)
+                                                self.trials_layout.addWidget(self.current_trials_widget)
+                                                
                                         if self.perievent_options_dict["plot_avg"] == True:
                                             # perieventnormalized preview
                                             all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
@@ -4677,6 +4733,11 @@ class SettingsWindow(QMainWindow):
         self.parent_window = parent_window
         self.parent_window.app_closed.connect(self.exit_app)
         self.settings = settings
+        self.current_fs = None
+        if self.parent_window.preview_widget != None:
+            current_subject = self.parent_window.preview_widget.options["subject"]
+            self.current_fs = fpExplorer_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
+            print("Frequency:",self.current_fs)
         
         # create widget with settings
         self.settings_main_widget = QWidget()
