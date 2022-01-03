@@ -1,3 +1,4 @@
-Available during cloning the repository.
-Requires git lfs
+Test data is available during cloning the repository.<br>
+Requires git lfs:
+<br>
 https://git-lfs.github.com/
