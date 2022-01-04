@@ -1303,175 +1303,154 @@ class PreviewContinuousWidget(QWidget):
                                                                                                                       trim_beginning,
                                                                                                                       trim_end
                                                                                                                       )]
-#        print(self.trimmed_raw_data_dict[self.options["subject"]])
-        # set current trimming
-        self.options["trim_start"] = self.trim_beginning_sec.text()
-        self.options["trim_end"] = self.trim_ending_sec.text()
-        
-        # get trimmed timestamps and update new session duration
-        trimmed_ts = self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]
-        total_trimmed = trimmed_ts[-1]-trimmed_ts[0]
-        # start time from zero
-        ts_reset = [i*total_trimmed/len(trimmed_ts) for i in range(len(trimmed_ts))]
-        last_ts = round(ts_reset[-1],2)
-        self.last_raw_ts_text.setText(str(last_ts))
-        
-        # if downsample was selected
-        if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True:
-            # add to downdampled dict
-            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                         self.settings_dict[0]["downsample"])
-        # if normalize was selected
-        if self.normalize_cb.isChecked() or self.normalized_export == True:
-            # always downsample first before normalizing
-            # downsample
-            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                                                                     self.settings_dict[0]["downsample"])
-            # check settings for method to normalize
-            if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
-                # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
-                                                                                    self.downsampled_dict[self.options["subject"]],
-                                                                                    self.settings_dict[0]["show_norm_as"],
-                                                                                    self.settings_dict[0]["filter"],
-                                                                                    self.settings_dict[0]["filter_fraction"])
-            if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
-                # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
-                                                                                    self.downsampled_dict[self.options["subject"]],
-                                                                                    self.settings_dict[0]["show_norm_as"],
-                                                                                    self.settings_dict[0]["filter"],
-                                                                                    self.settings_dict[0]["filter_fraction"])
-        # check what to show on the plot
-        self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
-        self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
-        self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
-        if self.options["plot_separate"] == False and self.options["plot_downsampled"] == False and self.options["plot_normalized"] == False:
-            self.raw_plot_cb.setChecked(True)
-        self.options["plot_raw"] = True if self.raw_plot_cb.isChecked() else False
-        if self.raw_plot_cb.isChecked(): # if it was set as checked the first time, uncheck it in the background(it is not visible anymore)
-            self.raw_plot_cb.setChecked(False)
+        if len(self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]) == 0:
+            self.show_info_dialog("No data left after trimming.\nTry to trim with different values.")
+            return False
+        else:
+            # set current trimming
+            self.options["trim_start"] = self.trim_beginning_sec.text()
+            self.options["trim_end"] = self.trim_ending_sec.text()
+            
+            # get trimmed timestamps and update new session duration
+            trimmed_ts = self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]
+            total_trimmed = trimmed_ts[-1]-trimmed_ts[0]
+            # start time from zero
+            ts_reset = [i*total_trimmed/len(trimmed_ts) for i in range(len(trimmed_ts))]
+            last_ts = round(ts_reset[-1],2)
+            self.last_raw_ts_text.setText(str(last_ts))
+            
+            # if downsample was selected
+            if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True:
+                # add to downdampled dict
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.settings_dict[0]["downsample"])
+            # if normalize was selected
+            if self.normalize_cb.isChecked() or self.normalized_export == True:
+                # always downsample first before normalizing
+                # downsample
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                                                                        self.settings_dict[0]["downsample"])
+                # check settings for method to normalize
+                if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
+                    # normalize from downsampled
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                                                                                        self.downsampled_dict[self.options["subject"]],
+                                                                                        self.settings_dict[0]["show_norm_as"],
+                                                                                        self.settings_dict[0]["filter"],
+                                                                                        self.settings_dict[0]["filter_fraction"])
+                if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
+                    # normalize from downsampled
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                                                                                        self.downsampled_dict[self.options["subject"]],
+                                                                                        self.settings_dict[0]["show_norm_as"],
+                                                                                        self.settings_dict[0]["filter"],
+                                                                                        self.settings_dict[0]["filter_fraction"])
+            # check what to show on the plot
+            self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
+            self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
+            self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
+            if self.options["plot_separate"] == False and self.options["plot_downsampled"] == False and self.options["plot_normalized"] == False:
+                self.raw_plot_cb.setChecked(True)
+            self.options["plot_raw"] = True if self.raw_plot_cb.isChecked() else False
+            if self.raw_plot_cb.isChecked(): # if it was set as checked the first time, uncheck it in the background(it is not visible anymore)
+                self.raw_plot_cb.setChecked(False)
+            return True
             
         
     # function to plot with user selected options       
     def apply_btn_clicked(self):
         self.disable_buttons_signal.emit()
-        self.read_options()
-        # plot
-        # 1 if just raw was checked
-        if (self.options["plot_raw"]==True and self.options["plot_separate"]==False
-            and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
-            fpExplorer_functions.plot_trimmed(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.raw_export,
-                                       self.save_plots,
-                                       (self.export_path,self.export_begining),
-                                       self.preview_init_params[0][0]["signal_name"],
-                                       self.preview_init_params[0][0]["control_name"])
-        # 2 if raw and downsampled was checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False
-            and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-            and self.options["plot_normalized"]==False):
-            fpExplorer_functions.plot_with_downsampled(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.downsampled_dict[self.options["subject"]])
-        # 3 if raw and normalized was checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpExplorer_functions.plot_with_normalized(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.normalized_dict[self.options["subject"]],
-                                       self.settings_dict[0]["show_norm_as"])
-        # 4 if raw and downsampled and normalized were checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-                        and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpExplorer_functions.plot_with_downsampled_with_normalized(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.downsampled_dict[self.options["subject"]],
-                                       self.normalized_dict[self.options["subject"]],
-                                       self.settings_dict[0]["show_norm_as"])
-        # 5 if only downsampled was checked
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-              and self.options["plot_normalized"]==False):
-            fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.downsampled_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict,
-                                           self.preview_init_params[0][0]["signal_name"],
-                                           self.preview_init_params[0][0]["control_name"])
-        # 6 if only normalized was checked
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                               self.options["subject"],
-                                               self.normalized_dict[self.options["subject"]],
-                                               self.normalized_export,
-                                               self.save_plots,
-                                               (self.export_path,self.export_begining),
-                                               self.settings_dict)
-        # if downsampled and normalized were selected
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            fpExplorer_functions.plot_downsampled_and_normalized_alone(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"])
-        # if user wants signal and control separately
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
-            # if there is downsampled data, plot that, if not raw
-            downsampled_to_plot = {}
-            if self.options["subject"] in self.downsampled_dict:
-                downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
-                self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
-            
-            fpExplorer_functions.plot_separate_only(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           downsampled_to_plot)
-        # if user wants signal and control separately and specificaly chose downsample
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-              and self.options["plot_normalized"]==False):
-            self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            fpExplorer_functions.plot_separate_only(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           self.downsampled_dict[self.options["subject"]])
-        # if user wants signal and control separately and normalized
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["plot_downsampled"]==False 
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            # if there is downsampled data, plot that, if not raw
-            downsampled_to_plot = {}
-            if self.options["subject"] in self.downsampled_dict:
-                downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
+        if self.read_options() == True:
+            # plot
+            # if just raw was checked
+            if (self.options["plot_raw"]==True and self.options["plot_separate"]==False
+                and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
+                fpExplorer_functions.plot_trimmed(self.canvas,
+                                        self.options["subject"],
+                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                        self.raw_export,
+                                        self.save_plots,
+                                        (self.export_path,self.export_begining),
+                                        self.preview_init_params[0][0]["signal_name"],
+                                        self.preview_init_params[0][0]["control_name"])
+            # if only downsampled was checked
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
+                and self.options["plot_normalized"]==False):
+                fpExplorer_functions.plot_downsampled_alone(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.downsampled_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict,
+                                            self.preview_init_params[0][0]["signal_name"],
+                                            self.preview_init_params[0][0]["control_name"])
+            # if only normalized was checked
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                fpExplorer_functions.plot_normalized_alone(self.canvas,
+                                                self.options["subject"],
+                                                self.normalized_dict[self.options["subject"]],
+                                                self.normalized_export,
+                                                self.save_plots,
+                                                (self.export_path,self.export_begining),
+                                                self.settings_dict)
+            # if downsampled and normalized were selected
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                fpExplorer_functions.plot_downsampled_and_normalized_alone(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"])
+            # if user wants signal and control separately
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
+                # if there is downsampled data, plot that, if not raw
+                downsampled_to_plot = {}
+                if self.options["subject"] in self.downsampled_dict:
+                    downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
+                    self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
+                
+                fpExplorer_functions.plot_separate_only(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            downsampled_to_plot)
+            # if user wants signal and control separately and specificaly chose downsample
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
+                and self.options["plot_normalized"]==False):
                 self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            fpExplorer_functions.plot_separate_with_normalized(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           downsampled_to_plot,
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"])
-        # if user wants signal and control separately and normalized and specificaly chose downsample
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["plot_downsampled"]==True and  self.options["subject"] in self.downsampled_dict
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            fpExplorer_functions.plot_separate_with_normalized(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"])
+                fpExplorer_functions.plot_separate_only(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.downsampled_dict[self.options["subject"]])
+            # if user wants signal and control separately and normalized
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["plot_downsampled"]==False 
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                # if there is downsampled data, plot that, if not raw
+                downsampled_to_plot = {}
+                if self.options["subject"] in self.downsampled_dict:
+                    downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
+                    self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
+                fpExplorer_functions.plot_separate_with_normalized(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            downsampled_to_plot,
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"])
+            # if user wants signal and control separately and normalized and specificaly chose downsample
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["plot_downsampled"]==True and  self.options["subject"] in self.downsampled_dict
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
+                fpExplorer_functions.plot_separate_with_normalized(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"])
         self.enable_buttons_signal.emit()
         
     def next_btn_clicked(self):
@@ -1516,15 +1495,15 @@ class PreviewContinuousWidget(QWidget):
     def check_poly_btn_clicked(self):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
-            self.read_options()
-            fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                              self.settings_dict[0], 
-                                              self.downsampled_dict[self.options["subject"]],
-                                              self.preview_init_params[0][0]["signal_name"],
-                                              self.preview_init_params[0][0]["control_name"],
-                                              self.options["subject"],
-                                              False,
-                                              "")
+            if self.read_options() == True:
+                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                self.settings_dict[0], 
+                                                self.downsampled_dict[self.options["subject"]],
+                                                self.preview_init_params[0][0]["signal_name"],
+                                                self.preview_init_params[0][0]["control_name"],
+                                                self.options["subject"],
+                                                False,
+                                                "")
         else: # prompt user to check normalize first
             self.show_info_dialog("Please check Normalize check box first.")
         self.enable_buttons_signal.emit()
@@ -1720,45 +1699,45 @@ class PreviewContinuousWidget(QWidget):
         
     # function to plot with user selected options       
     def export_data(self):
-        self.read_options()
-        # save fittings if save all plots was selected
-        if self.save_plots == True:
-            fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                              self.settings_dict[0], 
-                                              self.downsampled_dict[self.options["subject"]],
-                                              self.preview_init_params[0][0]["signal_name"],
-                                              self.preview_init_params[0][0]["control_name"],
-                                              self.options["subject"],
-                                              self.save_plots,
-                                              self.export_path)
-        # raw was checked
-        if self.raw_export == True:
-            self.plot_bare_raw_data(self.options["subject"],self.raw_data_dict[self.options["subject"]])
-        if self.downsampled_export == True:           
-            fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.downsampled_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict,
-                                           self.preview_init_params[0][0]["signal_name"],
-                                           self.preview_init_params[0][0]["control_name"])
-        if self.normalized_export == True:
-            fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                               self.options["subject"],
-                                               self.normalized_dict[self.options["subject"]],
-                                               self.normalized_export,
-                                               self.save_plots,
-                                               (self.export_path,self.export_begining),
-                                               self.settings_dict)
-        if self.spikes_export == True:
-            self.peaks_btn_clicked()
-        else:   # if perievent export was not selected, reset export settings, otherwise, reset it after perievent export   
-            self.reset_export_settings()
+        if self.read_options() == True:
+            # save fittings if save all plots was selected
+            if self.save_plots == True:
+                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                self.settings_dict[0], 
+                                                self.downsampled_dict[self.options["subject"]],
+                                                self.preview_init_params[0][0]["signal_name"],
+                                                self.preview_init_params[0][0]["control_name"],
+                                                self.options["subject"],
+                                                self.save_plots,
+                                                self.export_path)
+            # raw was checked
+            if self.raw_export == True:
+                self.plot_bare_raw_data(self.options["subject"],self.raw_data_dict[self.options["subject"]])
+            if self.downsampled_export == True:           
+                fpExplorer_functions.plot_downsampled_alone(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.downsampled_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict,
+                                            self.preview_init_params[0][0]["signal_name"],
+                                            self.preview_init_params[0][0]["control_name"])
+            if self.normalized_export == True:
+                fpExplorer_functions.plot_normalized_alone(self.canvas,
+                                                self.options["subject"],
+                                                self.normalized_dict[self.options["subject"]],
+                                                self.normalized_export,
+                                                self.save_plots,
+                                                (self.export_path,self.export_begining),
+                                                self.settings_dict)
+            if self.spikes_export == True:
+                self.peaks_btn_clicked()
+            else:   # if perievent export was not selected, reset export settings, otherwise, reset it after perievent export   
+                self.reset_export_settings()
 
-            self.close_export_window_signal.emit()
-            self.enable_buttons_signal.emit()
+                self.close_export_window_signal.emit()
+                self.enable_buttons_signal.emit()
         
         
     # add raw data structure and subject to self.raw_data dictionary   
@@ -2425,77 +2404,81 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                                       trim_beginning,
                                                                                                                       trim_end
                                                                                                                       )]
-#        print(self.trimmed_raw_data_dict[self.options["subject"]])
-        # set current trimming
-        self.options["trim_start"] = self.trim_beginning_sec.text()
-        self.options["trim_end"] = self.trim_ending_sec.text()
-        self.options["trim_begin_evt"] = self.trim_beginning_event.currentText()
-        self.options["trim_end_evt"] = self.trim_end_event.currentText()
-        
-        
-        # get trimmed timestamps and update new session duration
-        trimmed_ts = self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]
-        total_trimmed = trimmed_ts[-1]-trimmed_ts[0]
-        # start time from zero
-        ts_reset = [i*total_trimmed/len(trimmed_ts) for i in range(len(trimmed_ts))]
-        last_ts = round(ts_reset[-1],2)
-        self.last_raw_ts_text.setText(str(last_ts))
-        
-        # set event
-        self.options["event"] = self.event_from_data_comboBox.currentText()
-        self.options["event_name"] = self.event_name_text.text()
-        self.options["event2"] = self.event2_from_data_comboBox.currentText()
-        self.options["event2_name"] = self.event2_name_text.text()
-        # reset the event list to make sure it always has current events
-        self.event_data = []
-        if self.options["event"] != "---":
-            evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
-            if len(evt[0]) == 0:
-                self.show_info_dialog("Some "+self.options["event"]+" event data is missing.")
-            self.event_data.append(evt)
-        if self.options["event2"] != "---":
-            evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
-            if len(evt[0])==0:
-                self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
-            self.event_data.append(evt)
-        # if downsample was selected
-        if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True or self.separate_signal_contol_cb.isChecked():
-            # add to downdampled dict
-            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                         self.settings_dict[0]["downsample"])
-        # if normalize was selected
-        if self.normalize_cb.isChecked() or self.normalized_export == True:
-            # always downsample first before normalizing
-            # downsample
-            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                                                                     self.settings_dict[0]["downsample"])
-            # check settings for method to normalize
-            if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
-                # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
-                                                                                    self.downsampled_dict[self.options["subject"]],
-                                                                                    self.settings_dict[0]["show_norm_as"],
-                                                                                    self.settings_dict[0]["filter"],
-                                                                                    self.settings_dict[0]["filter_fraction"])
-            if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
-                # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
-                                                                                    self.downsampled_dict[self.options["subject"]],
-                                                                                    self.settings_dict[0]["show_norm_as"],
-                                                                                    self.settings_dict[0]["filter"],
-                                                                                    self.settings_dict[0]["filter_fraction"])
-        # check what to show on the plot
-        self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
-        self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
-        self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
-        if self.options["plot_separate"] == False and self.options["plot_downsampled"] == False and self.options["plot_normalized"] == False:
-            self.raw_plot_cb.setChecked(True)
-        self.options["plot_raw"] = True if self.raw_plot_cb.isChecked() else False
-        if self.raw_plot_cb.isChecked(): # if it was set as checked the first time, uncheck it in the background(it is not visible anymore)
-            self.raw_plot_cb.setChecked(False)
-        # self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
-        # self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
-        # self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
+        if len(self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]) == 0:
+            self.show_info_dialog("No data left after trimming.\nTry to trim with different values.")
+            return False
+        else:
+            # set current trimming
+            self.options["trim_start"] = self.trim_beginning_sec.text()
+            self.options["trim_end"] = self.trim_ending_sec.text()
+            self.options["trim_begin_evt"] = self.trim_beginning_event.currentText()
+            self.options["trim_end_evt"] = self.trim_end_event.currentText()
+            
+            
+            # get trimmed timestamps and update new session duration
+            trimmed_ts = self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]
+            total_trimmed = trimmed_ts[-1]-trimmed_ts[0]
+            # start time from zero
+            ts_reset = [i*total_trimmed/len(trimmed_ts) for i in range(len(trimmed_ts))]
+            last_ts = round(ts_reset[-1],2)
+            self.last_raw_ts_text.setText(str(last_ts))
+            
+            # set event
+            self.options["event"] = self.event_from_data_comboBox.currentText()
+            self.options["event_name"] = self.event_name_text.text()
+            self.options["event2"] = self.event2_from_data_comboBox.currentText()
+            self.options["event2_name"] = self.event2_name_text.text()
+            # reset the event list to make sure it always has current events
+            self.event_data = []
+            if self.options["event"] != "---":
+                evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+                if len(evt[0]) == 0:
+                    self.show_info_dialog("Some "+self.options["event"]+" event data is missing.")
+                self.event_data.append(evt)
+            if self.options["event2"] != "---":
+                evt = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event2"])
+                if len(evt[0])==0:
+                    self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
+                self.event_data.append(evt)
+            # if downsample was selected
+            if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True or self.separate_signal_contol_cb.isChecked():
+                # add to downdampled dict
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.settings_dict[0]["downsample"])
+            # if normalize was selected
+            if self.normalize_cb.isChecked() or self.normalized_export == True:
+                # always downsample first before normalizing
+                # downsample
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                                                                        self.settings_dict[0]["downsample"])
+                # check settings for method to normalize
+                if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
+                    # normalize from downsampled
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                                                                                        self.downsampled_dict[self.options["subject"]],
+                                                                                        self.settings_dict[0]["show_norm_as"],
+                                                                                        self.settings_dict[0]["filter"],
+                                                                                        self.settings_dict[0]["filter_fraction"])
+                if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
+                    # normalize from downsampled
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                                                                                        self.downsampled_dict[self.options["subject"]],
+                                                                                        self.settings_dict[0]["show_norm_as"],
+                                                                                        self.settings_dict[0]["filter"],
+                                                                                        self.settings_dict[0]["filter_fraction"])
+            # check what to show on the plot
+            self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
+            self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
+            self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
+            if self.options["plot_separate"] == False and self.options["plot_downsampled"] == False and self.options["plot_normalized"] == False:
+                self.raw_plot_cb.setChecked(True)
+            self.options["plot_raw"] = True if self.raw_plot_cb.isChecked() else False
+            if self.raw_plot_cb.isChecked(): # if it was set as checked the first time, uncheck it in the background(it is not visible anymore)
+                self.raw_plot_cb.setChecked(False)
+            # self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
+            # self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
+            # self.options["plot_normalized"] = True if self.normalized_plot_cb.isChecked() else False
+            return True
 
     def clear_include_trials_bar(self):
         new_trials_widget = QWidget()
@@ -2510,267 +2493,207 @@ class PreviewEventBasedWidget(QWidget):
     # function to plot with user selected options       
     def apply_btn_clicked(self):
         self.disable_buttons_signal.emit()
-        self.read_options()
-        wrong_event_order_info = "If you want to show just one event on the plots,\nselect your event as first event.\nAnd leave Event2 empty."
-        # before you proceed with ploting check correct order of events if only one event is selected
-        if self.options["event"] == "---" and self.options["event2"] != "---":
-            self.show_info_dialog(wrong_event_order_info)
-        # plot
-        # 1 if just raw was checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False
-            and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
-            if self.options["event"] == "---":
-                fpExplorer_functions.plot_trimmed(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.raw_export,
-                                       self.save_plots,
-                                       (self.export_path,self.export_begining),
-                                       self.preview_init_params[0][0]["signal_name"],
-                                       self.preview_init_params[0][0]["control_name"])
-            else:
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_with_event(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       custom_event_name,
-                                       custom_event_name2,
-                                       self.event_data,
-                                       self.raw_export,
-                                       self.save_plots,
-                                       (self.export_path,self.export_begining),
-                                       self.preview_init_params[0][0]["signal_name"],
-                                       self.preview_init_params[0][0]["control_name"])
-        # 2 if raw and downsampled was checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False
-            and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-            and self.options["plot_normalized"]==False):
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_with_downsampled(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.downsampled_dict[self.options["subject"]])
-            else:   # plot event as well
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_with_downsampled_with_event(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.downsampled_dict[self.options["subject"]],
-                                       custom_event_name,
-                                       custom_event_name2,
-                                       self.event_data)
-        # 3 if raw and normalized was checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_with_normalized(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.normalized_dict[self.options["subject"]],
-                                       self.settings_dict[0]["show_norm_as"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_with_normalized_with_event(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.normalized_dict[self.options["subject"]],
-                                       self.settings_dict[0]["show_norm_as"],
-                                       custom_event_name,
-                                       custom_event_name2,
-                                       self.event_data)
-        # 4 if raw and downsampled and normalized were checked
-        elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-                        and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_with_downsampled_with_normalized(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.downsampled_dict[self.options["subject"]],
-                                       self.normalized_dict[self.options["subject"]],
-                                       self.settings_dict[0]["show_norm_as"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_with_downsampled_with_normalized_with_event(self.canvas,
-                                       self.options["subject"],
-                                       self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                       self.downsampled_dict[self.options["subject"]],
-                                       self.normalized_dict[self.options["subject"]],
-                                       self.settings_dict[0]["show_norm_as"],
-                                       custom_event_name,
-                                       custom_event_name2,
-                                       self.event_data)
-        # 5 if only downsampled was checked
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-              and self.options["plot_normalized"]==False):
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.downsampled_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict,
-                                           self.preview_init_params[0][0]["signal_name"],
-                                           self.preview_init_params[0][0]["control_name"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data,
-                                           self.downsampled_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict,
-                                           self.preview_init_params[0][0]["signal_name"],
-                                           self.preview_init_params[0][0]["control_name"])
-        # 6 if only normalized was checked
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                               self.options["subject"],
-                                               self.normalized_dict[self.options["subject"]],
-                                               self.normalized_export,
-                                               self.save_plots,
-                                               (self.export_path,self.export_begining),
-                                               self.settings_dict)
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.normalized_dict[self.options["subject"]],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data,
-                                           self.normalized_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict)
-        # if downsampled and normalized were selected
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_downsampled_and_normalized_alone(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_downsampled_and_normalized_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data)
-        # if user wants signal and control separately
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
-            # if there is downsampled data, plot that, if not raw
-            downsampled_to_plot = {}           
-            if self.options["subject"] in self.downsampled_dict:
-                downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
-                self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_separate_only(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           downsampled_to_plot)
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_separate_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           downsampled_to_plot,
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data)
-        # if user wants signal and control separately and specificaly chose downsample
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
-              and self.options["plot_normalized"]==False):
-            self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_separate_only(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           self.downsampled_dict[self.options["subject"]])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_separate_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data)
-        # if user wants signal and control separately and normalized
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["plot_downsampled"]==False 
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            # if there is downsampled data, plot that, if not raw
-            downsampled_to_plot = {}
-            if self.options["subject"] in self.downsampled_dict:
-                downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
+        if self.read_options() == True: 
+            wrong_event_order_info = "If you want to show just one event on the plots,\nselect your event as first event.\nAnd leave Event2 empty."
+            # before you proceed with ploting check correct order of events if only one event is selected
+            if self.options["event"] == "---" and self.options["event2"] != "---":
+                self.show_info_dialog(wrong_event_order_info)
+            # plot
+            # if just raw was checked
+            elif (self.options["plot_raw"]==True and self.options["plot_separate"]==False
+                and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
+                if self.options["event"] == "---":
+                    fpExplorer_functions.plot_trimmed(self.canvas,
+                                        self.options["subject"],
+                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                        self.raw_export,
+                                        self.save_plots,
+                                        (self.export_path,self.export_begining),
+                                        self.preview_init_params[0][0]["signal_name"],
+                                        self.preview_init_params[0][0]["control_name"])
+                else:
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_with_event(self.canvas,
+                                        self.options["subject"],
+                                        self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                        custom_event_name,
+                                        custom_event_name2,
+                                        self.event_data,
+                                        self.raw_export,
+                                        self.save_plots,
+                                        (self.export_path,self.export_begining),
+                                        self.preview_init_params[0][0]["signal_name"],
+                                        self.preview_init_params[0][0]["control_name"])
+            # if only downsampled was checked
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
+                and self.options["plot_normalized"]==False):
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_downsampled_alone(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.downsampled_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict,
+                                            self.preview_init_params[0][0]["signal_name"],
+                                            self.preview_init_params[0][0]["control_name"])
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data,
+                                            self.downsampled_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict,
+                                            self.preview_init_params[0][0]["signal_name"],
+                                            self.preview_init_params[0][0]["control_name"])
+            # if only normalized was checked
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_normalized_alone(self.canvas,
+                                                self.options["subject"],
+                                                self.normalized_dict[self.options["subject"]],
+                                                self.normalized_export,
+                                                self.save_plots,
+                                                (self.export_path,self.export_begining),
+                                                self.settings_dict)
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.normalized_dict[self.options["subject"]],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data,
+                                            self.normalized_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict)
+            # if downsampled and normalized were selected
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_downsampled_and_normalized_alone(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"])
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_downsampled_and_normalized_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data)
+            # if user wants signal and control separately
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["plot_downsampled"]==False and self.options["plot_normalized"]==False):
+                # if there is downsampled data, plot that, if not raw
+                downsampled_to_plot = {}           
+                if self.options["subject"] in self.downsampled_dict:
+                    downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
+                    self.show_info_dialog("Separate signal and control plots\nshow downsampled data.")
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_separate_only(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            downsampled_to_plot)
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_separate_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            downsampled_to_plot,
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data)
+            # if user wants signal and control separately and specificaly chose downsample
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
+                and self.options["plot_normalized"]==False):
                 self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_separate_with_normalized(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           downsampled_to_plot,
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_separate_with_normalized_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           downsampled_to_plot,
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data)
-        # if user wants signal and control separately and normalized and specificaly chose downsample
-        elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
-              and self.options["plot_downsampled"]==True and  self.options["subject"] in self.downsampled_dict
-              and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
-            self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_separate_with_normalized(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_separate_with_normalized_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.trimmed_raw_data_dict[self.options["subject"]][1],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.normalized_dict[self.options["subject"]],
-                                           self.settings_dict[0]["show_norm_as"],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data)
-        self.clear_include_trials_bar()
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_separate_only(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.downsampled_dict[self.options["subject"]])
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_separate_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data)
+            # if user wants signal and control separately and normalized
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["plot_downsampled"]==False 
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                # if there is downsampled data, plot that, if not raw
+                downsampled_to_plot = {}
+                if self.options["subject"] in self.downsampled_dict:
+                    downsampled_to_plot = self.downsampled_dict[self.options["subject"]]
+                    self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_separate_with_normalized(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            downsampled_to_plot,
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"])
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_separate_with_normalized_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            downsampled_to_plot,
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data)
+            # if user wants signal and control separately and normalized and specificaly chose downsample
+            elif (self.options["plot_raw"]==False and self.options["plot_separate"]==True 
+                and self.options["plot_downsampled"]==True and  self.options["subject"] in self.downsampled_dict
+                and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
+                self.show_info_dialog("Separate signal and control plots\nwill show downsampled data.")
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_separate_with_normalized(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"])
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_separate_with_normalized_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.trimmed_raw_data_dict[self.options["subject"]][1],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.normalized_dict[self.options["subject"]],
+                                            self.settings_dict[0]["show_norm_as"],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data)
+        if self.current_perievent != None:
+            self.clear_include_trials_bar()
         self.enable_buttons_signal.emit()
 
     def next_btn_clicked(self):
@@ -3000,15 +2923,15 @@ class PreviewEventBasedWidget(QWidget):
     def check_poly_btn_clicked(self):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
-            self.read_options()
-            fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                              self.settings_dict[0], 
-                                              self.downsampled_dict[self.options["subject"]],
-                                              self.preview_init_params[0][0]["signal_name"],
-                                              self.preview_init_params[0][0]["control_name"],
-                                              self.options["subject"],
-                                              False,
-                                              "")
+            if self.read_options() == True:
+                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                self.settings_dict[0], 
+                                                self.downsampled_dict[self.options["subject"]],
+                                                self.preview_init_params[0][0]["signal_name"],
+                                                self.preview_init_params[0][0]["control_name"],
+                                                self.options["subject"],
+                                                False,
+                                                "")
         else: # prompt user to check normalize first
             self.show_info_dialog("Please check Normalize check box first.")
         self.enable_buttons_signal.emit()
@@ -3800,105 +3723,105 @@ class PreviewEventBasedWidget(QWidget):
                 
     # function to plot with user selected options       
     def export_data(self):
-        self.read_options()
-        wrong_event_order_info = "If you want to show just one event on the plots,\nselect your event as first event.\nAnd leave Event2 empty."
-        # before you proceed with ploting check correct order of events  if only one event is selected
-        if self.options["event"] == "---" and self.options["event2"] != "---":
-            self.show_info_dialog(wrong_event_order_info)
-        # save fittings if save all plots was selected
-        if self.save_plots == True:
-            fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                              self.settings_dict[0], 
-                                              self.downsampled_dict[self.options["subject"]],
-                                              self.preview_init_params[0][0]["signal_name"],
-                                              self.preview_init_params[0][0]["control_name"],
-                                              self.options["subject"],
-                                              self.save_plots,
-                                              self.export_path)
-        # raw was checked
-        if self.raw_export == True:
-            if self.options["event"] == "---":
-                self.plot_bare_raw_data(self.options["subject"],self.raw_data_dict[self.options["subject"]])
+        if self.read_options() == True:
+            wrong_event_order_info = "If you want to show just one event on the plots,\nselect your event as first event.\nAnd leave Event2 empty."
+            # before you proceed with ploting check correct order of events  if only one event is selected
+            if self.options["event"] == "---" and self.options["event2"] != "---":
+                self.show_info_dialog(wrong_event_order_info)
+            # save fittings if save all plots was selected
+            if self.save_plots == True:
+                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                self.settings_dict[0], 
+                                                self.downsampled_dict[self.options["subject"]],
+                                                self.preview_init_params[0][0]["signal_name"],
+                                                self.preview_init_params[0][0]["control_name"],
+                                                self.options["subject"],
+                                                self.save_plots,
+                                                self.export_path)
+            # raw was checked
+            if self.raw_export == True:
+                if self.options["event"] == "---":
+                    self.plot_bare_raw_data(self.options["subject"],self.raw_data_dict[self.options["subject"]])
+                else:
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_with_event(self.canvas,
+                                        self.options["subject"],
+                                        self.raw_data_dict[self.options["subject"]],
+                                        custom_event_name,
+                                        custom_event_name2,
+                                        self.event_data,
+                                        self.raw_export,
+                                        self.save_plots,
+                                        (self.export_path,self.export_begining),
+                                        self.preview_init_params[0][0]["signal_name"],
+                                        self.preview_init_params[0][0]["control_name"])
+            if self.downsampled_export == True:
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_downsampled_alone(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            self.downsampled_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict,
+                                            self.preview_init_params[0][0]["signal_name"],
+                                            self.preview_init_params[0][0]["control_name"])
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
+                                            self.options["subject"],
+                                            self.downsampled_dict[self.options["subject"]],
+                                            custom_event_name,
+                                            custom_event_name2,
+                                            self.event_data,
+                                            self.downsampled_export,
+                                            self.save_plots,
+                                            (self.export_path,self.export_begining),
+                                            self.settings_dict,
+                                            self.preview_init_params[0][0]["signal_name"],
+                                            self.preview_init_params[0][0]["control_name"])
+            if self.normalized_export == True:
+                if self.options["event"] == "---": # no event selected
+                    fpExplorer_functions.plot_normalized_alone(self.canvas,
+                                                self.options["subject"],
+                                                self.normalized_dict[self.options["subject"]],
+                                                self.normalized_export,
+                                                self.save_plots,
+                                                (self.export_path,self.export_begining),
+                                                self.settings_dict)
+                else:   # with event
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
+                                                            self.options["subject"],
+                                                            self.normalized_dict[self.options["subject"]],
+                                                            custom_event_name,
+                                                            custom_event_name2,
+                                                            self.event_data,
+                                                            self.normalized_export,
+                                                            self.save_plots,
+                                                            (self.export_path,self.export_begining),
+                                                            self.settings_dict)
+            if self.spikes_export == True or self.perievent_export == True:
+                if self.perievent_export == True and self.spikes_export == False:   # show perievent settings window
+                    self.open_spikes_later = False
+                    # update path and add that to perievent options
+                    self.perievent_options_dict["export_path"] = self.export_path
+                    self.perievent_options_dict["file_beginning"] = self.export_begining
+                    self.perievent_analysis_btn_clicked()  
+                elif self.spikes_export == True and self.perievent_export == False:
+                    self.peaks_btn_clicked()
+                else: # both were selected
+                    self.open_spikes_later = True # opens spikes window later
+                    # open perievent window first
+                    # update path and add that to perievent options
+                    self.perievent_options_dict["export_path"] = self.export_path
+                    self.perievent_options_dict["file_beginning"] = self.export_begining
+                    self.perievent_analysis_btn_clicked()  
             else:
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_with_event(self.canvas,
-                                       self.options["subject"],
-                                       self.raw_data_dict[self.options["subject"]],
-                                       custom_event_name,
-                                       custom_event_name2,
-                                       self.event_data,
-                                       self.raw_export,
-                                       self.save_plots,
-                                       (self.export_path,self.export_begining),
-                                       self.preview_init_params[0][0]["signal_name"],
-                                       self.preview_init_params[0][0]["control_name"])
-        if self.downsampled_export == True:
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           self.downsampled_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict,
-                                           self.preview_init_params[0][0]["signal_name"],
-                                           self.preview_init_params[0][0]["control_name"])
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
-                                           self.options["subject"],
-                                           self.downsampled_dict[self.options["subject"]],
-                                           custom_event_name,
-                                           custom_event_name2,
-                                           self.event_data,
-                                           self.downsampled_export,
-                                           self.save_plots,
-                                           (self.export_path,self.export_begining),
-                                           self.settings_dict,
-                                           self.preview_init_params[0][0]["signal_name"],
-                                           self.preview_init_params[0][0]["control_name"])
-        if self.normalized_export == True:
-            if self.options["event"] == "---": # no event selected
-                fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                               self.options["subject"],
-                                               self.normalized_dict[self.options["subject"]],
-                                               self.normalized_export,
-                                               self.save_plots,
-                                               (self.export_path,self.export_begining),
-                                               self.settings_dict)
-            else:   # with event
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
-                                                           self.options["subject"],
-                                                           self.normalized_dict[self.options["subject"]],
-                                                           custom_event_name,
-                                                           custom_event_name2,
-                                                           self.event_data,
-                                                           self.normalized_export,
-                                                           self.save_plots,
-                                                           (self.export_path,self.export_begining),
-                                                           self.settings_dict)
-        if self.spikes_export == True or self.perievent_export == True:
-            if self.perievent_export == True and self.spikes_export == False:   # show perievent settings window
-                self.open_spikes_later = False
-                # update path and add that to perievent options
-                self.perievent_options_dict["export_path"] = self.export_path
-                self.perievent_options_dict["file_beginning"] = self.export_begining
-                self.perievent_analysis_btn_clicked()  
-            elif self.spikes_export == True and self.perievent_export == False:
-                self.peaks_btn_clicked()
-            else: # both were selected
-                self.open_spikes_later = True # opens spikes window later
-                # open perievent window first
-                # update path and add that to perievent options
-                self.perievent_options_dict["export_path"] = self.export_path
-                self.perievent_options_dict["file_beginning"] = self.export_begining
-                self.perievent_analysis_btn_clicked()  
-        else:
-            self.reset_export_settings()
+                self.reset_export_settings()
         
             self.close_export_window_signal.emit()
             self.enable_buttons_signal.emit()
