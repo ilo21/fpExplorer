@@ -59,7 +59,13 @@ STYLESHEET = \
             + "font-weight: bold;\n" \
             + "}" 
             
-MAX_DOWNSAMPLE = 1000
+# MAX_DOWNSAMPLE = 1000
+# how low in downsampling can go
+MAX_DOWNSAMPLE_PCT = 50
+# how high in downsampling can you go
+MIN_DOWNSAMPLE_PCT = 0.5
+# default_samples to average 1% of original sampling rate
+DEFAULT_DOWNSAMPLE_PCT = 1
 MAX_SMOOTH_FRAQ = 100
 DEFAULT_SMOOTH_FRAQ = 1
 DEFAULT_EXPORT_FOLDER = "_fpExplorerAnalysis"
@@ -94,7 +100,8 @@ class MyMainWidget(QMainWindow):
             self.select_data_window = SelectDataWindow(self,self.select_data_window_content)
             self.select_data_window.got_user_input_sig.connect(self.get_select_data_window_user_input)
         # list with general settings dictionary as first element 
-        self.settings_dict = [{"downsample":10,
+        self.settings_dict = [{"downsample":None,
+                              "entered_downsample":None,
                               "normalization": "Standard Polynomial Fitting",
                               "show_norm_as":"dF/F (in % )",
                               "filter":False,
@@ -414,11 +421,15 @@ class RunOnBatchWindow(QMainWindow):
         self.parent_window = parent_window
         self.parent_window.app_closed.connect(self.exit_app)
         self.preview_window = prewiew_window
+        # subject:subject group name dictionary
+        self.group_names_dict = self.preview_window.group_names_dict
         
         self.all_paths_dict = batch_params[0]
         self.pre_selected_subjects = batch_params[1]
         self.batch_params_dict = batch_params[2]
         self.selected_subjects = []
+        self.selected_subjects_group_names = []
+        self.updated_group_dict = self.group_names_dict
         
 #        print(self.all_paths_dict)
         
@@ -497,26 +508,33 @@ class RunOnBatchWindow(QMainWindow):
         # AVAILABLE SUBJECTS
         self.selected_layout = QVBoxLayout()
         self.selected_widget = QWidget()
-        self.select_subjects_label = QLabel("Select Subjects:")
-        self.selected_layout.addWidget(self.select_subjects_label)
+        self.subjets_layout = QFormLayout() 
+        self.subjets_layout.addRow(QLabel("Select Subjects:"),QLabel("Enter Group Name:"))
+        self.subjets_layout.addRow(QLabel(""),QLabel(""))
         # find all subjects names
         self.all_subject_names = []
+        self.all_group_names = []
         for key in self.all_paths_dict:
             self.all_subject_names.append(key)
-            
         self.subjects_button_group = QButtonGroup()
         self.subjects_button_group.setExclusive(False)
         # create checkboxes for all
         for el in self.all_subject_names:
             radio_btn = QRadioButton(el)
+            group_name = ""
+            if el in self.group_names_dict:
+                group_name = self.group_names_dict[el]
             if el in self.pre_selected_subjects:
                 radio_btn.setChecked(True)
-            self.selected_layout.addWidget(radio_btn)
+            subject_group_name = QLineEdit(group_name)
+            self.all_group_names.append(subject_group_name)
+            self.subjets_layout.addRow(radio_btn,subject_group_name)
             self.subjects_button_group.addButton(radio_btn)
-        
+        self.selected_layout.addLayout(self.subjets_layout)
         self.select_all_subjects_btn = QRadioButton("Select All")
+        self.subjets_layout.addRow(QLabel(""),QLabel(""))
         self.select_all_subjects_btn.setStyleSheet(self.bold_stylesheet)
-        self.selected_layout.addWidget(QLabel(""))
+        # self.selected_layout.addWidget(QLabel(""))
         self.selected_layout.addWidget(self.select_all_subjects_btn)
         
 
@@ -611,9 +629,21 @@ class RunOnBatchWindow(QMainWindow):
         for item in self.selected_widget.findChildren(QRadioButton):
             # only subject names
             if item.text() in self.all_subject_names:
+                group_name = ""
+                # now fing matching group name
+                for i in range(len(self.all_subject_names)):
+                    if item.text() == self.all_subject_names[i]:
+                        group_name = self.all_group_names[i].text()
+                        self.updated_group_dict[item.text()] = group_name
                 if item.isChecked():
                     if item.text() not in self.selected_subjects:
                         self.selected_subjects.append(item.text())
+                        self.selected_subjects_group_names.append(group_name)
+                        # # now fing matching group name
+                        # for i in range(len(self.all_subject_names)):
+                        #     if item.text() == self.all_subject_names[i]:
+                        #         self.selected_subjects_group_names.append(self.all_group_names[i].text())
+                        
         # get what to export               
         normalized = self.normalized_cb.isChecked()
         perievent = self.perievent_cb.isChecked()
@@ -633,6 +663,8 @@ class RunOnBatchWindow(QMainWindow):
         self.export_options["trim_begin"] = str(trim_start)
         self.export_options["trim_end"] = str(trim_end)
         self.export_options["batch_subjects"] = self.selected_subjects
+        self.export_options["batch_subjects_group_names"] = self.selected_subjects_group_names
+        self.export_options["updated_group_names"] = self.updated_group_dict
                
         # if path is empty or no subjects were selected set ok to False
         if len(self.dump_path) == 0 or len(self.selected_subjects) == 0:
@@ -1042,9 +1074,13 @@ class PreviewContinuousWidget(QWidget):
               
         # options read from options section
         self.options = {"subject":self.preview_init_params[0][0]["subject_names"][0],
+                        "subject_group_name":"",
                         "plot_raw":True,
                         "plot_downsampled":False,
                         "plot_normalized":False}
+
+        # remember subject(key):group name(value) for later in a form dictionary
+        self.group_names_dict = {self.options["subject"]:self.options["subject_group_name"]}
         
         # a dictionary with subject:extracted raw data
         self.raw_data_dict = {}
@@ -1057,7 +1093,10 @@ class PreviewContinuousWidget(QWidget):
                                      self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],
                                      self.preview_init_params[0][0]["signal_name"],
                                      )
-        
+        # read first subject's frequency and create suggested downsampled rate
+        self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+        self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
         # keep trimmed data separately with latest trimming settings
         # first element of that list is beginning and end seconds to trim
         # second element is trimmed data dict ts:timestamps, signal:data,control:data
@@ -1125,6 +1164,8 @@ class PreviewContinuousWidget(QWidget):
         self.subject_label = QLabel("Subject")
         self.subject_label.setStyleSheet(self.bold_label_stylesheet)
         self.options_layout.addRow(self.subject_label, self.subject_comboBox)
+        self.subject_group_name = QLineEdit("")
+        self.options_layout.addRow("Subject group name", self.subject_group_name)
         self.last_raw_ts = round(self.last_raw_ts,2)
         self.last_raw_ts_text = QLineEdit(str(self.last_raw_ts))
         self.last_raw_ts_text.setReadOnly(True)
@@ -1271,6 +1312,9 @@ class PreviewContinuousWidget(QWidget):
         if self.options["subject"] not in self.raw_data_dict:
             self.get_raw_data(self.options["subject"],
                           self.parent_window.preview_params[1][self.options["subject"]])
+        self.options["subject_group_name"] = self.subject_group_name.text()
+        # update value
+        self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
         # get trimming settings
         try:
             trim_beginning = int(self.trim_beginning_sec.text())
@@ -1377,7 +1421,7 @@ class PreviewContinuousWidget(QWidget):
             elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["subject"] in self.downsampled_dict and self.options["plot_downsampled"]==True 
                 and self.options["plot_normalized"]==False):
                 fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.downsampled_dict[self.options["subject"]],
                                             self.downsampled_export,
                                             self.save_plots,
@@ -1389,7 +1433,7 @@ class PreviewContinuousWidget(QWidget):
             elif (self.options["plot_raw"]==False and self.options["plot_separate"]==False and self.options["plot_downsampled"]==False
                 and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
                 fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                self.options["subject"],
+                                                self.options,
                                                 self.normalized_dict[self.options["subject"]],
                                                 self.normalized_export,
                                                 self.save_plots,
@@ -1538,7 +1582,7 @@ class PreviewContinuousWidget(QWidget):
                                                             self.recent_peak_values,
                                                             self.spikes_export,
                                                             self.save_plots,
-                                                            self.parent_window.preview_params[1][subject],
+                                                            self.group_names_dict[subject],
                                                             self.settings_dict,
                                                             (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                     except:
@@ -1551,7 +1595,7 @@ class PreviewContinuousWidget(QWidget):
                                                             self.recent_peak_values,
                                                             self.spikes_export,
                                                             self.save_plots,
-                                                            self.parent_window.preview_params[1][subject],
+                                                            self.group_names_dict[subject],
                                                             self.settings_dict,
                                                             (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                 except:
@@ -1644,7 +1688,7 @@ class PreviewContinuousWidget(QWidget):
                                      self.recent_peak_values,
                                      self.spikes_export,
                                      self.save_plots,
-                                     self.parent_window.preview_params[1][self.options["subject"]],
+                                     self.group_names_dict[self.options["subject"]],
                                      self.settings_dict,
                                      (self.export_path,self.export_begining))
             except:
@@ -1715,7 +1759,7 @@ class PreviewContinuousWidget(QWidget):
                 self.plot_bare_raw_data(self.options["subject"],self.raw_data_dict[self.options["subject"]])
             if self.downsampled_export == True:           
                 fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.downsampled_dict[self.options["subject"]],
                                             self.downsampled_export,
                                             self.save_plots,
@@ -1725,7 +1769,7 @@ class PreviewContinuousWidget(QWidget):
                                             self.preview_init_params[0][0]["control_name"])
             if self.normalized_export == True:
                 fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                self.options["subject"],
+                                                self.options,
                                                 self.normalized_dict[self.options["subject"]],
                                                 self.normalized_export,
                                                 self.save_plots,
@@ -1797,6 +1841,16 @@ class PreviewContinuousWidget(QWidget):
                                      self.raw_data_dict[self.options["subject"]],
                                      self.preview_init_params[0][0]["signal_name"],
                                      )
+        # read new subject's frequency and update suggested downsampled rate (only if it is different)
+        new_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        if new_fs != self.current_fs:
+            self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
+            self.settings[0]["entered_downsample"] = None
+        if self.subject_comboBox.currentText() in self.group_names_dict:
+            self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
+        else:
+            self.subject_group_name.setText("")
         # clear long lasting check boxes to start faster
         self.downsample_cb.setChecked(False)
         self.normalize_cb.setChecked(False)
@@ -1843,6 +1897,13 @@ class PreviewContinuousWidget(QWidget):
         
     @pyqtSlot()     
     def start_batch_analysis(self):
+        # update group names
+        self.group_names_dict = self.parent_window.batch_export_settings_dict["updated_group_names"]
+        # update group name field of the current subject
+        self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
+        # update current trimming
+        self.trim_beginning_sec.setText(self.parent_window.batch_export_settings_dict["trim_begin"])
+        self.trim_ending_sec.setText(self.parent_window.batch_export_settings_dict["trim_end"])
         # set include to actual status
         if self.subject_comboBox.currentText() in self.parent_window.selected_subjects:
             self.include_cb.setChecked(True)
@@ -1860,6 +1921,9 @@ class PreviewContinuousWidget(QWidget):
         if self.parent_window.batch_export_settings_dict["normalized"] == True or self.parent_window.batch_export_settings_dict["spikes"] == True:
             # create normalized data for most recent settings
             for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+                # create separate options dictionary for batch analysis
+                self.batch_options_dict = {"subject":subject,
+                                            "subject_group_name":self.group_names_dict[subject]}
                 # if subject was not previewed yet, read data and add to dict
                 if subject not in self.raw_data_dict:
 #                    print(self.preview_init_params[1])
@@ -1913,7 +1977,7 @@ class PreviewContinuousWidget(QWidget):
                             
                             if self.parent_window.batch_export_settings_dict["normalized"] == True:
                                 fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                            subject,
+                                                            self.batch_options_dict,
                                                             self.normalized_dict[subject],
                                                             True,
                                                             True,
@@ -1933,7 +1997,7 @@ class PreviewContinuousWidget(QWidget):
                             
                         if self.parent_window.batch_export_settings_dict["normalized"] == True:
                             fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                            subject,
+                                                            self.batch_options_dict,
                                                             self.normalized_dict[subject],
                                                             True,
                                                             True,
@@ -2008,11 +2072,15 @@ class PreviewEventBasedWidget(QWidget):
               
         # options read from options section
         self.options = {"subject":self.preview_init_params[0][0]["subject_names"][0],
+                        "subject_group_name":"",
                         "event":"---",
                         "event2":"---",
                         "plot_raw":True,
                         "plot_downsampled":False,
                         "plot_normalized":False}
+
+        # remember subject(key):group name(value) for later in a form dictionary
+        self.group_names_dict = {self.options["subject"]:self.options["subject_group_name"]}
         
         # a dictionary with subject:extracted raw data
         self.raw_data_dict = {}
@@ -2024,7 +2092,13 @@ class PreviewEventBasedWidget(QWidget):
                                      self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],
                                      self.preview_init_params[0][0]["signal_name"],
                                      )
-    
+        # read first subject's frequency and create suggested downsampled rate
+        self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+        self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
+        self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
+        self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
+        # print("Current suggested downsample rate:",self.settings_dict[0]['downsample'])
         # keep trimmed data separately with latest trimming settings
         # first element of that list is beginning and end seconds to trim
         # second element is trimmed data dict ts:timestamps, signal:data,control:data
@@ -2114,11 +2188,12 @@ class PreviewEventBasedWidget(QWidget):
         # add drop down menu for subjects from the list
         self.subject_comboBox = QComboBox()
         self.subject_comboBox.addItems(self.preview_init_params[0][0]["subject_names"])
-
         self.subject_comboBox.currentIndexChanged.connect(self.on_subject_change)
         self.subject_label = QLabel("Subject")
         self.subject_label.setStyleSheet(self.bold_label_stylesheet)
         self.options_layout.addRow(self.subject_label, self.subject_comboBox)
+        self.subject_group_name = QLineEdit("")
+        self.options_layout.addRow("Subject group name", self.subject_group_name)
         self.last_raw_ts = round(self.last_raw_ts,2)
         self.last_raw_ts_text = QLineEdit(str(self.last_raw_ts))
         self.last_raw_ts_text.setReadOnly(True)
@@ -2348,6 +2423,10 @@ class PreviewEventBasedWidget(QWidget):
                self.parent_window.selected_subjects.remove(self.options["subject"]) 
         # set current subject
         self.options["subject"] = self.subject_comboBox.currentText()
+        self.options["subject_group_name"] = self.subject_group_name.text()
+        # update value
+        self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
+
         # if subject was not previewed yet, read data and add to dict
         if self.options["subject"] not in self.raw_data_dict:
             self.get_raw_data(self.options["subject"],
@@ -2530,7 +2609,7 @@ class PreviewEventBasedWidget(QWidget):
                 and self.options["plot_normalized"]==False):
                 if self.options["event"] == "---": # no event selected
                     fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.downsampled_dict[self.options["subject"]],
                                             self.downsampled_export,
                                             self.save_plots,
@@ -2542,7 +2621,7 @@ class PreviewEventBasedWidget(QWidget):
                     custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                     custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                     fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.downsampled_dict[self.options["subject"]],
                                             custom_event_name,
                                             custom_event_name2,
@@ -2558,7 +2637,7 @@ class PreviewEventBasedWidget(QWidget):
                 and self.options["subject"] in self.normalized_dict and self.options["plot_normalized"]==True):
                 if self.options["event"] == "---": # no event selected
                     fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                self.options["subject"],
+                                                self.options,
                                                 self.normalized_dict[self.options["subject"]],
                                                 self.normalized_export,
                                                 self.save_plots,
@@ -2568,7 +2647,7 @@ class PreviewEventBasedWidget(QWidget):
                     custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                     custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                     fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.normalized_dict[self.options["subject"]],
                                             custom_event_name,
                                             custom_event_name2,
@@ -2871,6 +2950,17 @@ class PreviewEventBasedWidget(QWidget):
                                      self.raw_data_dict[self.options["subject"]],
                                      self.preview_init_params[0][0]["signal_name"],
                                      )
+        # read new subject's frequency and update suggested downsampled rate (only if it is different)
+        new_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        if new_fs != self.current_fs:
+            self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
+            self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
+            self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
+        if self.subject_comboBox.currentText() in self.group_names_dict:
+            self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
+        else:
+            self.subject_group_name.setText("")
         # clear long lasting check boxes to start faster
         self.downsample_cb.setChecked(False)
         self.normalize_cb.setChecked(False)
@@ -2946,6 +3036,10 @@ class PreviewEventBasedWidget(QWidget):
         
     def perievent_analysis_btn_clicked(self):
         self.disable_buttons_signal.emit()
+        # update group name
+        self.options["subject_group_name"] = self.subject_group_name.text()
+        # update value
+        self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
         # show window with options to plot perievent
         # pass a list with first element=subject
         # second=events for current subjects
@@ -3035,7 +3129,10 @@ class PreviewEventBasedWidget(QWidget):
                     all_subjects_zscored_dfs = []
                     # check if user wanted data for each subject
                     if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
-                        for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+                        for i in range(len(self.parent_window.batch_export_settings_dict["batch_subjects"])):
+                            subject = self.parent_window.batch_export_settings_dict["batch_subjects"][i]
+                            # add the group name to group names dictionary if it was not there or update group names from batch options
+                            self.group_names_dict[subject] = self.parent_window.batch_export_settings_dict["batch_subjects_group_names"][i]
                             if subject not in self.raw_data_dict: # if data has not beed read yet
                                 self.get_raw_data(subject,
                                                   self.parent_window.preview_params[1][subject])
@@ -3067,7 +3164,8 @@ class PreviewEventBasedWidget(QWidget):
                             analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
                                                                                 self.current_trials,
                                                                                self.perievent_options_dict,
-                                                                               self.settings_dict,self.preview_init_params[0][0]["signal_name"],
+                                                                               self.settings_dict,
+                                                                               self.preview_init_params[0][0]["signal_name"],
                                                                                self.preview_init_params[0][0]["control_name"])
                             # check if there is any data to plot 
                             if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
@@ -3114,7 +3212,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["control_name"],
                                                       self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][subject],
+                                                      self.group_names_dict[subject],
                                                       (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))  
                                 if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
                                     all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
@@ -3125,7 +3223,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                   analyzed_perievent_dict,
                                                                   self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                   self.save_plots,
-                                                                  self.parent_window.preview_params[1][subject],
+                                                                  self.group_names_dict[subject],
                                                                   self.settings_dict,
                                                                   self.preview_init_params[0][0]["signal_name"],
                                                                   self.preview_init_params[0][0]["control_name"],
@@ -3141,7 +3239,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                       self.preview_init_params[0][0]["signal_name"],
                                                                       self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                       self.save_plots,
-                                                                      self.parent_window.preview_params[1][subject],
+                                                                      self.group_names_dict[subject],
                                                                       self.settings_dict,
                                                                       (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                     else:
@@ -3154,7 +3252,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                       self.preview_init_params[0][0]["signal_name"],
                                                                       self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                       self.save_plots,
-                                                                      self.parent_window.preview_params[1][subject],
+                                                                      self.group_names_dict[subject],
                                                                       self.settings_dict,
                                                                       (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                     if self.parent_window.batch_export_settings_dict["export_group_data"] == True: # save for later in order to not repeat tasks
@@ -3166,7 +3264,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                   analyzed_perievent_dict,
                                                                   self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                   self.save_plots,
-                                                                  self.parent_window.preview_params[1][subject],
+                                                                  self.group_names_dict[subject],
                                                                   self.settings_dict,
                                                                   (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                             else:
@@ -3179,6 +3277,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if len(all_subjects_peri_normalized_dfs) > 0: # if there already is data from single subjects
                                     fpExplorer_functions.get_batch_perievent_normalized(self.canvas,
                                                                                  all_subjects_peri_normalized_dfs,
+                                                                                 self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                                  self.perievent_options_dict,
                                                                                  self.settings_dict,
                                                                                  (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
@@ -3186,6 +3285,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if len(all_subjects_zscored_dfs) > 0: # if there already is data from single subjects
                                     fpExplorer_functions.get_batch_perievent_zscored(self.canvas,
                                                                           all_subjects_zscored_dfs,
+                                                                          self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
@@ -3193,6 +3293,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if len(all_subjects_zscored_dfs) > 0: # if there already is data from single subjects
                                     fpExplorer_functions.get_batch_perievent_zscored_with_trials(self.canvas,
                                                                           all_subjects_zscored_dfs,
+                                                                          self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
@@ -3200,6 +3301,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if len(all_subjects_zscored_dfs) > 0: # if there already is data from single subjects
                                     fpExplorer_functions.get_batch_perievent_auc(self.canvas,
                                                                   all_subjects_zscored_dfs,
+                                                                  self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                  self.perievent_options_dict,
                                                                  self.settings_dict,
                                                                  (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
@@ -3283,7 +3385,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                       self.preview_init_params[0][0]["control_name"],
                                                                       self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                       self.save_plots,
-                                                                      self.parent_window.preview_params[1][subject],
+                                                                      self.group_names_dict[subject],
                                                                       (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))  
                                             all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
                                         if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
@@ -3324,6 +3426,7 @@ class PreviewEventBasedWidget(QWidget):
                                     if len(all_subjects_peri_normalized_dfs) > 0:
                                         fpExplorer_functions.get_batch_perievent_normalized(self.canvas,
                                                                                  all_subjects_peri_normalized_dfs,
+                                                                                 self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                                  self.perievent_options_dict,
                                                                                  self.settings_dict,
                                                                                  (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
@@ -3331,18 +3434,21 @@ class PreviewEventBasedWidget(QWidget):
                                     if self.perievent_options_dict["plot_zscore"] == True:
                                         fpExplorer_functions.get_batch_perievent_zscored(self.canvas,
                                                                           all_subjects_zscored_dfs,
+                                                                          self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                                     if self.perievent_options_dict["plot_zscore_trials"] == True:
                                         fpExplorer_functions.get_batch_perievent_zscored_with_trials(self.canvas,
                                                                           all_subjects_zscored_dfs,
+                                                                          self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                           self.perievent_options_dict,
                                                                           self.settings_dict,
                                                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                                     if self.perievent_options_dict["plot_auc"] == True:
                                         fpExplorer_functions.get_batch_perievent_auc(self.canvas,
                                                                       all_subjects_zscored_dfs,
+                                                                      self.parent_window.batch_export_settings_dict["batch_subjects_group_names"],
                                                                      self.perievent_options_dict,
                                                                      self.settings_dict,
                                                                      (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
@@ -3481,7 +3587,7 @@ class PreviewEventBasedWidget(QWidget):
                                                   self.preview_init_params[0][0]["control_name"],
                                                   self.perievent_options_dict["export"],
                                                   self.save_plots,
-                                                  self.parent_window.preview_params[1][self.options["subject"]],
+                                                  self.group_names_dict[self.options["subject"]],
                                                   (self.export_path,self.export_begining))  
                 # if user clicked on analyze in perievent options window, analyze
                 if self.perievent_options_dict["analyze"] == True:
@@ -3500,7 +3606,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       self.preview_init_params[0][0]["signal_name"],
                                                       self.preview_init_params[0][0]["control_name"],
@@ -3516,7 +3622,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     # only zscore with trials
@@ -3530,7 +3636,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     # only auc
@@ -3542,7 +3648,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     # avg and zscore with error
@@ -3624,7 +3730,7 @@ class PreviewEventBasedWidget(QWidget):
                                                   self.preview_init_params[0][0]["control_name"],
                                                   self.perievent_options_dict["export"],
                                                   self.save_plots,
-                                                  self.parent_window.preview_params[1][self.options["subject"]],
+                                                  self.group_names_dict[self.options["subject"]],
                                                   (self.export_path,self.export_begining))  
                     if self.perievent_options_dict["plot_avg"] == True:
                         fpExplorer_functions.plot_perievent_average_alone(self.canvas,
@@ -3633,7 +3739,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       self.preview_init_params[0][0]["signal_name"],
                                                       self.preview_init_params[0][0]["control_name"],
@@ -3647,7 +3753,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     if self.perievent_options_dict["plot_zscore_trials"] == True:
@@ -3659,7 +3765,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                     if self.perievent_options_dict["plot_auc"] == True:
@@ -3669,7 +3775,7 @@ class PreviewEventBasedWidget(QWidget):
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
-                                                      self.parent_window.preview_params[1][self.options["subject"]],
+                                                      self.group_names_dict[self.options["subject"]],
                                                       self.settings_dict,
                                                       (self.export_path,self.export_begining))
                 # close popup window
@@ -3759,7 +3865,7 @@ class PreviewEventBasedWidget(QWidget):
             if self.downsampled_export == True:
                 if self.options["event"] == "---": # no event selected
                     fpExplorer_functions.plot_downsampled_alone(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.downsampled_dict[self.options["subject"]],
                                             self.downsampled_export,
                                             self.save_plots,
@@ -3771,7 +3877,7 @@ class PreviewEventBasedWidget(QWidget):
                     custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                     custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                     fpExplorer_functions.plot_downsampled_alone_with_event(self.canvas,
-                                            self.options["subject"],
+                                            self.options,
                                             self.downsampled_dict[self.options["subject"]],
                                             custom_event_name,
                                             custom_event_name2,
@@ -3785,7 +3891,7 @@ class PreviewEventBasedWidget(QWidget):
             if self.normalized_export == True:
                 if self.options["event"] == "---": # no event selected
                     fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                self.options["subject"],
+                                                self.options,
                                                 self.normalized_dict[self.options["subject"]],
                                                 self.normalized_export,
                                                 self.save_plots,
@@ -3795,7 +3901,7 @@ class PreviewEventBasedWidget(QWidget):
                     custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                     custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                     fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
-                                                            self.options["subject"],
+                                                            self.options,
                                                             self.normalized_dict[self.options["subject"]],
                                                             custom_event_name,
                                                             custom_event_name2,
@@ -3844,6 +3950,10 @@ class PreviewEventBasedWidget(QWidget):
       
     @pyqtSlot(list) 
     def peak_options_received(self,peak_options):
+        # update group name
+        self.options["subject_group_name"] = self.subject_group_name.text()
+        # update value
+        self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
         self.recent_peak_values = peak_options[0]
         export_path,file_begin = peak_options[1]
         if self.batch_peaks == True:
@@ -3866,7 +3976,7 @@ class PreviewEventBasedWidget(QWidget):
                                                          self.recent_peak_values,
                                                          self.spikes_export,
                                                          self.save_plots,
-                                                         self.parent_window.preview_params[1][subject],
+                                                         self.group_names_dict[subject],
                                                          self.settings_dict,
                                                          (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                 except:
@@ -3882,13 +3992,13 @@ class PreviewEventBasedWidget(QWidget):
                                                                     self.event_data,
                                                                     self.spikes_export,
                                                                     self.save_plots,
-                                                                    self.parent_window.preview_params[1][subject],
+                                                                    self.group_names_dict[subject],
                                                                     self.settings_dict,
                                                                     (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                 except:
                                     self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                    if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
-                        pass # single subjects only
+                    # if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
+                    #     pass # single subjects only
                         # # spikes for averaged signal
                         # if self.options["event"] == "---":
                         #     try:
@@ -4021,7 +4131,7 @@ class PreviewEventBasedWidget(QWidget):
                                          self.recent_peak_values,
                                          self.spikes_export,
                                          self.save_plots,
-                                         self.parent_window.preview_params[1][self.options["subject"]],
+                                         self.group_names_dict[self.options["subject"]],
                                          self.settings_dict,
                                          (self.export_path,self.export_begining))
                 except:
@@ -4037,7 +4147,7 @@ class PreviewEventBasedWidget(QWidget):
                                                     self.event_data,
                                                     self.spikes_export,
                                                     self.save_plots,
-                                                    self.parent_window.preview_params[1][self.options["subject"]],
+                                                    self.group_names_dict[self.options["subject"]],
                                                     self.settings_dict,
                                                     (self.export_path,self.export_begining))
                 except:
@@ -4050,6 +4160,13 @@ class PreviewEventBasedWidget(QWidget):
                 
     @pyqtSlot()     
     def start_batch_analysis(self):
+        # update group names
+        self.group_names_dict = self.parent_window.batch_export_settings_dict["updated_group_names"]
+        # update group name field of the current subject
+        self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
+        # update current trimming
+        self.trim_beginning_sec.setText(self.parent_window.batch_export_settings_dict["trim_begin"])
+        self.trim_ending_sec.setText(self.parent_window.batch_export_settings_dict["trim_end"])
         # set include to actual status
         if self.subject_comboBox.currentText() in self.parent_window.selected_subjects:
             self.include_cb.setChecked(True)
@@ -4088,7 +4205,13 @@ class PreviewEventBasedWidget(QWidget):
         # disable all buttons?
         if self.parent_window.batch_export_settings_dict["normalized"] == True or self.parent_window.batch_export_settings_dict["spikes"] == True:
             # create normalized data for most recent settings
-            for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+            for i in range(len(self.parent_window.batch_export_settings_dict["batch_subjects"])):
+                subject = self.parent_window.batch_export_settings_dict["batch_subjects"][i]
+                # create separate options dictionary for batch analysis
+                self.batch_options_dict = {"subject":subject,
+                                            "subject_group_name":self.parent_window.batch_export_settings_dict["batch_subjects_group_names"][i]}
+                # add the group name to group names dictionary if it was not there or update group names from batch options
+                self.group_names_dict[subject] = self.parent_window.batch_export_settings_dict["batch_subjects_group_names"][i]
                 # if subject was not previewed yet, read data and add to dict
                 if subject not in self.raw_data_dict:
                     self.get_raw_data(subject, self.parent_window.preview_params[1][subject])
@@ -4145,7 +4268,7 @@ class PreviewEventBasedWidget(QWidget):
                     if self.parent_window.batch_export_settings_dict["normalized"] == True:
                         if self.options["event"] == "---":
                             fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                       subject,
+                                                       self.batch_options_dict,
                                                        self.normalized_dict[subject],
                                                        True,
                                                        True,
@@ -4155,7 +4278,7 @@ class PreviewEventBasedWidget(QWidget):
                             custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                             custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                             fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
-                                                           subject,
+                                                           self.batch_options_dict,
                                                            self.normalized_dict[subject],
                                                            custom_event_name,
                                                            custom_event_name2,
@@ -4173,16 +4296,16 @@ class PreviewEventBasedWidget(QWidget):
                 # create a list of all normalized signals
                 self.all_normalized = [(subject,self.normalized_dict[subject]) for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]]
     #            print(all_normalized)
-                if self.parent_window.batch_export_settings_dict["normalized"] == True:
-                    if self.options["event"] == "---":
-                        pass # only for single subjects
+                # if self.parent_window.batch_export_settings_dict["normalized"] == True:
+                #     if self.options["event"] == "---":
+                #         pass # only for single subjects
                         # fpExplorer_functions.get_batch_normalized(self.canvas,
                         #                                self.all_normalized,
                         #                                self.settings_dict,
                         #                                self.parent_window.batch_export_settings_dict["normalized"],
                         #                                (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                    else:
-                        pass # only for single subjects
+                    # else:
+                    #     pass # only for single subjects
                         # custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
                         # custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
                         # fpExplorer_functions.get_batch_normalized_with_event(self.canvas,
@@ -4656,11 +4779,16 @@ class SettingsWindow(QMainWindow):
         self.parent_window = parent_window
         self.parent_window.app_closed.connect(self.exit_app)
         self.settings = settings
-        self.current_fs = None
-        if self.parent_window.preview_widget != None:
+        self.current_fs = 0
+        if self.parent_window.preview_widget != 0:
             current_subject = self.parent_window.preview_widget.options["subject"]
             self.current_fs = fpExplorer_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
-            print("Frequency:",self.current_fs)
+            # print("Frequency:",self.current_fs)
+
+        self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+        self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
+        self.min_downsampe_rate = int(int(self.current_fs)*MIN_DOWNSAMPLE_PCT/100)
+        self.max_downsample_rate = int(int(self.current_fs)*MAX_DOWNSAMPLE_PCT/100)
         
         # create widget with settings
         self.settings_main_widget = QWidget()
@@ -4671,10 +4799,13 @@ class SettingsWindow(QMainWindow):
         self.settings_layout = QFormLayout()
         self.settings_layout.setContentsMargins(10,10,10,10)
         self.settings_layout.setVerticalSpacing(15)
-        self.downsample_text = QLineEdit(str(self.settings[0]["downsample"]))
+        self.downsample_text = QLineEdit(str(int(int(self.current_fs)/self.settings[0]["downsample"])))
         self.downsample_text.setValidator(QtGui.QIntValidator())
-        self.downsample_text.setToolTip("Integers from 2 to "+str(MAX_DOWNSAMPLE))
-        self.settings_layout.addRow("Downsample (How many samples to average)\nRecommended: 1-2% of sampling frequency",self.downsample_text)
+        # self.downsample_text.setToolTip("Integers from 2 to "+str(MAX_DOWNSAMPLE))
+        self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate))
+        # self.settings_layout.addRow("Downsample (How many samples to average)\nRecommended: 1-2% of sampling frequency",self.downsample_text)
+        downsample_label = "Downsample to lower sampling rate.\nOriginal: "+str(int(self.current_fs))+"    Suggested: "+str(self.suggested_downsample_rate)
+        self.settings_layout.addRow(downsample_label,self.downsample_text)
         self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
         self.normalization_method_comboBox.setCurrentText(self.settings[0]["normalization"])
@@ -4717,10 +4848,12 @@ class SettingsWindow(QMainWindow):
     def read_user_settings(self):
         # reads all fields and sets new values for main app window
         # read downsampling settings
-        if int(self.downsample_text.text()) > 1 and int(self.downsample_text.text()) <= MAX_DOWNSAMPLE: 
-            self.settings[0]["downsample"] = int(self.downsample_text.text())
+        if int(self.downsample_text.text()) >= self.min_downsampe_rate and int(self.downsample_text.text()) <= self.max_downsample_rate: 
+            samples = int(int(self.current_fs)/int(self.downsample_text.text()))
+            self.settings[0]["downsample"] = samples
+            self.settings[0]["entered_downsample"] = int(self.downsample_text.text())
         else:
-            self.show_info_dialog("Downsample number was not updated.\nEnter values between 2 and "+str(MAX_DOWNSAMPLE)+".")
+            self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_downsampe_rate)+" and " + str(self.max_downsample_rate))
         # don't loose filter fraq information
         if self.filter_cb.isChecked() == False:
             self.settings[0]["filter_fraction"] = DEFAULT_SMOOTH_FRAQ

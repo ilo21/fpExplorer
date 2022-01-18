@@ -679,24 +679,28 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
         
     return analyzed_perievent_dict
     
-    
+# create settings dataframe for csv headers   
 def get_settings_df(settings_dict):
 #    self.settings_dict = [{"downsample":10,
 #                              "normalization": "Mulholland dF/F",
 #                              "filter":False,
 #                              "filter_fraction":DEFAULT_SMOOTH_FRAQ}]
     downsample_no = settings_dict[0]["downsample"]
+    downsample_rate = settings_dict[0]["entered_downsample"]
     normalization = settings_dict[0]["normalization"]
     filter_on = settings_dict[0]["filter"]
     filter_fraction = settings_dict[0]["filter_fraction"]
     normalization_as = settings_dict[0]["show_norm_as"]
     subjects = settings_dict[0]["subject"]
-    my_df = pd.DataFrame({"downsample":[downsample_no],
+    group = settings_dict[0]["subject_group_name"]
+    my_df = pd.DataFrame({"rate after downsampling":[downsample_rate],
+                          "number of averaged samples for downsampling":[downsample_no],
                           "normalization":[normalization],
                           "normalization as": normalization_as,
                           "filter":[filter_on],
                           "filter fraction":[filter_fraction],
-                          "subjects":subjects})
+                          "subjects":subjects,
+                          "subject group name":group})
     my_df_transposed = my_df.transpose()
     return my_df_transposed
 
@@ -1012,8 +1016,9 @@ def plot_with_event(canvas,subject,signal_dict,event_name,event2_name,event_data
         canvas.draw() 
     
 
-def plot_downsampled_alone(canvas,subject,downsampled_signal_dict,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
-    settings_dict[0]["subject"] = subject
+def plot_downsampled_alone(canvas,options_dict,downsampled_signal_dict,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
+    settings_dict[0]["subject"] = options_dict["subject"]
+    settings_dict[0]["subject_group_name"] = options_dict["subject_group_name"]
     # a tuple path+file beginning
     dump_path,file_beginning = export_loc_data
     # downsampled data
@@ -1038,7 +1043,7 @@ def plot_downsampled_alone(canvas,subject,downsampled_signal_dict,export,save_pl
              linewidth=1,
              label = "control")
     # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
+    my_title = 'Subject: ' + options_dict["subject"]
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('Downsampled',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
     ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
@@ -1083,8 +1088,9 @@ def plot_downsampled_alone(canvas,subject,downsampled_signal_dict,export,save_pl
         canvas.draw()
 
     
-def plot_downsampled_alone_with_event(canvas,subject,downsampled_signal_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
-    settings_dict[0]["subject"] = subject
+def plot_downsampled_alone_with_event(canvas,options_dict,downsampled_signal_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,settings_dict,signal_name,control_name):
+    settings_dict[0]["subject"] = options_dict["subject"]
+    settings_dict[0]["subject_group_name"] = options_dict["subject_group_name"]
     # a tuple path+file beginning
     dump_path,file_beginning = export_loc_data
     # downsampled data
@@ -1144,7 +1150,7 @@ def plot_downsampled_alone_with_event(canvas,subject,downsampled_signal_dict,eve
                     ctr+=1
     
     # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
+    my_title = 'Subject: ' + options_dict["subject"]
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('Downsampled',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
     ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
@@ -1204,8 +1210,9 @@ def plot_downsampled_alone_with_event(canvas,subject,downsampled_signal_dict,eve
         canvas.draw() 
 
     
-def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,export_loc_data,settings_dict):
-    settings_dict[0]["subject"] = subject
+def plot_normalized_alone(canvas,options_dict,normalized_dict,export,save_plots,export_loc_data,settings_dict):
+    settings_dict[0]["subject"] = options_dict["subject"]
+    settings_dict[0]["subject_group_name"] = options_dict["subject_group_name"]
     show_norm_as = settings_dict[0]["show_norm_as"]
     # a tuple path+file beginning
     dump_path,file_beginning = export_loc_data
@@ -1227,7 +1234,7 @@ def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,expor
              linewidth=1,
              label = "normalized")
     # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
+    my_title = 'Subject: ' + options_dict["subject"]
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('Normalized',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
     ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
@@ -1250,8 +1257,8 @@ def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,expor
     # create subfolder in current subject folder
     if export == True:
         file_name = file_beginning+"_normalized.csv"
-        if file_beginning != subject:
-            file_name = file_beginning+"_"+subject+"_normalized.csv"
+        if file_beginning != options_dict["subject"]:
+            file_name = file_beginning+"_"+options_dict["subject"]+"_normalized.csv"
         dump_file_path = os.path.join(dump_path,file_name)
         settings_df = get_settings_df(settings_dict)
         raw_df= pd.DataFrame({"Time (sec)":ts_reset,
@@ -1263,9 +1270,9 @@ def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,expor
     if export == True and save_plots == True:
         plot_file_name = file_beginning+"_normalized.png"
         plot_file_name2 = file_beginning+"_normalized.svg"
-        if file_beginning != subject:
-            plot_file_name = file_beginning+"_"+subject+"_normalized.png"
-            plot_file_name2 = file_beginning+"_"+subject+"_normalized.svg"
+        if file_beginning != options_dict["subject"]:
+            plot_file_name = file_beginning+"_"+options_dict["subject"]+"_normalized.png"
+            plot_file_name2 = file_beginning+"_"+options_dict["subject"]+"_normalized.svg"
         dump_plot_file_path = os.path.join(dump_path,plot_file_name)
         canvas.fig.savefig(dump_plot_file_path)
         # also as svg
@@ -1274,8 +1281,9 @@ def plot_normalized_alone(canvas,subject,normalized_dict,export,save_plots,expor
     else:
         canvas.draw()
     
-def plot_normalized_alone_with_event(canvas,subject,normalized_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,settings_dict):
-    settings_dict[0]["subject"] = subject
+def plot_normalized_alone_with_event(canvas,options_dict,normalized_dict,event_name,event2_name,event_data,export,save_plots,export_loc_data,settings_dict):
+    settings_dict[0]["subject"] = options_dict["subject"]
+    settings_dict[0]["subject_group_name"] = options_dict["subject_group_name"]
     show_norm_as = settings_dict[0]["show_norm_as"]
     # a tuple path+file beginning
     dump_path,file_beginning = export_loc_data
@@ -1338,7 +1346,7 @@ def plot_normalized_alone_with_event(canvas,subject,normalized_dict,event_name,e
                     ctr+=1
     
     # create title, axis labels, and legend
-    my_title = 'Subject: ' + subject
+    my_title = 'Subject: ' + options_dict["subject"]
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('Normalized',fontdict={'fontsize': TITLE_FONT_SIZE, 'fontweight': 'medium'})
     ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
@@ -1360,8 +1368,8 @@ def plot_normalized_alone_with_event(canvas,subject,normalized_dict,event_name,e
     # create subfolder in current subject folder
     if export == True:
         file_name = file_beginning+"_normalized.csv"
-        if file_beginning != subject:
-            file_name = file_beginning+"_"+subject+"_normalized.csv"
+        if file_beginning != options_dict["subject"]:
+            file_name = file_beginning+"_"+options_dict["subject"]+"_normalized.csv"
         dump_file_path = os.path.join(dump_path,file_name)
         settings_df = get_settings_df(settings_dict)
         raw_df= pd.DataFrame({"Time (sec)":ts_reset,
@@ -1387,15 +1395,15 @@ def plot_normalized_alone_with_event(canvas,subject,normalized_dict,event_name,e
         if event2_name == "---":
             plot_file_name = file_beginning+"_normalized_"+event_name+".png"
             plot_file_name2 = file_beginning+"_normalized_"+event_name+".svg"
-            if file_beginning != subject:
-                plot_file_name = file_beginning+"_"+subject+"_normalized_"+event_name+".png"
-                plot_file_name2 = file_beginning+"_"+subject+"_normalized_"+event_name+".svg"
+            if file_beginning != options_dict["subject"]:
+                plot_file_name = file_beginning+"_"+options_dict["subject"]+"_normalized_"+event_name+".png"
+                plot_file_name2 = file_beginning+"_"+options_dict["subject"]+"_normalized_"+event_name+".svg"
         else:
             plot_file_name = file_beginning+"_normalized_"+event_name+"_"+event2_name+".png"
             plot_file_name2 = file_beginning+"_normalized_"+event_name+"_"+event2_name+".svg"
-            if file_beginning != subject:
-                plot_file_name = file_beginning+"_"+subject+"_normalized_"+event_name+"_"+event2_name+".png"
-                plot_file_name2 = file_beginning+"_"+subject+"_normalized_"+event_name+"_"+event2_name+".svg"
+            if file_beginning != options_dict["subject"]:
+                plot_file_name = file_beginning+"_"+options_dict["subject"]+"_normalized_"+event_name+"_"+event2_name+".png"
+                plot_file_name2 = file_beginning+"_"+options_dict["subject"]+"_normalized_"+event_name+"_"+event2_name+".svg"
         dump_plot_file_path = os.path.join(dump_path,plot_file_name)
         canvas.fig.savefig(dump_plot_file_path)
         # also as svg
@@ -1931,8 +1939,9 @@ def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,
     canvas.draw()
     
 # plot rwa but downsampled perievents
-def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,subject_data_path,export_loc_data):
+def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,group_name,export_loc_data):
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data
     raw_df = None
@@ -2122,8 +2131,9 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         
     
 
-def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,subject_data_path,settings_dict,signal_name,control_name,export_loc_data):
+def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,signal_name,control_name,export_loc_data):
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     dump_path,file_beginning = export_loc_data
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get data to plot
@@ -2194,8 +2204,9 @@ def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_
         canvas.draw()
     
     
-def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     dump_path,file_beginning = export_loc_data    
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     raw_df = None
@@ -2287,8 +2298,9 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
         canvas.draw()
     return raw_df
 
-def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     dump_path,file_beginning = export_loc_data    
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     raw_df = None
@@ -2551,8 +2563,9 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
                     hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,subject_data_path,settings_dict,export_loc_data):   
+def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):   
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     dump_path,file_beginning = export_loc_data 
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get data to plot
@@ -3073,8 +3086,9 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
                     hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_peaks(canvas,subject,data,options,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data 
     # get peak params from gui
@@ -3236,8 +3250,9 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,subject_data_path,s
     else:
         canvas.draw()
     
-def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,event_data,export,save_plots,subject_data_path,settings_dict,export_loc_data):
+def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,event_data,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
+    settings_dict[0]["subject_group_name"] = group_name
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data 
     # get peak params from gui
@@ -4089,7 +4104,7 @@ def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,even
         canvas.draw()
         
 
-def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     show_norm_as = settings_dict[0]["show_norm_as"]
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     dump_path,file_beginning = export_loc_data 
@@ -4100,9 +4115,11 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,sett
     trials_dfs = []
     # remember all subjects
     subjects_end_file = ""
+    # and their group names
+    subjects_group_names = ""
     for el in all_dfs:
         subject,df = el
-        subject_string = subject+" "
+        subject_string = subject+","
         subjects_end_file+=subject_string
         # if first dataframe keep time
         if len(ts_df) == 0:
@@ -4119,8 +4136,14 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,sett
         df.columns = new_columns
         trials_dfs.append(df)
 
+    for name in group_names:
+        name2write = name+","
+        subjects_group_names+=name2write
+
     # add subjects to settings
-    settings_dict[0]["subject"] = subjects_end_file
+    # exclude last coma
+    settings_dict[0]["subject"] = subjects_end_file[:-1]
+    settings_dict[0]["subject_group_name"] = subjects_group_names[:-1]
     # create df with all subject info for csv
     ts_df.extend(trials_dfs)
     main_df = pd.concat(ts_df,axis=1)  
@@ -4189,7 +4212,7 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,perievent_options_dict,sett
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
     
-def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     dump_path,file_beginning = export_loc_data 
 #    print(len(my_all_dfs))
@@ -4203,11 +4226,12 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
     zscores_by_trials = []
     # remember all subjects to include in file name
     subjects_end_file = ""
+    subjects_group_names = ""
     for i in range(len(all_dfs)):
         subject,df = all_dfs[i]
 #        print(subject)
 #        print(df)
-        subject_string = subject + " "
+        subject_string = subject + ","
         subjects_end_file+=subject_string
         # get means as list
         means = df['Mean_zscore'].tolist()
@@ -4238,9 +4262,15 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
                 # add empty list for trials
                zscores_by_trials.append([]) 
                zscores_by_trials[j].append(trial_df)
+    for name in group_names:
+        name2write = name+","
+        subjects_group_names+=name2write
 
     # add subjects to settings
-    settings_dict[0]["subject"] = subjects_end_file
+    # exclude last coma
+    settings_dict[0]["subject"] = subjects_end_file[:-1]
+    settings_dict[0]["subject_group_name"] = subjects_group_names[:-1]
+    
     # calculate means
     # join all trials from all subjects to get means ans errors
     df_all_trials = pd.concat(zscore_all_dfs,axis=1)
@@ -4340,7 +4370,7 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,perievent_options_dict,setting
 #        print(subject)
 #        print(df)
     
-def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     dump_path,file_beginning = export_loc_data 
 #    print(len(my_all_dfs))
@@ -4354,11 +4384,12 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_
     zscores_by_trials = []
     # remember all subjects to include in file name
     subjects_end_file = ""
+    subjects_group_names = ""
     for el in all_dfs:
         subject,df = el
 #        print(subject)
 #        print(df)
-        subject_string = subject + " "
+        subject_string = subject + ","
         subjects_end_file+=subject_string
         # get means as list
         means = df['Mean_zscore'].tolist()
@@ -4390,8 +4421,15 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_
                zscores_by_trials.append([]) 
                zscores_by_trials[j].append(trial_df)
 
+    for name in group_names:
+        name2write = name+","
+        subjects_group_names+=name2write
+
     # add subjects to settings
-    settings_dict[0]["subject"] = subjects_end_file
+    # exclude last coma
+    settings_dict[0]["subject"] = subjects_end_file[:-1]
+    settings_dict[0]["subject_group_name"] = subjects_group_names[:-1]
+
     # calculate means
     # join all trials from all subjects to get means ans errors
     df_all_trials = pd.concat(zscore_all_dfs,axis=1)
@@ -4488,7 +4526,7 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,perievent_options_
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
     
-def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_dict,export_loc_data):
+def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     dump_path,file_beginning = export_loc_data 
     all_dfs = copy.deepcopy(my_all_dfs)
@@ -4499,9 +4537,10 @@ def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_di
     zscores_means_by_subject = []
     # remember all subjects to include in file name
     subjects_end_file = ""
+    subjects_group_names = ""
     for el in all_dfs:
         subject,df = el
-        subject_string = subject + " "
+        subject_string = subject + ","
         subjects_end_file+=subject_string
         # get means as list
         means = df['Mean_zscore'].tolist()
@@ -4523,8 +4562,15 @@ def get_batch_perievent_auc(canvas,my_all_dfs,perievent_options_dict,settings_di
         df.columns = new_columns
         # add to means list
         zscore_all_dfs.append(df)    
+
+    for name in group_names:
+        name2write = name+","
+        subjects_group_names+=name2write
+
     # add subjects to settings
-    settings_dict[0]["subject"] = subjects_end_file
+    # exclude last coma
+    settings_dict[0]["subject"] = subjects_end_file[:-1]
+    settings_dict[0]["subject_group_name"] = subjects_group_names[:-1]
     # calculate means
     # join all trials from all subjects to get means ans errors
     df_all_trials = pd.concat(zscore_all_dfs,axis=1)
