@@ -144,6 +144,14 @@ def get_event_on_off(raw_data, event):
         on_off = evt_on_off.time_ranges
     except: 
         print("Problem getting on off event data by tdt.epoc_filter")
+        print(event_name_split[0]) # some names end with _ and that gets replaced in data tank
+        if event_name_split[0][-1] == "_":
+            adjusted_name = event_name_split[0][:-1]+"/"
+            print(adjusted_name)
+            evt_on_off= tdt.epoc_filter(raw_data, adjusted_name, values=[int(event_name_split[1])])
+            on_off = evt_on_off.time_ranges
+    if len(on_off[0]) == 0:
+        print("Could not get onsets any of known ways")
     return on_off
 
 def get_single_channel(raw_data,chnl_name):
@@ -406,7 +414,7 @@ def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_fraq):
 
 
 #https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
-def filter_data_around_event(raw_data,trimmed_data,perievent_options_dict,settings_dict,signal_name,control_name):
+def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signal_name,control_name):
     event_name_split = perievent_options_dict["event"].split(" ")
     before = -perievent_options_dict["sec_before"]
     till = perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]
@@ -414,30 +422,6 @@ def filter_data_around_event(raw_data,trimmed_data,perievent_options_dict,settin
     modified_data = tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
     all_control_filtered = modified_data.streams[control_name].filtered
     all_signal_filtered = modified_data.streams[signal_name].filtered
-    onsets = get_event_on_off(raw_data, perievent_options_dict["event"])[0]
-    # check how many events from the beginning or ending of the recording have been already trimmed out
-    from_begin = 0
-    from_end = 0
-    for el in onsets:
-        # print(el,trimmed_data[1]["ts"][0])
-        if el < trimmed_data[1]["ts"][0]:
-            from_begin +=1
-        else:
-            break
-    for el in onsets:
-        # print(el,trimmed_data[1]["ts"][-1])
-        if el > trimmed_data[1]["ts"][-1]:
-            from_end +=1
-            
-    # print(from_begin,from_end)
-    if from_begin > 0:
-        for i in range(from_begin):
-            all_control_filtered=np.delete(all_control_filtered,0,0)
-            all_signal_filtered=np.delete(all_signal_filtered,0,0)
-    if from_end > 0:
-        for i in range(from_end):
-            all_control_filtered=np.delete(all_control_filtered,-1,0)
-            all_signal_filtered=np.delete(all_signal_filtered,-1,0)
     modified_data.streams[signal_name].filtered = all_signal_filtered
     modified_data.streams[control_name].filtered = all_control_filtered
     '''Applying a time filter to a uniformly sampled signal means that the length 
@@ -445,28 +429,45 @@ def filter_data_around_event(raw_data,trimmed_data,perievent_options_dict,settin
         so we can trim the excess off before calculating the median.
         '''
     try:
+        nans = 0
         min1 = np.min([np.size(x) for x in modified_data.streams[signal_name].filtered])
         min2 = np.min([np.size(x) for x in modified_data.streams[control_name].filtered])
         modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
         modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
         # downsample data as well
         N = settings_dict[0]["downsample"] # Average every N samples into 1 value
+        # print("Total seconds:",perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"])
+        # print("Total samples before downsampling:",len(modified_data.streams[signal_name].filtered[0]))
+        # samples_after = settings_dict[0]["entered_downsample"]*(perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"])
+        # print("Total samples after:",samples_after)
+    
         control = []
         signal = []
         for lst in modified_data.streams[control_name].filtered:
             small_lst = []
             for i in range(0, min2, N):
-                small_lst.append(np.median(lst[i:i+N-1])) # This is the moving window median
+                val = np.median(lst[i:i+N-1])
+                if math.isnan(val):
+                    nans +=1
+                small_lst.append(val) # This is the moving window median
             control.append(small_lst)
-        
+            
         for lst in modified_data.streams[signal_name].filtered:
             small_lst = []
             for i in range(0, min1, N):
-                small_lst.append(np.median(lst[i:i+N-1]))
+                val = np.median(lst[i:i+N-1])
+                if math.isnan(val):
+                    nans +=1
+                small_lst.append(val) # This is the moving window median
             signal.append(small_lst)
-            
+
         modified_data.streams[signal_name].filtered_downsampled = signal
-        modified_data.streams[control_name].filtered_downsampled = control
+        modified_data.streams[control_name].filtered_downsampled = control      
+        # sometimes the last median value is nan
+        # if that is the case, remove that from all
+        if nans > 0:
+            modified_data.streams[signal_name].filtered_downsampled = [x[:-1] for x in signal]
+            modified_data.streams[control_name].filtered_downsampled = [x[:-1] for x in control]
     except:
         print("Not enough data that satisfy your request. Try changing event or times around event.")
     
@@ -2231,14 +2232,14 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Mean Z-Score')
     ax2.fill_between(ts, mean_zscore+zerror,
                           mean_zscore-zerror, facecolor='green', alpha=0.2, label="Standard\nerror")
-    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax2.spines['top'].set_visible(False)
@@ -2330,14 +2331,14 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
         else:
             ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
 
-    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax2.spines['top'].set_visible(False)
@@ -2446,7 +2447,7 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
     ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
     ax3.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
                           ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2, label="Standard\nerror")
-    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label='Event Onset')
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -2460,7 +2461,7 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax3.spines['top'].set_visible(False)
@@ -2531,7 +2532,7 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
             ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
         else:
             ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
-    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label='Event Onset')
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -2545,7 +2546,7 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     # hide top and right border
     ax3.spines['top'].set_visible(False)
@@ -2597,7 +2598,10 @@ def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_peri
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
-    ax.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax.set_ylim(0-2, y+2*h)
     ax.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax.set_xticks(np.arange(-1, len(AUC)+1))
@@ -2709,7 +2713,10 @@ def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_periev
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
     ax2.spines['bottom'].set_visible(False)
-    ax2.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax2.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax2.set_ylim(0-2, y+2*h)
     ax2.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax2.set_xticks(np.arange(-1, len(AUC)+1))
@@ -2746,7 +2753,7 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
     ax2.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
                           ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2,label="Standard\nerror")
-    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
     # polt bars with error bars
@@ -2769,7 +2776,7 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
@@ -2778,7 +2785,10 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
     ax3.spines['bottom'].set_visible(False)
-    ax3.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax3.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax3.set_ylim(0-2, y+2*h)
     ax3.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
@@ -2826,7 +2836,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
             ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
         else:
             ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
-    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
     ax3.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
@@ -2842,14 +2852,14 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
   
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
-    # hide top and right border
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
     ax.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
+    # hide top and right border
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
@@ -2857,7 +2867,10 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
     ax3.spines['bottom'].set_visible(False)
-    ax3.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax3.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax3.set_ylim(0-2, y+2*h)
     ax3.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
@@ -2925,7 +2938,7 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
     ax3.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
                           ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2,label="Standard\nerror")
-    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
     ax4.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
@@ -2951,7 +2964,7 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
-    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
 #    ax2.set_xlabel('Seconds from Event Onset')
     ax3.spines['top'].set_visible(False)
@@ -2963,7 +2976,10 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     ax4.spines['top'].set_visible(False)
     ax4.spines['right'].set_visible(False)
     ax4.spines['bottom'].set_visible(False)
-    ax4.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax4.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax4.set_ylim(0-2, y+2*h)
     ax4.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax4.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
@@ -3033,7 +3049,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
             ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
         else:
             ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
-    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
     ax4.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
@@ -3059,7 +3075,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
-    ax2.set_yticks(np.arange(0,len(zscore_all), 1))
+    ax2.set_yticks(np.arange(0.5,len(zscore_all), 1))
     ax2.set_yticklabels(np.arange(1, len(zscore_all)+1, 1))
 #    ax2.set_xlabel('Seconds from Event Onset')
     ax3.spines['top'].set_visible(False)
@@ -3071,7 +3087,10 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     ax4.spines['top'].set_visible(False)
     ax4.spines['right'].set_visible(False)
     ax4.spines['bottom'].set_visible(False)
-    ax4.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax4.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax4.set_ylim(0-2, y+2*h)
     ax4.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax4.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
@@ -4320,14 +4339,14 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     ax2.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
                       facecolor='g', alpha=0.2,label = 'Standard error')
 
-    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
     my_title = 'Total Subjects: ' + str(len(all_dfs)) + "; Event: " + event_name
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_yticks(np.arange(0,len(zscores_by_trials_list), 1))
+    ax.set_yticks(np.arange(0.5,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
     # show only intiger yticks
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -4481,14 +4500,14 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
         else:
             ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color='green')
 
-    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label='Event Onset')
+    ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
     my_title = 'Total Subjects: ' + str(len(all_dfs)) + "; Event: " + event_name
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_title('z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
-    ax.set_yticks(np.arange(0,len(zscores_by_trials_list), 1))
+    ax.set_yticks(np.arange(0.5,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
     # show only intiger yticks
     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -4651,7 +4670,10 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
-    ax.set_ylim(min(AUC)-2*h, y+2*h)
+    if min(AUC) < 0:
+        ax.set_ylim(min(AUC)-2*h, y+2*h)
+    else:
+        ax.set_ylim(0-2, y+2*h)
     ax.set_ylabel('AUC',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax.set_xticks(np.arange(-1, len(AUC)+1))

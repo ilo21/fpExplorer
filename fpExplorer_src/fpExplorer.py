@@ -1846,7 +1846,7 @@ class PreviewContinuousWidget(QWidget):
         if new_fs != self.current_fs:
             self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-            self.settings[0]["entered_downsample"] = None
+            # self.settings[0]["entered_downsample"] = None
         if self.subject_comboBox.currentText() in self.group_names_dict:
             self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
         else:
@@ -2096,8 +2096,8 @@ class PreviewEventBasedWidget(QWidget):
         self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
         self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-        self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
-        self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
+        # self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
+        # self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
         # print("Current suggested downsample rate:",self.settings_dict[0]['downsample'])
         # keep trimmed data separately with latest trimming settings
         # first element of that list is beginning and end seconds to trim
@@ -2128,6 +2128,8 @@ class PreviewEventBasedWidget(QWidget):
         self.current_trials = []
         # remember how many were there
         self.total_current_trials = 0
+        # key is subject, value is a dict where key is event and value is list of most recent trials for that event
+        self.trials_dict = {}
         
         # initialize export settings
         self.raw_export = False
@@ -2956,7 +2958,7 @@ class PreviewEventBasedWidget(QWidget):
             self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
             self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
-            self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
+            # self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
         if self.subject_comboBox.currentText() in self.group_names_dict:
             self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
         else:
@@ -3098,6 +3100,10 @@ class PreviewEventBasedWidget(QWidget):
             # read the trials radio buttons
             try:
                 self.current_trials = self.read_trials()
+                if self.options["subject"] in self.trials_dict:
+                    self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
+                else:
+                    self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
             except:
                 self.trials_button_group = []
                 # create new buttons
@@ -3120,7 +3126,7 @@ class PreviewEventBasedWidget(QWidget):
                 self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
                 self.current_trials_widget.deleteLater()
                 self.current_trials_widget = new_trials_widget
-        if self.batch_perievent == True:     
+        if self.batch_perievent == True:    
             if "perievent" in self.parent_window.batch_export_settings_dict:
                 if self.parent_window.batch_export_settings_dict["perievent"] == True:
                     # collect subject data if possible: list of tuples: subject+each all trials as dataframe
@@ -3155,11 +3161,13 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                             0
                                                                                                             )]
                             # filter around trimmed
-                            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],self.trimmed_raw_data_dict[subject],
+                            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],
                                                     self.perievent_options_dict,
                                                     self.settings_dict,
                                                     self.preview_init_params[0][0]["signal_name"],
                                                     self.preview_init_params[0][0]["control_name"])
+                            # if run on batch was selected, select all trials by default
+                            self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
                             # analyze
                             analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
                                                                                 self.current_trials,
@@ -3169,7 +3177,6 @@ class PreviewEventBasedWidget(QWidget):
                                                                                self.preview_init_params[0][0]["control_name"])
                             # check if there is any data to plot 
                             if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
-
                                 # show buttons of available trials
                                 self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
                                 if self.current_perievent == None:
@@ -3179,7 +3186,7 @@ class PreviewEventBasedWidget(QWidget):
                                     self.current_trials_widget.setLayout(self.current_trials_layout)
                                     text_label = QLabel("Include Trials:")
                                     self.current_trials_layout.addWidget(text_label)
-                                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                    for i in range(self.total_current_trials):
                                         # create btn
                                         # add button to a group
                                         # add to list
@@ -3335,11 +3342,13 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                                     0
                                                                                                                     )]
                                     # filter around trimmed
-                                    data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],self.trimmed_raw_data_dict[subject],
+                                    data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],
                                                                 self.perievent_options_dict,
                                                                 self.settings_dict,
                                                                 self.preview_init_params[0][0]["signal_name"],
                                                                 self.preview_init_params[0][0]["control_name"])
+                                    # if run on batch was selected, select all trials by default
+                                    self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
                                     # check if there is any data to plot 
                                     if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
                                         if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
@@ -3372,6 +3381,7 @@ class PreviewEventBasedWidget(QWidget):
                                                     self.trials_button_group.append(btn)
                                                     self.current_trials.append(i+1)
                                                 self.trials_layout.addWidget(self.current_trials_widget)
+
                                                 
                                         if self.perievent_options_dict["plot_avg"] == True:
                                             # perieventnormalized preview
@@ -3479,7 +3489,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                         0
                                                                                                         )]
             # filter around trimmed
-            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[self.options["subject"]],self.trimmed_raw_data_dict[self.options["subject"]],
+            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[self.options["subject"]],
                                                     self.perievent_options_dict,
                                                     self.settings_dict,
                                                     self.preview_init_params[0][0]["signal_name"],
@@ -3520,6 +3530,10 @@ class PreviewEventBasedWidget(QWidget):
                         self.trials_button_group.append(btn)
                         self.current_trials.append(i+1)
                     self.trials_layout.addWidget(self.current_trials_widget)
+                    if self.options["subject"] in self.trials_dict:
+                        self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
+                    else:
+                        self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
                 elif self.current_perievent != self.perievent_options_dict['event']:  # if new event different from previous       
                     # clear current trials and buttons group
                     self.current_trials = []
@@ -3530,21 +3544,43 @@ class PreviewEventBasedWidget(QWidget):
                     new_trials_widget.setLayout(new_trials_layout)
                     text_label = QLabel("Include Trials:")
                     new_trials_layout.addWidget(text_label)
-                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                        # create btn
-                        # add button to a group
-                        # add to list
-                        # add to layout
-                        btn = QCheckBox(str(i+1))
-                        btn.setChecked(True)
-                        new_trials_layout.addWidget(btn)
-                        self.trials_button_group.append(btn)
-                        self.current_trials.append(i+1)
+                    if self.options["subject"] not in self.trials_dict:
+                        for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                            # create btn
+                            # add button to a group
+                            # add to list
+                            # add to layout
+                            btn = QCheckBox(str(i+1))
+                            btn.setChecked(True)
+                            new_trials_layout.addWidget(btn)
+                            self.trials_button_group.append(btn)
+                            self.current_trials.append(i+1)
+                        self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
+                    else: # subject already had some events trials previewed
+                        if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
+                            self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
+                            for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                btn = QCheckBox(str(i+1))
+                                if i+1 in self.current_trials:
+                                    btn.setChecked(True)
+                                new_trials_layout.addWidget(btn)
+                                self.trials_button_group.append(btn)
+                        else: # add event for that subject
+                            for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                # create btn
+                                # add button to a group
+                                # add to list
+                                # add to layout
+                                btn = QCheckBox(str(i+1))
+                                btn.setChecked(True)
+                                new_trials_layout.addWidget(btn)
+                                self.trials_button_group.append(btn)
+                                self.current_trials.append(i+1)
+                            self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']] = self.current_trials
                     # replace with updated widget
                     self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
                     self.current_trials_widget.deleteLater()
                     self.current_trials_widget = new_trials_widget
-
                     # set new event
                     self.current_perievent = self.perievent_options_dict['event']
                 else: # if same event and/or new subject
@@ -3558,20 +3594,45 @@ class PreviewEventBasedWidget(QWidget):
                         for btn in self.trials_button_group:
                             new_trials_layout.addWidget(btn)
                     else:
-                        for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                            # create btn
-                            # add button to a group
-                            # add to list
-                            # add to layout
-                            btn = QCheckBox(str(i+1))
-                            btn.setChecked(True)
-                            new_trials_layout.addWidget(btn)
-                            self.trials_button_group.append(btn)
-                            self.current_trials.append(i+1)
+                        if self.options["subject"] not in self.trials_dict:
+                            for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                # create btn
+                                # add button to a group
+                                # add to list
+                                # add to layout
+                                btn = QCheckBox(str(i+1))
+                                btn.setChecked(True)
+                                new_trials_layout.addWidget(btn)
+                                self.trials_button_group.append(btn)
+                                self.current_trials.append(i+1)
+                            self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
+                        else: # subject already had some events trials previewed
+                            if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
+                                self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
+                                for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                    btn = QCheckBox(str(i+1))
+                                    if i+1 in self.current_trials:
+                                        btn.setChecked(True)
+                                    new_trials_layout.addWidget(btn)
+                                    self.trials_button_group.append(btn)
+                            else: # add event for that subject
+                                for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                    # create btn
+                                    # add button to a group
+                                    # add to list
+                                    # add to layout
+                                    btn = QCheckBox(str(i+1))
+                                    btn.setChecked(True)
+                                    new_trials_layout.addWidget(btn)
+                                    self.trials_button_group.append(btn)
+                                    self.current_trials.append(i+1)
+                                self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
                     # replace with updated widget
                     self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
                     self.current_trials_widget.deleteLater()
                     self.current_trials_widget = new_trials_widget
+                    print("Trials dictionary")
+                    print(self.trials_dict)
             ##########################################
 
                 # if user clicked on preview in perievent options window, show preview
@@ -4785,10 +4846,28 @@ class SettingsWindow(QMainWindow):
             self.current_fs = fpExplorer_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
             # print("Frequency:",self.current_fs)
 
-        self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
-        self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
-        self.min_downsampe_rate = int(int(self.current_fs)*MIN_DOWNSAMPLE_PCT/100)
-        self.max_downsample_rate = int(int(self.current_fs)*MAX_DOWNSAMPLE_PCT/100)
+        # calculate min, max and sugested sample rates
+        self.suggested_downsample_samples = round(self.current_fs*DEFAULT_DOWNSAMPLE_PCT/100)
+        self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
+        self.min_downsampe_rate = round(self.current_fs*MIN_DOWNSAMPLE_PCT/100)
+        self.max_downsample_rate = round(self.current_fs*MAX_DOWNSAMPLE_PCT/100)
+        # create a list of available sampling rates, display only divisible by 5
+        sampling_rates = [str(self.min_downsampe_rate)]
+        min_samples = round(self.current_fs/self.max_downsample_rate)
+        max_samples = round(self.current_fs/self.min_downsampe_rate)
+        first_samples = max_samples
+        next_samples = first_samples-1
+        diff = self.max_downsample_rate - self.min_downsampe_rate
+        for i in range(diff):
+            if next_samples >= min_samples:
+                new_sample_no = round(self.current_fs/(self.min_downsampe_rate+i))
+                if (new_sample_no != first_samples) and (self.min_downsampe_rate+i)%5==0:
+                    sampling_rates.append(str(self.min_downsampe_rate+i))
+                    first_samples = new_sample_no
+                    next_samples = first_samples-1
+                    # print(new_sample_no,self.min_downsampe_rate+i)
+                    if new_sample_no == self.suggested_downsample_samples:
+                        self.suggested_downsample_rate = self.min_downsampe_rate+i
         
         # create widget with settings
         self.settings_main_widget = QWidget()
@@ -4799,12 +4878,16 @@ class SettingsWindow(QMainWindow):
         self.settings_layout = QFormLayout()
         self.settings_layout.setContentsMargins(10,10,10,10)
         self.settings_layout.setVerticalSpacing(15)
-        self.downsample_text = QLineEdit(str(int(int(self.current_fs)/self.settings[0]["downsample"])))
+        self.downsample_text = QComboBox()
+        self.downsample_text.addItems(sampling_rates)
+        if self.settings[0]["entered_downsample"] == None:
+            self.downsample_text.setCurrentText(str(self.suggested_downsample_rate))
+        else:
+            self.downsample_text.setCurrentText(str(self.settings[0]["entered_downsample"]))
         self.downsample_text.setValidator(QtGui.QIntValidator())
         # self.downsample_text.setToolTip("Integers from 2 to "+str(MAX_DOWNSAMPLE))
-        self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate))
-        # self.settings_layout.addRow("Downsample (How many samples to average)\nRecommended: 1-2% of sampling frequency",self.downsample_text)
-        downsample_label = "Downsample to lower sampling rate.\nOriginal: "+str(int(self.current_fs))+"    Suggested: "+str(self.suggested_downsample_rate)
+        # self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate)+"Hz")
+        downsample_label = "Downsample to lower sampling rate.\nOriginal: "+str(int(self.current_fs))+" Hz    Suggested: "+str(self.suggested_downsample_rate)+" Hz"
         self.settings_layout.addRow(downsample_label,self.downsample_text)
         self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
@@ -4848,10 +4931,10 @@ class SettingsWindow(QMainWindow):
     def read_user_settings(self):
         # reads all fields and sets new values for main app window
         # read downsampling settings
-        if int(self.downsample_text.text()) >= self.min_downsampe_rate and int(self.downsample_text.text()) <= self.max_downsample_rate: 
-            samples = int(int(self.current_fs)/int(self.downsample_text.text()))
+        if int(self.downsample_text.currentText()) >= self.min_downsampe_rate and int(self.downsample_text.currentText()) <= self.max_downsample_rate: 
+            samples = round(self.current_fs/int(self.downsample_text.currentText()))
             self.settings[0]["downsample"] = samples
-            self.settings[0]["entered_downsample"] = int(self.downsample_text.text())
+            self.settings[0]["entered_downsample"] = int(self.downsample_text.currentText())
         else:
             self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_downsampe_rate)+" and " + str(self.max_downsample_rate))
         # don't loose filter fraq information
@@ -5187,6 +5270,8 @@ class PeriEventOptionsWindow(QMainWindow):
             # send values to main app window
             self.got_peri_event_options_sig[list].emit([self.options_dict])
 #            self.close()
+        else:
+            self.enable_buttons()
     
     def export_btn_clicked(self):
         self.disable_buttons_signal.emit()
@@ -5203,26 +5288,34 @@ class PeriEventOptionsWindow(QMainWindow):
 #                self.close()
             else:
                 self.show_info_dialog("Please select export path.")
+                self.enable_buttons()
+        else:
+            self.enable_buttons()
             
     def validate(self):
-        valid = False
+        valid = True
         # make sure that for analysis, baseline is correct
         if self.options_dict["baseline_from"] == self.options_dict["baseline_to"]:
             self.show_info_dialog("Baseline window needs to me longer than 0 seconds.")
+            valid = False
         elif self.options_dict["baseline_from"] > self.options_dict["baseline_to"]:
             self.show_info_dialog("Start of baseline window needs to be earlier\nthan the end of baseline window.")
+            valid = False
         # check if baseline is within perievent window
         if self.options_dict["baseline_from"] < -self.options_dict["sec_before"] or self.options_dict["baseline_to"] > self.options_dict["sec_after"]:
             self.show_info_dialog("Baseline time window needs to be\nwithin perievent time window.")
+            valid = False
         # check if auc windows are within range
         if (self.options_dict["auc_pre_from"] < -self.options_dict["sec_before"] or self.options_dict["auc_pre_from"] > self.options_dict["sec_after"] 
             or self.options_dict["auc_post_to"] > self.options_dict["sec_after"] or self.options_dict["auc_post_to"] < -self.options_dict["sec_before"]):
             self.show_info_dialog("Please make sure that your AUC time window\nis within perievent time window.")
+            valid = False
         # check id auc windows are equal
         elif abs(self.options_dict["auc_pre_from"]+self.options_dict["auc_pre_to"]) != abs(self.options_dict["auc_post_from"]+self.options_dict["auc_post_to"]):
             self.show_info_dialog("Please make sure the AUC-pre and AUC-post\ntime windows are equal.")
-        else:
-            valid = True
+            valid = False
+        # else:
+        #     valid = True
         # this should always be true, unless there are no events!
         if len(self.options_dict["event"])==0:
             valid = False
