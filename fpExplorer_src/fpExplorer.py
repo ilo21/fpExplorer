@@ -1846,7 +1846,7 @@ class PreviewContinuousWidget(QWidget):
         if new_fs != self.current_fs:
             self.suggested_downsample_samples = int(int(new_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-            self.settings[0]["entered_downsample"] = round(new_fs/self.suggested_downsample_samples,2)
+            self.settings[0]["entered_downsample"] = round(new_fs/self.suggested_downsample_samples)
         if self.subject_comboBox.currentText() in self.group_names_dict:
             self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
         else:
@@ -2096,7 +2096,7 @@ class PreviewEventBasedWidget(QWidget):
         self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
         self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-        self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples,2)
+        self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
         self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
         # print("Current suggested downsample rate:",self.settings_dict[0]['downsample'])
         # keep trimmed data separately with latest trimming settings
@@ -4892,8 +4892,10 @@ class SettingsWindow(QMainWindow):
         self.downsample_text.setValidator(QtGui.QIntValidator())
         self.downsample_text.setToolTip("Integers from 2 to "+str(self.max_samples))
         # self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate)+"Hz")
-        downsample_label = "Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs,2))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()),2)) +" Hz"
-        self.settings_layout.addRow(downsample_label,self.downsample_text)
+        self.downsample_label = QLabel("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+        self.settings_layout.addRow(self.downsample_label,self.downsample_text)
+        self.update_rate_btn = QPushButton("Preview new rate")
+        self.settings_layout.addRow("",self.update_rate_btn)
         self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
         self.normalization_method_comboBox.setCurrentText(self.settings[0]["normalization"])
@@ -4919,12 +4921,20 @@ class SettingsWindow(QMainWindow):
         
         # set the window's main layout
         self.settings_main_widget.setLayout(self.settings_main_layout)
+        # make the hint button with updated sampling rate smaller than regular buttons
+        self.update_rate_btn.setStyleSheet("QPushButton {padding: 2px; margin-left:0px; margin-right:0px; margin-top:0px; margin-bottom:0px; font-size: 10pt; font-weight: normal;}")
         
         # use main stylesheet
         self.setStyleSheet(STYLESHEET)
         
         self.save_settings_btn.clicked.connect(self.save_settings_btn_clicked)
-        
+        self.update_rate_btn.clicked.connect(self.update_rate)
+
+    def update_rate(self):
+        message = "After downsampling "+str(int(self.downsample_text.text()))+" times,\nyour new sampling rate will be "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz"
+        self.show_info_dialog(message)
+        self.downsample_label.setText("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+
     def save_settings_btn_clicked(self):
         # read user settings
         self.read_user_settings()
@@ -4940,7 +4950,7 @@ class SettingsWindow(QMainWindow):
             self.settings[0]["downsample"] = int(self.downsample_text.text())
             # samples = round(self.current_fs/int(self.downsample_text.currentText()))
             # self.settings[0]["downsample"] = samples
-            self.settings[0]["entered_downsample"] = round(self.current_fs/int(self.downsample_text.text()),2)
+            self.settings[0]["entered_downsample"] = round(self.current_fs/int(self.downsample_text.text()))
         else:
             self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_samples)+" and " + str(self.max_samples))
         # don't loose filter fraq information
