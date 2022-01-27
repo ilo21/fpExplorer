@@ -694,7 +694,7 @@ def get_settings_df(settings_dict):
     normalization_as = settings_dict[0]["show_norm_as"]
     subjects = settings_dict[0]["subject"]
     group = settings_dict[0]["subject_group_name"]
-    my_df = pd.DataFrame({"rate after downsampling":[downsample_rate],
+    my_df = pd.DataFrame({"rate after downsampling (Hz)":[downsample_rate],
                           "number of averaged samples for downsampling":[downsample_no],
                           "normalization":[normalization],
                           "normalization as": normalization_as,
@@ -4136,6 +4136,10 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
     subjects_end_file = ""
     # and their group names
     subjects_group_names = ""
+    # separate dataframe to show subjects and groups above headers
+    group_df = [pd.DataFrame({"headers":["Subject","Group"]})]
+    group_trials_dfs = []
+    group_idx = 0
     for el in all_dfs:
         subject,df = el
         subject_string = subject+","
@@ -4147,14 +4151,24 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
         # remove time
         del df['Time (sec)']
         original_cols = list(df.columns)
-        new_columns = []
-        for col in original_cols:
-            new_name = subject+"_"+col
-            new_columns.append(new_name)
-        # replace old column names with new that contain subject name
-        df.columns = new_columns
+        new_dfs_list = []
+        for i in range(len(original_cols)):
+            single_df = pd.DataFrame({i:[subject,group_names[group_idx]]})
+            new_dfs_list.append(single_df)
+        group_trials_dfs.append(pd.concat(new_dfs_list,axis=1))
+        group_idx +=1
+        # new_columns = []
+        # for col in original_cols:
+        #     new_name = subject+"_"+col
+        #     new_columns.append(new_name)
+        # # replace old column names with new that contain subject name
+        # df.columns = new_columns
         trials_dfs.append(df)
-
+    # add subjects and their group names 
+    group_df.extend(group_trials_dfs)
+    # create a single dataframe from that
+    group_header_df4csv = pd.concat(group_df,axis=1)
+    # create headers with group names for standard header
     for name in group_names:
         name2write = name+","
         subjects_group_names+=name2write
@@ -4219,6 +4233,7 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
     settings_df.to_csv(dump_file_path,header=False)            
     with open(dump_file_path,'a') as f:
         f.write("\n")
+    group_header_df4csv.to_csv(dump_file_path, header=False,index=False,mode='a')
     main_df.to_csv(dump_file_path, index=False,mode='a')
       
     # save plot
@@ -4246,6 +4261,10 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     # remember all subjects to include in file name
     subjects_end_file = ""
     subjects_group_names = ""
+    # separate dataframe to show subjects and groups above headers
+    group_df = [pd.DataFrame({"headers":["Subject","Group"]})]
+    group_trials_dfs = []
+    group_idx = 0
     for i in range(len(all_dfs)):
         subject,df = all_dfs[i]
 #        print(subject)
@@ -4264,23 +4283,34 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
         # remove time
         del df['Time (sec)']
         original_cols = list(df.columns)
-        new_columns = []
-        for col in original_cols:
-            new_name = subject+"_"+col
-            new_columns.append(new_name)
-        # replace old column names with new that contain subject name
-        df.columns = new_columns
+        new_dfs_list = []
+        for i in range(len(original_cols)):
+            single_df = pd.DataFrame({i:[subject,group_names[group_idx]]})
+            new_dfs_list.append(single_df)
+        group_trials_dfs.append(pd.concat(new_dfs_list,axis=1))
+        group_idx +=1
+        # new_columns = []
+        # for col in original_cols:
+        #     new_name = subject+"_"+col
+        #     new_columns.append(new_name)
+        # # replace old column names with new that contain subject name
+        # df.columns = new_columns
         # add to means list
         zscore_all_dfs.append(df) 
         # add each trial column to a separate list
-        for j in range(len(new_columns)):
-            trial_df = df[new_columns[j]]
+        for j in range(len(original_cols)):
+            trial_df = df[original_cols[j]]
             try:
                 zscores_by_trials[j].append(trial_df)
             except: # handle index out of range exception
                 # add empty list for trials
                zscores_by_trials.append([]) 
                zscores_by_trials[j].append(trial_df)
+    # add subjects and their group names 
+    group_df.extend(group_trials_dfs)
+    # create a single dataframe from that
+    group_header_df4csv = pd.concat(group_df,axis=1)
+    # create headers with group names for standard header
     for name in group_names:
         name2write = name+","
         subjects_group_names+=name2write
@@ -4372,6 +4402,7 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     settings_df.to_csv(dump_file_path,header=False)            
     with open(dump_file_path,'a') as f:
         f.write("\n")
+    group_header_df4csv.to_csv(dump_file_path, header=False,index=False,mode='a')
     raw_df.to_csv(dump_file_path, index=False,mode='a')
       
     # save plot
@@ -4404,6 +4435,10 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     # remember all subjects to include in file name
     subjects_end_file = ""
     subjects_group_names = ""
+    # separate dataframe to show subjects and groups above headers
+    group_df = [pd.DataFrame({"headers":["Subject","Group"]})]
+    group_trials_dfs = []
+    group_idx = 0
     for el in all_dfs:
         subject,df = el
 #        print(subject)
@@ -4422,24 +4457,34 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
         # remove time
         del df['Time (sec)']
         original_cols = list(df.columns)
-        new_columns = []
-        for col in original_cols:
-            new_name = subject+"_"+col
-            new_columns.append(new_name)
-        # replace old column names with new that contain subject name
-        df.columns = new_columns
+        new_dfs_list = []
+        for i in range(len(original_cols)):
+            single_df = pd.DataFrame({i:[subject,group_names[group_idx]]})
+            new_dfs_list.append(single_df)
+        group_trials_dfs.append(pd.concat(new_dfs_list,axis=1))
+        group_idx +=1
+        # new_columns = []
+        # for col in original_cols:
+        #     new_name = subject+"_"+col
+        #     new_columns.append(new_name)
+        # # replace old column names with new that contain subject name
+        # df.columns = new_columns
         # add to means list
         zscore_all_dfs.append(df)  
         # add each trial column to a separate list
-        for j in range(len(new_columns)):
-            trial_df = df[new_columns[j]]
+        for j in range(len(original_cols)):
+            trial_df = df[original_cols[j]]
             try:
                 zscores_by_trials[j].append(trial_df)
             except: # handle index out of range exception
                 # add empty list for trials
                zscores_by_trials.append([]) 
                zscores_by_trials[j].append(trial_df)
-
+    # add subjects and their group names 
+    group_df.extend(group_trials_dfs)
+    # create a single dataframe from that
+    group_header_df4csv = pd.concat(group_df,axis=1)
+    # create headers with group names for standard header
     for name in group_names:
         name2write = name+","
         subjects_group_names+=name2write
@@ -4533,6 +4578,7 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     settings_df.to_csv(dump_file_path,header=False)            
     with open(dump_file_path,'a') as f:
         f.write("\n")
+    group_header_df4csv.to_csv(dump_file_path, header=False,index=False,mode='a')
     raw_df.to_csv(dump_file_path, index=False,mode='a')
       
     # save plot
