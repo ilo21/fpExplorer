@@ -1844,9 +1844,9 @@ class PreviewContinuousWidget(QWidget):
         # read new subject's frequency and update suggested downsampled rate (only if it is different)
         new_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         if new_fs != self.current_fs:
-            self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            self.suggested_downsample_samples = int(int(new_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-            # self.settings[0]["entered_downsample"] = None
+            self.settings[0]["entered_downsample"] = round(new_fs/self.suggested_downsample_samples,2)
         if self.subject_comboBox.currentText() in self.group_names_dict:
             self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
         else:
@@ -2096,8 +2096,8 @@ class PreviewEventBasedWidget(QWidget):
         self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
         self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-        # self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
-        # self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
+        self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples,2)
+        self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
         # print("Current suggested downsample rate:",self.settings_dict[0]['downsample'])
         # keep trimmed data separately with latest trimming settings
         # first element of that list is beginning and end seconds to trim
@@ -2958,7 +2958,7 @@ class PreviewEventBasedWidget(QWidget):
             self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
             self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
-            # self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
+            self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
         if self.subject_comboBox.currentText() in self.group_names_dict:
             self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
         else:
@@ -3056,7 +3056,8 @@ class PreviewEventBasedWidget(QWidget):
                 evt_list = fpExplorer_functions.get_events(self.raw_data_dict[subject])
                 subjects_event_sets.append(set(evt_list))
             # find intersection of all subjects events (common events)  
-            common_events = list(set.intersection(*subjects_event_sets))    
+            common_events = list(set.intersection(*subjects_event_sets))  
+
         self.perievent_window = PeriEventOptionsWindow(self.parent_window,[self.options["subject"],
                                                                            self.events_from_current_subject,
                                                                            self.raw_data_dict[self.options["subject"]]],
@@ -3100,6 +3101,7 @@ class PreviewEventBasedWidget(QWidget):
             # read the trials radio buttons
             try:
                 self.current_trials = self.read_trials()
+                print("Trials read from previous")
                 if self.options["subject"] in self.trials_dict:
                     self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
                 else:
@@ -3126,6 +3128,7 @@ class PreviewEventBasedWidget(QWidget):
                 self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
                 self.current_trials_widget.deleteLater()
                 self.current_trials_widget = new_trials_widget
+                print("Trials not read from previous",self.current_trials)
         if self.batch_perievent == True:    
             if "perievent" in self.parent_window.batch_export_settings_dict:
                 if self.parent_window.batch_export_settings_dict["perievent"] == True:
@@ -3195,8 +3198,9 @@ class PreviewEventBasedWidget(QWidget):
                                         btn.setChecked(True)
                                         self.current_trials_layout.addWidget(btn)
                                         self.trials_button_group.append(btn)
-                                        self.current_trials.append(i+1)
+                                        # self.current_trials.append(i+1)
                                     self.trials_layout.addWidget(self.current_trials_widget)
+                                    print("Before plot raw",self.current_trials)
 
 
                                 # create subfolder with subject name
@@ -3379,7 +3383,7 @@ class PreviewEventBasedWidget(QWidget):
                                                     btn.setChecked(True)
                                                     self.current_trials_layout.addWidget(btn)
                                                     self.trials_button_group.append(btn)
-                                                    self.current_trials.append(i+1)
+                                                    # self.current_trials.append(i+1)
                                                 self.trials_layout.addWidget(self.current_trials_widget)
 
                                                 
@@ -4851,23 +4855,23 @@ class SettingsWindow(QMainWindow):
         self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
         self.min_downsampe_rate = round(self.current_fs*MIN_DOWNSAMPLE_PCT/100)
         self.max_downsample_rate = round(self.current_fs*MAX_DOWNSAMPLE_PCT/100)
-        # create a list of available sampling rates, display only divisible by 5
-        sampling_rates = [str(self.min_downsampe_rate)]
-        min_samples = round(self.current_fs/self.max_downsample_rate)
-        max_samples = round(self.current_fs/self.min_downsampe_rate)
-        first_samples = max_samples
-        next_samples = first_samples-1
-        diff = self.max_downsample_rate - self.min_downsampe_rate
-        for i in range(diff):
-            if next_samples >= min_samples:
-                new_sample_no = round(self.current_fs/(self.min_downsampe_rate+i))
-                if (new_sample_no != first_samples) and (self.min_downsampe_rate+i)%5==0:
-                    sampling_rates.append(str(self.min_downsampe_rate+i))
-                    first_samples = new_sample_no
-                    next_samples = first_samples-1
-                    # print(new_sample_no,self.min_downsampe_rate+i)
-                    if new_sample_no == self.suggested_downsample_samples:
-                        self.suggested_downsample_rate = self.min_downsampe_rate+i
+        # # create a list of available sampling rates, display only divisible by 5
+        # sampling_rates = [str(self.min_downsampe_rate)]
+        self.min_samples = round(self.current_fs/self.max_downsample_rate)
+        self.max_samples = round(self.current_fs/self.min_downsampe_rate)
+        # first_samples = max_samples
+        # next_samples = first_samples-1
+        # diff = self.max_downsample_rate - self.min_downsampe_rate
+        # for i in range(diff):
+        #     if next_samples >= min_samples:
+        #         new_sample_no = round(self.current_fs/(self.min_downsampe_rate+i))
+        #         if (new_sample_no != first_samples) and (self.min_downsampe_rate+i)%5==0:
+        #             sampling_rates.append(str(self.min_downsampe_rate+i))
+        #             first_samples = new_sample_no
+        #             next_samples = first_samples-1
+        #             # print(new_sample_no,self.min_downsampe_rate+i)
+        #             if new_sample_no == self.suggested_downsample_samples:
+        #                 self.suggested_downsample_rate = self.min_downsampe_rate+i
         
         # create widget with settings
         self.settings_main_widget = QWidget()
@@ -4878,16 +4882,17 @@ class SettingsWindow(QMainWindow):
         self.settings_layout = QFormLayout()
         self.settings_layout.setContentsMargins(10,10,10,10)
         self.settings_layout.setVerticalSpacing(15)
-        self.downsample_text = QComboBox()
-        self.downsample_text.addItems(sampling_rates)
-        if self.settings[0]["entered_downsample"] == None:
-            self.downsample_text.setCurrentText(str(self.suggested_downsample_rate))
-        else:
-            self.downsample_text.setCurrentText(str(self.settings[0]["entered_downsample"]))
+        # self.downsample_text = QComboBox()
+        self.downsample_text = QLineEdit(str(self.settings[0]["downsample"]))
+        # self.downsample_text.addItems(sampling_rates)
+        # if self.settings[0]["entered_downsample"] == None:
+        #     self.downsample_text.setCurrentText(str(self.suggested_downsample_rate))
+        # else:
+        #     self.downsample_text.setCurrentText(str(self.settings[0]["entered_downsample"]))
         self.downsample_text.setValidator(QtGui.QIntValidator())
-        # self.downsample_text.setToolTip("Integers from 2 to "+str(MAX_DOWNSAMPLE))
+        self.downsample_text.setToolTip("Integers from 2 to "+str(self.max_samples))
         # self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate)+"Hz")
-        downsample_label = "Downsample to lower sampling rate.\nOriginal: "+str(int(self.current_fs))+" Hz    Suggested: "+str(self.suggested_downsample_rate)+" Hz"
+        downsample_label = "Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs,2))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()),2)) +" Hz"
         self.settings_layout.addRow(downsample_label,self.downsample_text)
         self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
@@ -4931,12 +4936,13 @@ class SettingsWindow(QMainWindow):
     def read_user_settings(self):
         # reads all fields and sets new values for main app window
         # read downsampling settings
-        if int(self.downsample_text.currentText()) >= self.min_downsampe_rate and int(self.downsample_text.currentText()) <= self.max_downsample_rate: 
-            samples = round(self.current_fs/int(self.downsample_text.currentText()))
-            self.settings[0]["downsample"] = samples
-            self.settings[0]["entered_downsample"] = int(self.downsample_text.currentText())
+        if int(self.downsample_text.text()) >= self.min_samples and int(self.downsample_text.text()) <= self.max_samples: 
+            self.settings[0]["downsample"] = int(self.downsample_text.text())
+            # samples = round(self.current_fs/int(self.downsample_text.currentText()))
+            # self.settings[0]["downsample"] = samples
+            self.settings[0]["entered_downsample"] = round(self.current_fs/int(self.downsample_text.text()),2)
         else:
-            self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_downsampe_rate)+" and " + str(self.max_downsample_rate))
+            self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_samples)+" and " + str(self.max_samples))
         # don't loose filter fraq information
         if self.filter_cb.isChecked() == False:
             self.settings[0]["filter_fraction"] = DEFAULT_SMOOTH_FRAQ
@@ -5076,7 +5082,9 @@ class PeriEventOptionsWindow(QMainWindow):
         self.main_layout.addLayout(self.event_window_layout)
         
         self.plot_raw_btn = QPushButton("Preview All Events")
-        self.main_layout.addWidget(self.plot_raw_btn)
+    
+        if self.batch == False:
+            self.main_layout.addWidget(self.plot_raw_btn)
         
         # add that widget to the dock
         self.top_dock_widget.addWidget(self.main_widget)
