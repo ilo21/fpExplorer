@@ -63,11 +63,11 @@ STYLESHEET = \
 # how low in downsampling can go
 MAX_DOWNSAMPLE_PCT = 50
 # how high in downsampling can you go
-MIN_DOWNSAMPLE_PCT = 0.5
+MIN_DOWNSAMPLE_PCT = 1
 # default_samples to average 1% of original sampling rate
 DEFAULT_DOWNSAMPLE_PCT = 1
-MAX_SMOOTH_FRAQ = 100
-DEFAULT_SMOOTH_FRAQ = 1
+MAX_SMOOTH_WINDOW = 100
+DEFAULT_SMOOTH_WINDOW = 10
 DEFAULT_EXPORT_FOLDER = "_fpExplorerAnalysis"
 ###############################
 # CLASS FORM MAIN GUI WINDOW  #
@@ -105,7 +105,7 @@ class MyMainWidget(QMainWindow):
                               "normalization": "Standard Polynomial Fitting",
                               "show_norm_as":"dF/F (in % )",
                               "filter":False,
-                              "filter_fraction":DEFAULT_SMOOTH_FRAQ,
+                              "filter_window":DEFAULT_SMOOTH_WINDOW,
                               "subject":""}]
         # window with general settings
         self.settings_window = None
@@ -1216,11 +1216,14 @@ class PreviewContinuousWidget(QWidget):
         self.check_poly_btn = QPushButton("*Check Polynomial Fitting")
         self.check_btn_stylesheet = \
             ".QPushButton{\n" \
-            + "padding: 7px;\n" \
+            + "padding-left: 5px;\n" \
+            + "padding-right: 5px;\n" \
+            + "padding-top: 7px;\n"\
+            + "padding-bottom: 5px;\n" \
             + "margin-left:20px;\n" \
             + "margin-right:20px;\n" \
-            + "margin-top:10px;\n" \
-            + "margin-bottom:10px;\n" \
+            + "margin-top:5px;\n" \
+            + "margin-bottom:5px;\n" \
             + "font-size: normal;\n" \
             + "font-weight: normal;\n" \
             + "}" 
@@ -1381,14 +1384,14 @@ class PreviewContinuousWidget(QWidget):
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
                     self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
             # check what to show on the plot
             self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
             self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
@@ -1671,14 +1674,14 @@ class PreviewContinuousWidget(QWidget):
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
                 self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
     
                 
             # close popup window
@@ -1951,14 +1954,14 @@ class PreviewContinuousWidget(QWidget):
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_fraction"])
+                                                                                            self.settings_dict[0]["filter_window"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
                     self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_fraction"])
+                                                                                            self.settings_dict[0]["filter_window"])
                 if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
                     # create subfolder with subject name
                     subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
@@ -2286,9 +2289,12 @@ class PreviewEventBasedWidget(QWidget):
         self.check_poly_btn = QPushButton("*Check Polynomial Fitting")
         self.check_btn_stylesheet = \
             ".QPushButton{\n" \
-            + "padding: 7px;\n" \
-            + "margin-left:10px;\n" \
-            + "margin-right:10px;\n" \
+            + "padding-left: 5px;\n" \
+            + "padding-right: 5px;\n" \
+            + "padding-top: 7px;\n"\
+            + "padding-bottom: 5px;\n" \
+            + "margin-left:20px;\n" \
+            + "margin-right:20px;\n" \
             + "margin-top:5px;\n" \
             + "margin-bottom:5px;\n" \
             + "font-size: normal;\n" \
@@ -2539,14 +2545,14 @@ class PreviewEventBasedWidget(QWidget):
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
                     self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
             # check what to show on the plot
             self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
             self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
@@ -3230,6 +3236,7 @@ class PreviewEventBasedWidget(QWidget):
                                 if self.perievent_options_dict["plot_avg"] == True:
                                     fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                                   subject,
+                                                                  self.current_trials,
                                                                   self.perievent_options_dict,
                                                                   analyzed_perievent_dict,
                                                                   self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
@@ -3667,6 +3674,7 @@ class PreviewEventBasedWidget(QWidget):
                         and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
@@ -3721,6 +3729,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_avg_zscore(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3730,6 +3739,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_avg_zscore_trials(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3739,6 +3749,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_perievent_avg_auc(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict)
                     #zscore with error and auc
@@ -3764,6 +3775,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_all_perievent(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3773,6 +3785,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_all_perievent_zscore_trials(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
@@ -3800,6 +3813,7 @@ class PreviewEventBasedWidget(QWidget):
                     if self.perievent_options_dict["plot_avg"] == True:
                         fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
@@ -4158,14 +4172,14 @@ class PreviewEventBasedWidget(QWidget):
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
                 self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_fraction"])
+                                                                                        self.settings_dict[0]["filter_window"])
             # set event
             self.options["event"] = self.event_from_data_comboBox.currentText()
             self.options["event_name"] = self.event_name_text.text()
@@ -4303,14 +4317,14 @@ class PreviewEventBasedWidget(QWidget):
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_fraction"])
+                                                                                            self.settings_dict[0]["filter_window"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
                     self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
                                                                                             self.downsampled_dict[subject],
                                                                                             self.settings_dict[0]["show_norm_as"],
                                                                                             self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_fraction"])
+                                                                                            self.settings_dict[0]["filter_window"])
                 if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
                     # create subfolder with subject name
                     subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
@@ -4892,10 +4906,11 @@ class SettingsWindow(QMainWindow):
         self.downsample_text.setValidator(QtGui.QIntValidator())
         self.downsample_text.setToolTip("Integers from 2 to "+str(self.max_samples))
         # self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate)+"Hz")
-        self.downsample_label = QLabel("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+        self.downsample_label = QLabel("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz")
         self.settings_layout.addRow(self.downsample_label,self.downsample_text)
         self.update_rate_btn = QPushButton("Preview new rate")
-        self.settings_layout.addRow("",self.update_rate_btn)
+        self.after_rate_label = QLabel("After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+        self.settings_layout.addRow(self.after_rate_label,self.update_rate_btn)
         self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
         self.normalization_method_comboBox.setCurrentText(self.settings[0]["normalization"])
@@ -4904,13 +4919,14 @@ class SettingsWindow(QMainWindow):
         self.normalization_show_comboBox.addItems(["df/F ( in % )","Z-Score"])
         self.normalization_show_comboBox.setCurrentText(self.settings[0]["show_norm_as"])
         self.settings_layout.addRow("Show normalized data as",self.normalization_show_comboBox)
-        self.filter_cb = QCheckBox("Gaussian filter")
+        self.filter_cb = QCheckBox("Filter")
         self.filter_cb.setChecked(self.settings[0]["filter"])
-        self.settings_layout.addRow("Smooth data:",QLabel("The fraction (0-100%) of the data used when estimating each y-value:"))
+        self.settings_layout.addRow("Smooth data:",QLabel("The window around each sample (in samples):"))
         # The fraction of the data used when estimating each y-value
 #        self.smooth_text = QLineEdit(str(DEFAULT_SMOOTH_FRAQ*100))
-        self.smooth_text = QLineEdit(str(self.settings[0]["filter_fraction"]))
-        self.smooth_text.setToolTip("From 0 to "+str(MAX_SMOOTH_FRAQ))
+        self.smooth_text = QLineEdit(str(self.settings[0]["filter_window"]))
+        self.smooth_text.setToolTip("From 0 to "+str(MAX_SMOOTH_WINDOW))
+        self.smooth_text.setValidator(QtGui.QIntValidator())
         self.settings_layout.addRow(self.filter_cb,self.smooth_text)
         self.settings_main_layout.addLayout(self.settings_layout)
         self.save_settings_layout = QVBoxLayout()
@@ -4931,9 +4947,10 @@ class SettingsWindow(QMainWindow):
         self.update_rate_btn.clicked.connect(self.update_rate)
 
     def update_rate(self):
-        message = "After downsampling "+str(int(self.downsample_text.text()))+" times,\nyour new sampling rate will be "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz"
-        self.show_info_dialog(message)
-        self.downsample_label.setText("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+        # message = "After downsampling "+str(int(self.downsample_text.text()))+" times,\nyour new sampling rate will be "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz"
+        # self.show_info_dialog(message)
+        # self.downsample_label.setText("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+        self.after_rate_label.setText("After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
 
     def save_settings_btn_clicked(self):
         # read user settings
@@ -4955,16 +4972,16 @@ class SettingsWindow(QMainWindow):
             self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_samples)+" and " + str(self.max_samples))
         # don't loose filter fraq information
         if self.filter_cb.isChecked() == False:
-            self.settings[0]["filter_fraction"] = DEFAULT_SMOOTH_FRAQ
+            self.settings[0]["filter_window"] = DEFAULT_SMOOTH_WINDOW
         else:
             try:
-                fraq = float(self.smooth_text.text())
-                if fraq > 0 and fraq <= MAX_SMOOTH_FRAQ:
-                    self.settings[0]["filter_fraction"] = fraq
+                fraq = int(self.smooth_text.text())
+                if fraq > 0 and fraq <= MAX_SMOOTH_WINDOW:
+                    self.settings[0]["filter_window"] = fraq
                 else:
-                    self.show_info_dialog("Fraction of the data has to be between 0 and "+str(MAX_SMOOTH_FRAQ))
+                    self.show_info_dialog("Fraction of the data has to be between 0 and "+str(MAX_SMOOTH_WINDOW))
             except:
-                self.show_info_dialog("Fraction of the data has to be between 0 and "+str(MAX_SMOOTH_FRAQ))
+                self.show_info_dialog("Fraction of the data has to be between 0 and "+str(MAX_SMOOTH_WINDOW))
         # read normalization method
         self.settings[0]["normalization"] = self.normalization_method_comboBox.currentText()
         self.settings[0]["show_norm_as"] = self.normalization_show_comboBox.currentText()

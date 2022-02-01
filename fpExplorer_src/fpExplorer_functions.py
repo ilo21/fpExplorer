@@ -35,14 +35,14 @@ import math
 # https://pypi.org/project/lowess/
 #import lowess
 import pandas as pd
-from scipy.ndimage import gaussian_filter
+# from scipy.ndimage import gaussian_filter
 from scipy import stats
 from sklearn.metrics import auc
 #from loess.loess_1d import loess_1d
 #import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, filtfilt
 import os
 import copy
 
@@ -271,7 +271,7 @@ def downsample_tdt(signal_dict,downsample_n):
     return {"ts":ts_adjusted,"signal":GCaMP_data_means,"control":control_data_means}
 
 # Mulholland dff
-def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_fraq):
+def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_window):
     # debug
 #    a = np.array([1, 2, 3, 4])
 #    test_add = a + 1
@@ -292,7 +292,7 @@ def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_fraq):
     signal_arr =np.asarray(signal_dict["signal"])
     control_arr = np.asarray(signal_dict["control"])
     if smooth == True:
-        print("Start smoothing",smooth_fraq)
+        print("Start smoothing",smooth_window)
         # smooth data using lowess filter
         # https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html
         # https://github.com/djamesbarker/pMAT/blob/master/pMAT%20v1-2%20MATLAB/pmat.m
@@ -304,8 +304,15 @@ def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_fraq):
         # working lowess (super slow)
 #        signal_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(signal_arr), bandwidth=smooth_fraq, polynomialDegree=1)
 #        control_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(control_arr), bandwidth=smooth_fraq, polynomialDegree=1)
-        signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-        control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+###################################################################################
+# GAUSSIAN
+        # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+        # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+
+        a = 1
+        b = np.divide(np.ones((smooth_window,)), smooth_window)
+        control_arr = filtfilt(b, a, control_arr)
+        signal_arr = filtfilt(b, a, signal_arr)
         print("Done smoothing")
         
     # Before:
@@ -359,14 +366,14 @@ def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_fraq):
 
 
 # https://github.com/djamesbarker/pMAT
-def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_fraq):
+def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_window):
     # change lists to numpy array for calculations
     ts_arr = np.asarray(signal_dict["ts"])
     signal_arr =np.asarray(signal_dict["signal"])
     control_arr = np.asarray(signal_dict["control"])
     
     if smooth == True:
-        print("Start smoothing",smooth_fraq)
+        print("Start smoothing",smooth_window)
         # smooth data using lowess filter
         # https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html
         # https://github.com/djamesbarker/pMAT/blob/master/pMAT%20v1-2%20MATLAB/pmat.m
@@ -376,8 +383,15 @@ def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_fraq):
         # working lowess
 #        signal_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(signal_arr), bandwidth=smooth_fraq, polynomialDegree=1)
 #        control_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(control_arr), bandwidth=smooth_fraq, polynomialDegree=1)
-        signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-        control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+#############################################################################################################################
+# GAUSSIAN
+        # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+        # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+
+        a = 1
+        b = np.divide(np.ones((smooth_window,)), smooth_window)
+        control_arr = filtfilt(b, a, control_arr)
+        signal_arr = filtfilt(b, a, signal_arr)
         print("Done smoothing")
         
         
@@ -515,17 +529,21 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
     analyzed_perievent_dict["average"] = avg_data2plot_dict
     
     if settings_dict[0]["filter"] == True:
-        print("Start smoothing",settings_dict[0]["filter_fraction"])
+        print("Start smoothing",settings_dict[0]["filter_window"])
         # smooth data using lowess filter
         temp_signal_smoothed = []
         temp_control_smoothed = []
+        a = 1
+        b = np.divide(np.ones((settings_dict[0]["filter_window"],)), settings_dict[0]["filter_window"])
         for i in range(len(GCaMP_perievent_data)):
-            single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+            single_evt = filtfilt(b, a, GCaMP_perievent_data[i])
+            # single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_window"])
 #            single_evt = lowess.lowess(pd.Series(ts_signal4average), pd.Series(GCaMP_perievent_data[i]), 
 #                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
             temp_signal_smoothed.append(single_evt)
         for i in range(len(control_perievent_data)):
-            single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+            single_evt = filtfilt(b, a, control_perievent_data[i])
+            # single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_window"])
 #            single_evt = lowess.lowess(pd.Series(ts_control4average), pd.Series(control_perievent_data[i]), 
 #                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
             temp_control_smoothed.append(single_evt)
@@ -690,7 +708,7 @@ def get_settings_df(settings_dict):
     downsample_rate = settings_dict[0]["entered_downsample"]
     normalization = settings_dict[0]["normalization"]
     filter_on = settings_dict[0]["filter"]
-    filter_fraction = settings_dict[0]["filter_fraction"]
+    filter_window = settings_dict[0]["filter_window"]
     normalization_as = settings_dict[0]["show_norm_as"]
     subjects = settings_dict[0]["subject"]
     group = settings_dict[0]["subject_group_name"]
@@ -699,7 +717,7 @@ def get_settings_df(settings_dict):
                           "normalization":[normalization],
                           "normalization as": normalization_as,
                           "filter":[filter_on],
-                          "filter fraction":[filter_fraction],
+                          "filter window":[filter_window],
                           "subjects":subjects,
                           "subject group name":group})
     my_df_transposed = my_df.transpose()
@@ -1262,8 +1280,13 @@ def plot_normalized_alone(canvas,options_dict,normalized_dict,export,save_plots,
             file_name = file_beginning+"_"+options_dict["subject"]+"_normalized.csv"
         dump_file_path = os.path.join(dump_path,file_name)
         settings_df = get_settings_df(settings_dict)
+        if show_norm_as == 'Z-Score':
+            normalized_header = "signal (z-score)"
+        else:
+
+            normalized_header = "signal (%df/F)"
         raw_df= pd.DataFrame({"Time (sec)":ts_reset,
-                                 "normalized" : normalized_data})
+                                 normalized_header: normalized_data})
         settings_df.to_csv(dump_file_path,header=False)            
         with open(dump_file_path,'a') as f:
             f.write("\n")
@@ -1373,8 +1396,13 @@ def plot_normalized_alone_with_event(canvas,options_dict,normalized_dict,event_n
             file_name = file_beginning+"_"+options_dict["subject"]+"_normalized.csv"
         dump_file_path = os.path.join(dump_path,file_name)
         settings_df = get_settings_df(settings_dict)
+        if show_norm_as == 'Z-Score':
+            normalized_header = "signal (z-score)"
+        else:
+
+            normalized_header = "signal (%df/F)"
         raw_df= pd.DataFrame({"Time (sec)":ts_reset,
-                                 "normalized" : normalized_data})
+                                 normalized_header : normalized_data})
         settings_df.to_csv(dump_file_path,header=False)            
         with open(dump_file_path,'a') as f:
                 f.write("\n")
@@ -1963,17 +1991,21 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
     total_plots = len(GCaMP_perievent_data) # total number of events
     
     if settings_dict[0]["filter"] == True:
-        print("Start smoothing",settings_dict[0]["filter_fraction"])
-        # smooth data using lowess filter
+        print("Start smoothing",settings_dict[0]["filter_window"])
+        # smooth data using filter
         temp_signal_smoothed = []
         temp_control_smoothed = []
+        a = 1
+        b = np.divide(np.ones((settings_dict[0]["filter_window"],)), settings_dict[0]["filter_window"])
         for i in range(len(GCaMP_perievent_data)):
-            single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+            single_evt = filtfilt(b, a, GCaMP_perievent_data[i])
+            # single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
 #            single_evt = lowess.lowess(pd.Series(ts_signal4average), pd.Series(GCaMP_perievent_data[i]), 
 #                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
             temp_signal_smoothed.append(single_evt)
         for i in range(len(control_perievent_data)):
-            single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
+            single_evt = filtfilt(b, a, control_perievent_data[i])
+            # single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_fraction"])
 #            single_evt = lowess.lowess(pd.Series(ts_control4average), pd.Series(control_perievent_data[i]), 
 #                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
             temp_control_smoothed.append(single_evt)
@@ -2097,8 +2129,12 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
     dfs = []
     time_df = pd.DataFrame({"Time (sec)":ts1})
     dfs.append(time_df)
+    if show_norm_as == 'Z-Score':
+        norm_type = " (z-score)"
+    else:
+        norm_type = " (%df/F)"
     for i in range(total_plots):
-        header_signal = "Trial"+str(i+1)
+        header_signal = "Trial"+str(i+1)+norm_type
         signal_data = y_dff_all[i]
         df = pd.DataFrame({header_signal:signal_data})
         dfs.append(df)
@@ -2132,7 +2168,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         
     
 
-def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,signal_name,control_name,export_loc_data):
+def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,signal_name,control_name,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     dump_path,file_beginning = export_loc_data
@@ -2165,7 +2201,7 @@ def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_
     ax.fill_between(ts_control, control+std_control, control-std_control,
                       facecolor='red', alpha=0.1)
     
-    my_title = 'Average From All Trials. Subject: ' + subject
+    my_title = 'Average From '+ str(len(current_trials))+' Trials. Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
@@ -2184,7 +2220,9 @@ def plot_perievent_average_alone(canvas,subject,perievent_options_dict,analyzed_
         cont = "Control_"+control_name
         raw_df= pd.DataFrame({"Time (sec)":ts_signal,
                                  sig +' (mV)': signal, 
-                                 cont +' (mV)': control})
+                                 cont +' (mV)': control,
+                                 "Error_signal": std_signal,
+                                 "Error_control": std_control})
         settings_df = get_settings_df(settings_dict)
         settings_df.to_csv(dump_file_path,header=False)            
         with open(dump_file_path,'a') as f:
@@ -2398,7 +2436,7 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
         canvas.draw()
     return raw_df    
     
-def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     
     # get data to plot avg
@@ -2451,7 +2489,7 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
-    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
+    ax.set_title('Average From '+str(len(current_trials))+' Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -2479,7 +2517,7 @@ def plot_perievent_avg_zscore(canvas,subject,data, perievent_options_dict,analyz
                     hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     
     # get data to plot avg
@@ -2536,7 +2574,7 @@ def plot_perievent_avg_zscore_trials(canvas,subject,data, perievent_options_dict
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
-    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
+    ax.set_title('Average From '+str(len(current_trials))+' Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -2651,7 +2689,7 @@ def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_peri
         canvas.draw()
     
     
-def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_perievent_dict):       
+def plot_perievent_avg_auc(canvas,subject,current_trials,perievent_options_dict,analyzed_perievent_dict):       
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get avg data to plot
     ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
@@ -2701,7 +2739,7 @@ def plot_perievent_avg_auc(canvas,subject,perievent_options_dict,analyzed_periev
         
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
-    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
+    ax.set_title('Average From '+str(len(current_trials))+' Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -2886,7 +2924,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
                     hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get avg data to plot
     ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
@@ -2955,7 +2993,7 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
-    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
+    ax.set_title('Average From '+str(len(current_trials))+' Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -2994,7 +3032,7 @@ def plot_all_perievent(canvas,subject,data, perievent_options_dict,analyzed_peri
                     hspace=MY_HSPACE) 
     canvas.draw()
 
-def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get avg data to plot
     ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
@@ -3066,7 +3104,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,data, perievent_options_dict
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
-    ax.set_title('Average From All Trials',fontsize=TITLE_FONT_SIZE)
+    ax.set_title('Average From '+str(len(current_trials))+' Trials',fontsize=TITLE_FONT_SIZE)
     # hide top and right border
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -4763,7 +4801,7 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
 def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,control_name,subject_name,save_plot,dump_path):
     normalization = settings_dict["normalization"]
     smooth = settings_dict["filter"]
-    smooth_fraq = settings_dict["filter_fraction"]
+    smooth_window = settings_dict["filter_window"]
     
     # change lists to numpy array for calculations
     ts_arr = np.asarray(downsampled["ts"])
@@ -4775,9 +4813,13 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
     ts_reset = [i*total_seconds/len(ts_arr) for i in range(len(ts_arr))]
     if normalization == 'Standard Polynomial Fitting':        
         if smooth == True:
-            print("Start smoothing",smooth_fraq)
-            signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-            control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+            print("Start smoothing",smooth_window)
+            a = 1
+            b = np.divide(np.ones((smooth_window,)), smooth_window)
+            control_arr = filtfilt(b, a, control_arr)
+            signal_arr = filtfilt(b, a, signal_arr)
+            # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+            # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
             print("Done smoothing")
             
         # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
@@ -4822,9 +4864,13 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
     
     if normalization == 'Modified Polynomial Fitting':
         if smooth == True:
-            print("Start smoothing",smooth_fraq)
-            signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-            control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
+            print("Start smoothing",smooth_window)
+            a = 1
+            b = np.divide(np.ones((smooth_window,)), smooth_window)
+            control_arr = filtfilt(b, a, control_arr)
+            signal_arr = filtfilt(b, a, signal_arr)
+            # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
+            # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
             print("Done smoothing")
             
         # fit time axis to the 465nm stream  
