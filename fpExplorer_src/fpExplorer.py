@@ -1625,6 +1625,11 @@ class PreviewContinuousWidget(QWidget):
         else: # if it is not for batch analysis
             # if user entered path or if path was already there, update
             if len(export_path) > 0:
+                try: 
+                    os.mkdir(export_path)
+                except:
+                    if not os.path.exists(export_path):
+                        self.show_info_dialog("Problem creating subfolder")
                 self.export_path = export_path
                 self.export_begining = file_begin
             # if subject was not previewed yet, read data and add to dict
@@ -4116,7 +4121,7 @@ class PreviewEventBasedWidget(QWidget):
         else: # if it is not for batch analysis
             
             # if user entered path or if path was already there, update
-            if len(export_path) > 0 and os.path.split(export_path)[1]==DEFAULT_EXPORT_FOLDER:
+            if len(export_path) > 0 or os.path.split(export_path)[1]==DEFAULT_EXPORT_FOLDER:
                 try: 
                     os.mkdir(export_path)
                 except:
@@ -4676,17 +4681,17 @@ class PeakSettingsWindow(QMainWindow):
             self.export_loc_layout = QFormLayout()
             self.select_folder_btn = QPushButton(" Select Export Folder ")
             self.selected_folder_text = QLineEdit("")
-            # always start with default npath
-#            if len(self.export_path) > 0:
-#                self.selected_folder_text.setText(self.export_path)
-#            else: # create default subfolder
+            # start with default path
             default_path = os.path.join(self.parent_window.preview_params[1][self.subject_name],DEFAULT_EXPORT_FOLDER)
-            self.selected_folder_text.setText(default_path)
+            if len(self.export_path) > 0:
+                self.selected_folder_text.setText(self.export_path)
+            else:
+                self.selected_folder_text.setText(default_path)
             
             self.export_loc_layout.addRow(self.select_folder_btn,self.selected_folder_text)
             self.suggested_file_beginning_text = QLineEdit(self.subject_name)
-#            if len(self.export_file_begin) > 0:
-#                self.suggested_file_beginning_text.setText(self.export_file_begin)
+            # if len(self.export_file_begin) > 0:
+            #    self.suggested_file_beginning_text.setText(self.export_file_begin)
             self.export_loc_layout.addRow("Suggested file name beginning:",self.suggested_file_beginning_text)
             self.bottom_layout.addLayout(self.export_loc_layout)
             
