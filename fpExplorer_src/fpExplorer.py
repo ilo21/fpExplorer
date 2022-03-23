@@ -357,9 +357,12 @@ class MyMainWidget(QMainWindow):
        
         # ask user for signal and control channels
         data = fpExplorer_functions.get_raw_data(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]])
-        self.signal_control_window = SignalControlWindow(self,fpExplorer_functions.get_channel_names(data))
-        self.signal_control_window.got_signal_name_sig.connect(self.got_signal_name_sig)
-        self.signal_control_window.show()    
+        if data != None:
+            self.signal_control_window = SignalControlWindow(self,fpExplorer_functions.get_channel_names(data))
+            self.signal_control_window.got_signal_name_sig.connect(self.got_signal_name_sig)
+            self.signal_control_window.show()   
+        else:
+            self.show_info_dialog("Could not read subject "+self.select_data_window_content[0]["subject_names"][0]+" file.\nTry excluding it from your data folder.") 
             
         
     @pyqtSlot() 
@@ -367,7 +370,7 @@ class MyMainWidget(QMainWindow):
     # disables buttons 
     def got_select_data_window_open(self):
         self.disable_buttons()
-#        QApplication.processEvents()
+
         
     @pyqtSlot()
     # receives signal that select folder window is closed
@@ -375,7 +378,7 @@ class MyMainWidget(QMainWindow):
     def got_select_data_window_closed(self):
         print("enable")
         self.enable_all_buttons()
-#        QApplication.processEvents()
+
         
     @pyqtSlot(list) 
     # receives a list with dictionary of signal and control channel names
@@ -417,14 +420,22 @@ class RunOnBatchWindow(QMainWindow):
         super(RunOnBatchWindow, self).__init__()
         self.setWindowTitle("Run On Batch")
         self.setWindowIcon(QtGui.QIcon(ICO))
-        self.resize(650,350)
+        self.resize(800,400)
         self.parent_window = parent_window
         self.parent_window.app_closed.connect(self.exit_app)
         self.preview_window = prewiew_window
         # subject:subject group name dictionary
         self.group_names_dict = self.preview_window.group_names_dict
-        
-        self.all_paths_dict = batch_params[0]
+        # readjust paths to possibly updated subject list (if some subject files were corrupted)
+        if self.parent_window.select_data_window_content[0]["subject_experiment"] == True:
+            self.all_paths_dict = fpExplorer_functions.create_list_of_paths(self.parent_window.select_data_window_content[0]["main_path"],
+                                                                   self.preview_window.preview_init_params[0][0]["subject_names"],
+                                                                   self.parent_window.select_data_window_content[0]["selected_experiment"])
+        elif self.parent_window.select_data_window_content[0]["experiment_subject"] == True:
+            valid_subjects,self.all_paths_dict = fpExplorer_functions.create_list_of_paths_experiment_subjects(self.parent_window.select_data_window_content[0]["main_path"],
+                                                                    self.preview_window.preview_init_params[0][0]["subject_names"],
+                                                                    self.parent_window.select_data_window_content[0]["selected_experiment"])
+        # self.all_paths_dict = batch_params[0]
         self.pre_selected_subjects = batch_params[1]
         self.batch_params_dict = batch_params[2]
         self.selected_subjects = []
@@ -506,6 +517,7 @@ class RunOnBatchWindow(QMainWindow):
         
 ##########################
         # AVAILABLE SUBJECTS
+        self.scroll_area = QScrollArea()  
         self.selected_layout = QVBoxLayout()
         self.selected_widget = QWidget()
         self.subjets_layout = QFormLayout() 
@@ -583,7 +595,9 @@ class RunOnBatchWindow(QMainWindow):
         self.trim_dock_widget.addWidget(self.trimming_widget)
         
         self.selected_widget.setLayout(self.selected_layout)
-        self.selected_dock_widget.addWidget(self.selected_widget)
+        # self.selected_dock_widget.addWidget(self.selected_widget)
+        self.scroll_area.setWidget(self.selected_widget)
+        self.selected_dock_widget.addWidget(self.scroll_area)
 
         self.options_widget.setLayout(self.options_layout)
         self.options_dock_widget.addWidget(self.options_widget)
@@ -669,8 +683,15 @@ class RunOnBatchWindow(QMainWindow):
         # if path is empty or no subjects were selected set ok to False
         if len(self.dump_path) == 0 or len(self.selected_subjects) == 0:
             ok = False
+        # if not analysis type selected or no group or single subject
+        # do not validate
         if ((normalized==False and perievent==False and spikes==False) 
             or (export_for_single_subjects==False and export_group_data==False)):
+            ok = False
+        # if normalized or spikes selected but not perievent
+        # and user selected only group, do not validate
+        if (((normalized==True or spikes==True) 
+                and perievent==False) and (export_for_single_subjects==False and export_group_data==True)):
             ok = False
                         
         return ok
@@ -1122,8 +1143,6 @@ class PreviewContinuousWidget(QWidget):
         self.recent_peak_values = []
         # if user wanted to run spikes on batch
         self.batch_peaks = False
-        # all normalized datafor current batch analysis
-        self.all_normalized = []
         
         self.disable_buttons_signal.connect(self.disable_buttons)
         self.enable_buttons_signal.connect(self.enable_buttons)
@@ -1204,7 +1223,7 @@ class PreviewContinuousWidget(QWidget):
         self.options_main_layout.addLayout(self.options_layout)
         
         # add apply button
-        self.apply_btn = QPushButton("Plot")
+        self.apply_btn = QPushButton("Plot/Apply")
         self.options_main_layout.addWidget(self.apply_btn)
         # add find peaks button
         self.find_peaks_btn = QPushButton("Spike Detection")
@@ -1315,6 +1334,8 @@ class PreviewContinuousWidget(QWidget):
         if self.options["subject"] not in self.raw_data_dict:
             self.get_raw_data(self.options["subject"],
                           self.parent_window.preview_params[1][self.options["subject"]])
+            if self.raw_data_dict[self.options["subject"]] == None:
+                return False
         self.options["subject_group_name"] = self.subject_group_name.text()
         # update value
         self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
@@ -1575,46 +1596,37 @@ class PreviewContinuousWidget(QWidget):
                 if self.parent_window.batch_export_settings_dict["spikes"] == True:
                     if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
                         for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
-                            # create subfolder with subject name
-                            subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                            if not os.path.exists(subject_subfolder):
-                                try:
-                                    os.mkdir(subject_subfolder)
+                            if self.raw_data_dict[subject] != None:
+                                # create subfolder with subject name
+                                subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                                if not os.path.exists(subject_subfolder):
+                                    try:
+                                        os.mkdir(subject_subfolder)
+                                        try:
+                                            fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                                                self.recent_peak_values,
+                                                                self.spikes_export,
+                                                                self.save_plots,
+                                                                self.group_names_dict[subject],
+                                                                self.settings_dict,
+                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                        except:
+                                            self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                                    except:
+                                        self.show_info_dialog("Problem creating subfolder")
+                                else: # if subfolder already exists
                                     try:
                                         fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
-                                                            self.recent_peak_values,
-                                                            self.spikes_export,
-                                                            self.save_plots,
-                                                            self.group_names_dict[subject],
-                                                            self.settings_dict,
-                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                                                self.recent_peak_values,
+                                                                self.spikes_export,
+                                                                self.save_plots,
+                                                                self.group_names_dict[subject],
+                                                                self.settings_dict,
+                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                     except:
                                         self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                                except:
-                                    self.show_info_dialog("Problem creating subfolder")
-                            else: # if subfolder already exists
-                                try:
-                                    fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
-                                                            self.recent_peak_values,
-                                                            self.spikes_export,
-                                                            self.save_plots,
-                                                            self.group_names_dict[subject],
-                                                            self.settings_dict,
-                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                except:
-                                    self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
                     if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
                         pass # single subjects only
-                        # spikes for averaged signal
-#                        try:
-                        # fpExplorer_functions.get_batch_spikes(self.canvas,
-                        #                                        self.recent_peak_values,
-                        #                                        self.all_normalized,
-                        #                                        self.settings_dict,
-                        #                                        self.parent_window.batch_export_settings_dict["spikes"],
-                        #                                        (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-#                        except:
-#                            self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
                 # close popup window
                 self.peak_options_window.close()
                 self.reset_export_settings()
@@ -1795,6 +1807,16 @@ class PreviewContinuousWidget(QWidget):
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
         self.raw_data_dict[subject] = fpExplorer_functions.get_raw_data(my_path)
+        if self.raw_data_dict[subject] == None:
+            # remove from combo box
+            index = self.subject_comboBox.findText(subject)  # find the index of text
+            self.subject_comboBox.removeItem(index)  # remove item from index
+            # and remove from available subjects
+            self.preview_init_params[0][0]["subject_names"].remove(subject)
+            self.show_info_dialog("Problem reading subject's "+subject+" file.\nSubject will not be available for the analysis.")
+            # # clear previous figure
+            # self.canvas.fig.clf()
+            # self.canvas.draw()
         
     # when app starts plot just raw data  
     def plot_bare_raw_data(self,subject,raw_data):
@@ -1834,6 +1856,12 @@ class PreviewContinuousWidget(QWidget):
             if self.options["subject"] in self.parent_window.selected_subjects:
                self.parent_window.selected_subjects.remove(self.options["subject"]) 
         self.check_trimming()
+        # check if the subject was previewed before
+        if self.options["subject"] not in self.raw_data_dict:
+            self.get_raw_data(self.options["subject"],
+                          self.parent_window.preview_params[1][self.options["subject"]])
+            # if self.raw_data_dict[self.options["subject"]] == None:
+            #     return
         # set include to actual status
         if self.subject_comboBox.currentText() in self.parent_window.selected_subjects:
             self.include_cb.setChecked(True)
@@ -1936,98 +1964,89 @@ class PreviewContinuousWidget(QWidget):
                 if subject not in self.raw_data_dict:
 #                    print(self.preview_init_params[1])
                     self.get_raw_data(subject, self.parent_window.preview_params[1][subject])
+                if self.raw_data_dict[subject] != None:   
+                    # trim to batch export settings
+                    # key is the subject name, value is a list
+                    # first element of that list is beginning and end seconds to trim
+                    # second element is trimmed data dict ts:timestamps, signal:data,control:data
+                    self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
+                                                                                    self.preview_init_params[0][0]["signal_name"],
+                                                                                    self.preview_init_params[0][0]["control_name"],
+                                                                                    new_trim_start,
+                                                                                    new_trim_end
+                                                                                    )]
                     
-                # trim to batch export settings
-                # key is the subject name, value is a list
-                # first element of that list is beginning and end seconds to trim
-                # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
-                                                                                  self.preview_init_params[0][0]["signal_name"],
-                                                                                  self.preview_init_params[0][0]["control_name"],
-                                                                                  new_trim_start,
-                                                                                  new_trim_end
-                                                                                  )]
-                
-                # always downsample first before normalizing
-                # downsample
-                self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
-                                                                             self.settings_dict[0]["downsample"])
-                # check settings for method to normalize
-                if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
-                    # normalize from downsampled
-                    self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
-                                                                                            self.downsampled_dict[subject],
-                                                                                            self.settings_dict[0]["show_norm_as"],
-                                                                                            self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_window"])
-                if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
-                    # normalize from downsampled
-                    self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
-                                                                                            self.downsampled_dict[subject],
-                                                                                            self.settings_dict[0]["show_norm_as"],
-                                                                                            self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_window"])
-                if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
-                    # create subfolder with subject name
-                    subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                    if not os.path.exists(subject_subfolder):
-                        try:
-                            os.mkdir(subject_subfolder)
-                            # save also polynomial fitting by default
+                    # always downsample first before normalizing
+                    # downsample
+                    self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
+                                                                                self.settings_dict[0]["downsample"])
+                    # check settings for method to normalize
+                    if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
+                        # normalize from downsampled
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
+                                                                                                self.downsampled_dict[subject],
+                                                                                                self.settings_dict[0]["show_norm_as"],
+                                                                                                self.settings_dict[0]["filter"],
+                                                                                                self.settings_dict[0]["filter_window"])
+                    if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
+                        # normalize from downsampled
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
+                                                                                                self.downsampled_dict[subject],
+                                                                                                self.settings_dict[0]["show_norm_as"],
+                                                                                                self.settings_dict[0]["filter"],
+                                                                                                self.settings_dict[0]["filter_window"])
+                    if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
+                        # create subfolder with subject name
+                        subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                        if not os.path.exists(subject_subfolder):
+                            try:
+                                os.mkdir(subject_subfolder)
+                                # save also polynomial fitting by default
+                                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                        self.settings_dict[0], 
+                                                        self.downsampled_dict[subject],
+                                                        self.preview_init_params[0][0]["signal_name"],
+                                                        self.preview_init_params[0][0]["control_name"],
+                                                        subject,
+                                                        True,
+                                                        subject_subfolder)
+                                
+                                if self.parent_window.batch_export_settings_dict["normalized"] == True:
+                                    fpExplorer_functions.plot_normalized_alone(self.canvas,
+                                                                self.batch_options_dict,
+                                                                self.normalized_dict[subject],
+                                                                True,
+                                                                True,
+                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
+                                                                self.settings_dict)
+                            except:
+                                self.show_info_dialog("Problem creating subfolder")
+                        else: # if subfolder already folder exists
                             fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                                    self.settings_dict[0], 
-                                                    self.downsampled_dict[subject],
-                                                    self.preview_init_params[0][0]["signal_name"],
-                                                    self.preview_init_params[0][0]["control_name"],
-                                                    subject,
-                                                    True,
-                                                    subject_subfolder)
-                            
+                                                        self.settings_dict[0], 
+                                                        self.downsampled_dict[subject],
+                                                        self.preview_init_params[0][0]["signal_name"],
+                                                        self.preview_init_params[0][0]["control_name"],
+                                                        subject,
+                                                        True,
+                                                        subject_subfolder)
+                                
                             if self.parent_window.batch_export_settings_dict["normalized"] == True:
                                 fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                            self.batch_options_dict,
-                                                            self.normalized_dict[subject],
-                                                            True,
-                                                            True,
-                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
-                                                            self.settings_dict)
-                        except:
-                            self.show_info_dialog("Problem creating subfolder")
-                    else: # if subfolder already folder exists
-                        fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                                    self.settings_dict[0], 
-                                                    self.downsampled_dict[subject],
-                                                    self.preview_init_params[0][0]["signal_name"],
-                                                    self.preview_init_params[0][0]["control_name"],
-                                                    subject,
-                                                    True,
-                                                    subject_subfolder)
-                            
-                        if self.parent_window.batch_export_settings_dict["normalized"] == True:
-                            fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                            self.batch_options_dict,
-                                                            self.normalized_dict[subject],
-                                                            True,
-                                                            True,
-                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
-                                                            self.settings_dict)
-                    if self.parent_window.batch_export_settings_dict["spikes"] == True:
-                        self.spikes_export = True
-                        self.save_plots = True
+                                                                self.batch_options_dict,
+                                                                self.normalized_dict[subject],
+                                                                True,
+                                                                True,
+                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
+                                                                self.settings_dict)
+                        if self.parent_window.batch_export_settings_dict["spikes"] == True:
+                            self.spikes_export = True
+                            self.save_plots = True
                     
             ### end for loop for each subject   
             if self.parent_window.batch_export_settings_dict["export_group_data"] == True: 
-                # average signal
-                # create a list of all normalized signals
-                # self.all_normalized = [(subject,self.normalized_dict[subject]) for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]]
-    #            print(all_normalized)
                 if self.parent_window.batch_export_settings_dict["normalized"] == True:
                     pass # only for single subjects
-                    # fpExplorer_functions.get_batch_normalized(self.canvas,
-                    #                                    self.all_normalized,
-                    #                                    self.settings_dict,
-                    #                                    self.parent_window.batch_export_settings_dict["normalized"],
-                    #                                    (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                 if self.parent_window.batch_export_settings_dict["spikes"] == True:
                     # set batch peaks to true
                     self.batch_peaks = True
@@ -2040,9 +2059,6 @@ class PreviewContinuousWidget(QWidget):
                 self.done_batch_processing_sig.emit()
                 self.enable_buttons_signal.emit()
                 
-#        print("Done batch processing")
-#        self.done_batch_processing_sig.emit()
-#        self.enable_buttons_signal.emit()
         
     # show info popup
     def show_info_dialog(self, text):
@@ -2158,8 +2174,6 @@ class PreviewEventBasedWidget(QWidget):
         self.open_spikes_later = False
         # if user wanted to run spikes on batch
         self.batch_peaks = False
-        # all normalized datafor current batch analysis
-        self.all_normalized = []
         # if user wanted to run perievent on batch
         self.batch_perievent = False
         
@@ -2279,7 +2293,7 @@ class PreviewEventBasedWidget(QWidget):
         self.options_main_layout.addLayout(self.options_layout)
         
         # add apply button
-        self.apply_btn = QPushButton("Plot")
+        self.apply_btn = QPushButton("Plot/Apply")
         self.options_main_layout.addWidget(self.apply_btn)
         # add perievent button
         self.perievent_analysis_btn = QPushButton("Perievent analysis")
@@ -2444,6 +2458,8 @@ class PreviewEventBasedWidget(QWidget):
         if self.options["subject"] not in self.raw_data_dict:
             self.get_raw_data(self.options["subject"],
                           self.parent_window.preview_params[1][self.options["subject"]])
+        if self.raw_data_dict[self.options["subject"]] == None:
+            return False
         # get trimming settings
         # check what method was selected
         if self.trim_beginning_select.currentText() == "Trim first seconds":
@@ -2848,6 +2864,8 @@ class PreviewEventBasedWidget(QWidget):
         if self.options["subject"] not in self.raw_data_dict:
             self.get_raw_data(self.options["subject"],
                           self.parent_window.preview_params[1][self.options["subject"]])
+            if self.raw_data_dict[self.options["subject"]] == None:
+                return
         # check events for new data
         # first check if there are the same events
         previous_events = self.events_from_current_subject
@@ -2945,8 +2963,6 @@ class PreviewEventBasedWidget(QWidget):
         else:
             if self.options["subject"] in self.parent_window.selected_subjects:
                self.parent_window.selected_subjects.remove(self.options["subject"]) 
-#        self.check_trimming()
-#        self.read_options()
         self.check_events()
         self.check_trimming()
         # set include to actual status
@@ -2957,6 +2973,8 @@ class PreviewEventBasedWidget(QWidget):
             
     def on_subject_change(self):
         self.options_pre_check()
+        if self.raw_data_dict[self.options["subject"]] == None:
+            return
         # update last timestamp
         # get last timestamp in seconds
         self.last_raw_ts = fpExplorer_functions.get_last_timestamp(
@@ -3064,8 +3082,9 @@ class PreviewEventBasedWidget(QWidget):
             for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
                 if subject not in self.raw_data_dict:
                     self.get_raw_data(subject,self.parent_window.preview_params[1][subject])
-                evt_list = fpExplorer_functions.get_events(self.raw_data_dict[subject])
-                subjects_event_sets.append(set(evt_list))
+                if self.raw_data_dict[subject] != None:
+                    evt_list = fpExplorer_functions.get_events(self.raw_data_dict[subject])
+                    subjects_event_sets.append(set(evt_list))
             # find intersection of all subjects events (common events)  
             common_events = list(set.intersection(*subjects_event_sets))  
 
@@ -3081,6 +3100,14 @@ class PreviewEventBasedWidget(QWidget):
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
         self.raw_data_dict[subject] = fpExplorer_functions.get_raw_data(my_path)
+        if self.raw_data_dict[subject] == None:
+            # remove from combo box
+            index = self.subject_comboBox.findText(subject)  # find the index of text
+            self.subject_comboBox.removeItem(index)  # remove item from index
+            # and remove from available subjects
+            self.preview_init_params[0][0]["subject_names"].remove(subject)
+            self.show_info_dialog("Problem reading subject's "+subject+" file.\nSubject will not be available for the analysis.")
+            
     # when app starts plot just raw data  
     def plot_bare_raw_data(self,subject,raw_data):
         fpExplorer_functions.plot_raw(self.canvas,
@@ -3156,15 +3183,16 @@ class PreviewEventBasedWidget(QWidget):
                             if subject not in self.raw_data_dict: # if data has not beed read yet
                                 self.get_raw_data(subject,
                                                   self.parent_window.preview_params[1][subject])
-                                # if subject data has not been trimmed
-                                # if it was not trimmed yet, add to dictionary with zero trimming
-                                self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
-                                                                                                            self.preview_init_params[0][0]["signal_name"],
-                                                                                                            self.preview_init_params[0][0]["control_name"],
-                                                                                                            0,
-                                                                                                            0
-                                                                                                            )]
-                            if subject not in self.trimmed_raw_data_dict: # if raw data read but not trimmed assume trimming 0
+                                if self.raw_data_dict[subject] != None:
+                                    # if subject data has not been trimmed
+                                    # if it was not trimmed yet, add to dictionary with zero trimming
+                                    self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
+                                                                                                                self.preview_init_params[0][0]["signal_name"],
+                                                                                                                self.preview_init_params[0][0]["control_name"],
+                                                                                                                0,
+                                                                                                                0
+                                                                                                                )]
+                            if subject not in self.trimmed_raw_data_dict and self.raw_data_dict[subject] != None: # if raw data read but not trimmed assume trimming 0
                                 # key is the subject name, value is a list
                                 # first element of that list is beginning and end seconds to trim
                                 # second element is trimmed data dict ts:timestamps, signal:data,control:data
@@ -3174,125 +3202,126 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                             0,
                                                                                                             0
                                                                                                             )]
-                            # filter around trimmed
-                            data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],
-                                                    self.perievent_options_dict,
-                                                    self.settings_dict,
-                                                    self.preview_init_params[0][0]["signal_name"],
-                                                    self.preview_init_params[0][0]["control_name"])
-                            # if run on batch was selected, select all trials by default
-                            self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
-                            # analyze
-                            analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
-                                                                                self.current_trials,
-                                                                               self.perievent_options_dict,
-                                                                               self.settings_dict,
-                                                                               self.preview_init_params[0][0]["signal_name"],
-                                                                               self.preview_init_params[0][0]["control_name"])
-                            # check if there is any data to plot 
-                            if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
-                                # show buttons of available trials
-                                self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
-                                if self.current_perievent == None:
-                                    self.current_perievent = self.perievent_options_dict['event']
-                                    # add trials to view
-                                    self.current_trials_layout = QHBoxLayout()
-                                    self.current_trials_widget.setLayout(self.current_trials_layout)
-                                    text_label = QLabel("Include Trials:")
-                                    self.current_trials_layout.addWidget(text_label)
-                                    for i in range(self.total_current_trials):
-                                        # create btn
-                                        # add button to a group
-                                        # add to list
-                                        # add to layout
-                                        btn = QCheckBox(str(i+1))
-                                        btn.setChecked(True)
-                                        self.current_trials_layout.addWidget(btn)
-                                        self.trials_button_group.append(btn)
-                                        # self.current_trials.append(i+1)
-                                    self.trials_layout.addWidget(self.current_trials_widget)
-                                    print("Before plot raw",self.current_trials)
+                            if self.raw_data_dict[subject] != None:
+                                # filter around trimmed
+                                data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],
+                                                        self.perievent_options_dict,
+                                                        self.settings_dict,
+                                                        self.preview_init_params[0][0]["signal_name"],
+                                                        self.preview_init_params[0][0]["control_name"])
+                                # if run on batch was selected, select all trials by default
+                                self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                # analyze
+                                analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                    self.current_trials,
+                                                                                self.perievent_options_dict,
+                                                                                self.settings_dict,
+                                                                                self.preview_init_params[0][0]["signal_name"],
+                                                                                self.preview_init_params[0][0]["control_name"])
+                                # check if there is any data to plot 
+                                if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
+                                    # show buttons of available trials
+                                    self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                                    if self.current_perievent == None:
+                                        self.current_perievent = self.perievent_options_dict['event']
+                                        # add trials to view
+                                        self.current_trials_layout = QHBoxLayout()
+                                        self.current_trials_widget.setLayout(self.current_trials_layout)
+                                        text_label = QLabel("Include Trials:")
+                                        self.current_trials_layout.addWidget(text_label)
+                                        for i in range(self.total_current_trials):
+                                            # create btn
+                                            # add button to a group
+                                            # add to list
+                                            # add to layout
+                                            btn = QCheckBox(str(i+1))
+                                            btn.setChecked(True)
+                                            self.current_trials_layout.addWidget(btn)
+                                            self.trials_button_group.append(btn)
+                                            # self.current_trials.append(i+1)
+                                        self.trials_layout.addWidget(self.current_trials_widget)
+                                        print("Before plot raw",self.current_trials)
 
 
-                                # create subfolder with subject name
-                                subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                                if not os.path.exists(subject_subfolder):
-                                    try:
-                                        os.mkdir(subject_subfolder)
-                                    except:
-                                        self.show_info_dialog("Problem creating subfolder")
-                                        # save under main folder then
-                                        subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
-                                # plot and save normalized preview
-                                all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
-                                                      subject,
-                                                      data,
-                                                      self.current_trials,
-                                                      self.perievent_options_dict,
-                                                      self.settings_dict,
-                                                      self.preview_init_params[0][0]["signal_name"],
-                                                      self.preview_init_params[0][0]["control_name"],
-                                                      self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                      self.save_plots,
-                                                      self.group_names_dict[subject],
-                                                      (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))  
-                                if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
-                                    all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
-                                if self.perievent_options_dict["plot_avg"] == True:
-                                    fpExplorer_functions.plot_perievent_average_alone(self.canvas,
-                                                                  subject,
-                                                                  self.current_trials,
-                                                                  self.perievent_options_dict,
-                                                                  analyzed_perievent_dict,
-                                                                  self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                  self.save_plots,
-                                                                  self.group_names_dict[subject],
-                                                                  self.settings_dict,
-                                                                  self.preview_init_params[0][0]["signal_name"],
-                                                                  self.preview_init_params[0][0]["control_name"],
-                                                                  (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
-                                    or self.perievent_options_dict["plot_auc"] == True): # we need zcsore data for auc
-                                    if self.perievent_options_dict["plot_zscore"] == True:
-                                        z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
-                                                                      subject,
-                                                                      data,
-                                                                      self.perievent_options_dict,
-                                                                      analyzed_perievent_dict,
-                                                                      self.preview_init_params[0][0]["signal_name"],
-                                                                      self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                      self.save_plots,
-                                                                      self.group_names_dict[subject],
-                                                                      self.settings_dict,
-                                                                      (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                    else:
-#                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                        z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
-                                                                      subject,
-                                                                      data,
-                                                                      self.perievent_options_dict,
-                                                                      analyzed_perievent_dict,
-                                                                      self.preview_init_params[0][0]["signal_name"],
-                                                                      self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                      self.save_plots,
-                                                                      self.group_names_dict[subject],
-                                                                      self.settings_dict,
-                                                                      (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                    if self.parent_window.batch_export_settings_dict["export_group_data"] == True: # save for later in order to not repeat tasks
-                                        all_subjects_zscored_dfs.append((subject,z_score_df))
-                                if self.perievent_options_dict["plot_auc"] == True:
-                                    fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
-                                                                  subject,
-                                                                  self.perievent_options_dict,
-                                                                  analyzed_perievent_dict,
-                                                                  self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                  self.save_plots,
-                                                                  self.group_names_dict[subject],
-                                                                  self.settings_dict,
-                                                                  (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                            else:
-                                self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
-                                break
+                                    # create subfolder with subject name
+                                    subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                                    if not os.path.exists(subject_subfolder):
+                                        try:
+                                            os.mkdir(subject_subfolder)
+                                        except:
+                                            self.show_info_dialog("Problem creating subfolder")
+                                            # save under main folder then
+                                            subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
+                                    # plot and save normalized preview
+                                    all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
+                                                        subject,
+                                                        data,
+                                                        self.current_trials,
+                                                        self.perievent_options_dict,
+                                                        self.settings_dict,
+                                                        self.preview_init_params[0][0]["signal_name"],
+                                                        self.preview_init_params[0][0]["control_name"],
+                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                        self.save_plots,
+                                                        self.group_names_dict[subject],
+                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))  
+                                    if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
+                                        all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
+                                    if self.perievent_options_dict["plot_avg"] == True:
+                                        fpExplorer_functions.plot_perievent_average_alone(self.canvas,
+                                                                    subject,
+                                                                    self.current_trials,
+                                                                    self.perievent_options_dict,
+                                                                    analyzed_perievent_dict,
+                                                                    self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                    self.save_plots,
+                                                                    self.group_names_dict[subject],
+                                                                    self.settings_dict,
+                                                                    self.preview_init_params[0][0]["signal_name"],
+                                                                    self.preview_init_params[0][0]["control_name"],
+                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                    if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
+                                        or self.perievent_options_dict["plot_auc"] == True): # we need zcsore data for auc
+                                        if self.perievent_options_dict["plot_zscore"] == True:
+                                            z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
+                                                                        subject,
+                                                                        data,
+                                                                        self.perievent_options_dict,
+                                                                        analyzed_perievent_dict,
+                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                        self.save_plots,
+                                                                        self.group_names_dict[subject],
+                                                                        self.settings_dict,
+                                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                        else:
+    #                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
+                                            z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                                                                        subject,
+                                                                        data,
+                                                                        self.perievent_options_dict,
+                                                                        analyzed_perievent_dict,
+                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                        self.save_plots,
+                                                                        self.group_names_dict[subject],
+                                                                        self.settings_dict,
+                                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                        if self.parent_window.batch_export_settings_dict["export_group_data"] == True: # save for later in order to not repeat tasks
+                                            all_subjects_zscored_dfs.append((subject,z_score_df))
+                                    if self.perievent_options_dict["plot_auc"] == True:
+                                        fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
+                                                                    subject,
+                                                                    self.perievent_options_dict,
+                                                                    analyzed_perievent_dict,
+                                                                    self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                    self.save_plots,
+                                                                    self.group_names_dict[subject],
+                                                                    self.settings_dict,
+                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                else:
+                                    self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
+                                    break
                     # check if user wanted group analysis
                     if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
                         if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
@@ -3339,114 +3368,116 @@ class PreviewEventBasedWidget(QWidget):
                                     if subject not in self.raw_data_dict: # if data has not beed read yet
                                         self.get_raw_data(subject,
                                                           self.parent_window.preview_params[1][subject])
-                                        # if subject data has not been trimmed
-                                        # if it was not trimmed yet, add to dictionary with zero trimming
-                                        self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
-                                                                                                                    self.preview_init_params[0][0]["signal_name"],
-                                                                                                                    self.preview_init_params[0][0]["control_name"],
-                                                                                                                    0,
-                                                                                                                    0
-                                                                                                                    )]
-                                    if subject not in self.trimmed_raw_data_dict: # if raw data read but not trimmed assume trimming 0
-                                        # key is the subject name, value is a list
-                                        # first element of that list is beginning and end seconds to trim
-                                        # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                                        self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
-                                                                                                                    self.preview_init_params[0][0]["signal_name"],
-                                                                                                                    self.preview_init_params[0][0]["control_name"],
-                                                                                                                    0,
-                                                                                                                    0
-                                                                                                                    )]
-                                    # filter around trimmed
-                                    data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],
-                                                                self.perievent_options_dict,
-                                                                self.settings_dict,
-                                                                self.preview_init_params[0][0]["signal_name"],
-                                                                self.preview_init_params[0][0]["control_name"])
-                                    # if run on batch was selected, select all trials by default
-                                    self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
-                                    # check if there is any data to plot 
-                                    if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
-                                        if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
-                                            or self.perievent_options_dict["plot_auc"] == True):
-                                            # analyze
-                                            analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
-                                                                                            self.current_trials,
-                                                                                           self.perievent_options_dict,
-                                                                                           self.settings_dict,
-                                                                                           self.preview_init_params[0][0]["signal_name"],
-                                                                                           self.preview_init_params[0][0]["control_name"])
+                                        if self.raw_data_dict[subject] != None:
+                                            # if subject data has not been trimmed
+                                            # if it was not trimmed yet, add to dictionary with zero trimming
+                                            self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
+                                                                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                                                                        self.preview_init_params[0][0]["control_name"],
+                                                                                                                        0,
+                                                                                                                        0
+                                                                                                                        )]
+                                    if self.raw_data_dict[subject] != None:
+                                        if subject not in self.trimmed_raw_data_dict: # if raw data read but not trimmed assume trimming 0
+                                            # key is the subject name, value is a list
+                                            # first element of that list is beginning and end seconds to trim
+                                            # second element is trimmed data dict ts:timestamps, signal:data,control:data
+                                            self.trimmed_raw_data_dict[subject] = [(0,0),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
+                                                                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                                                                        self.preview_init_params[0][0]["control_name"],
+                                                                                                                        0,
+                                                                                                                        0
+                                                                                                                        )]
+                                        # filter around trimmed
+                                        data = fpExplorer_functions.filter_data_around_event(self.raw_data_dict[subject],
+                                                                    self.perievent_options_dict,
+                                                                    self.settings_dict,
+                                                                    self.preview_init_params[0][0]["signal_name"],
+                                                                    self.preview_init_params[0][0]["control_name"])
+                                        # if run on batch was selected, select all trials by default
+                                        self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                        # check if there is any data to plot 
+                                        if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
+                                            if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
+                                                or self.perievent_options_dict["plot_auc"] == True):
+                                                # analyze
+                                                analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                                self.current_trials,
+                                                                                            self.perievent_options_dict,
+                                                                                            self.settings_dict,
+                                                                                            self.preview_init_params[0][0]["signal_name"],
+                                                                                            self.preview_init_params[0][0]["control_name"])
 
-                                            # show buttons of available trials
-                                            self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
-                                            if self.current_perievent == None:
-                                                self.current_perievent = self.perievent_options_dict['event']
-                                                # add trials to view
-                                                self.current_trials_layout = QHBoxLayout()
-                                                self.current_trials_widget.setLayout(self.current_trials_layout)
-                                                text_label = QLabel("Include Trials:")
-                                                self.current_trials_layout.addWidget(text_label)
-                                                for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                                                    # create btn
-                                                    # add button to a group
-                                                    # add to list
-                                                    # add to layout
-                                                    btn = QCheckBox(str(i+1))
-                                                    btn.setChecked(True)
-                                                    self.current_trials_layout.addWidget(btn)
-                                                    self.trials_button_group.append(btn)
-                                                    # self.current_trials.append(i+1)
-                                                self.trials_layout.addWidget(self.current_trials_widget)
+                                                # show buttons of available trials
+                                                self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                                                if self.current_perievent == None:
+                                                    self.current_perievent = self.perievent_options_dict['event']
+                                                    # add trials to view
+                                                    self.current_trials_layout = QHBoxLayout()
+                                                    self.current_trials_widget.setLayout(self.current_trials_layout)
+                                                    text_label = QLabel("Include Trials:")
+                                                    self.current_trials_layout.addWidget(text_label)
+                                                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                                        # create btn
+                                                        # add button to a group
+                                                        # add to list
+                                                        # add to layout
+                                                        btn = QCheckBox(str(i+1))
+                                                        btn.setChecked(True)
+                                                        self.current_trials_layout.addWidget(btn)
+                                                        self.trials_button_group.append(btn)
+                                                        # self.current_trials.append(i+1)
+                                                    self.trials_layout.addWidget(self.current_trials_widget)
 
-                                                
-                                        if self.perievent_options_dict["plot_avg"] == True:
-                                            # perieventnormalized preview
-                                            all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
-                                                                      subject,
-                                                                      data,
-                                                                      self.current_trials,
-                                                                      self.perievent_options_dict,
-                                                                      self.settings_dict,
-                                                                      self.preview_init_params[0][0]["signal_name"],
-                                                                      self.preview_init_params[0][0]["control_name"],
-                                                                      self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                      self.save_plots,
-                                                                      self.group_names_dict[subject],
-                                                                      (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))  
-                                            all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
-                                        if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
-                                            or self.perievent_options_dict["plot_auc"] == True):
-                                            if self.perievent_options_dict["plot_zscore"] == True:
-                                                z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
-                                                                          subject,
-                                                                          data,
-                                                                          self.perievent_options_dict,
-                                                                          analyzed_perievent_dict,
-                                                                          self.preview_init_params[0][0]["signal_name"],
-                                                                          self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                          self.save_plots,
-                                                                          self.parent_window.preview_params[1][subject],
-                                                                          self.settings_dict,
-                                                                          (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                                                all_subjects_zscored_dfs.append((subject,z_score_df))
-                                            else:
-#                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                                z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
-                                                                          subject,
-                                                                          data,
-                                                                          self.perievent_options_dict,
-                                                                          analyzed_perievent_dict,
-                                                                          self.preview_init_params[0][0]["signal_name"],
-                                                                          self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                          self.save_plots,
-                                                                          self.parent_window.preview_params[1][subject],
-                                                                          self.settings_dict,
-                                                                          (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                                                all_subjects_zscored_dfs.append((subject,z_score_df))
-                                    else:
-                                        self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
-                                        self.perievent_window.enable_buttons()
-                                        break
+                                                    
+                                            if self.perievent_options_dict["plot_avg"] == True:
+                                                # perieventnormalized preview
+                                                all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
+                                                                        subject,
+                                                                        data,
+                                                                        self.current_trials,
+                                                                        self.perievent_options_dict,
+                                                                        self.settings_dict,
+                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                        self.preview_init_params[0][0]["control_name"],
+                                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                        self.save_plots,
+                                                                        self.group_names_dict[subject],
+                                                                        (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))  
+                                                all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
+                                            if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
+                                                or self.perievent_options_dict["plot_auc"] == True):
+                                                if self.perievent_options_dict["plot_zscore"] == True:
+                                                    z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
+                                                                            subject,
+                                                                            data,
+                                                                            self.perievent_options_dict,
+                                                                            analyzed_perievent_dict,
+                                                                            self.preview_init_params[0][0]["signal_name"],
+                                                                            self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                            self.save_plots,
+                                                                            self.parent_window.preview_params[1][subject],
+                                                                            self.settings_dict,
+                                                                            (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
+                                                    all_subjects_zscored_dfs.append((subject,z_score_df))
+                                                else:
+    #                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
+                                                    z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                                                                            subject,
+                                                                            data,
+                                                                            self.perievent_options_dict,
+                                                                            analyzed_perievent_dict,
+                                                                            self.preview_init_params[0][0]["signal_name"],
+                                                                            self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                            self.save_plots,
+                                                                            self.parent_window.preview_params[1][subject],
+                                                                            self.settings_dict,
+                                                                            (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
+                                                    all_subjects_zscored_dfs.append((subject,z_score_df))
+                                        else:
+                                            self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
+                                            self.perievent_window.enable_buttons()
+                                            break
                                 
                                 if self.perievent_options_dict["plot_avg"] == True:
                                     if len(all_subjects_peri_normalized_dfs) > 0:
@@ -4045,68 +4076,43 @@ class PreviewEventBasedWidget(QWidget):
                 if self.parent_window.batch_export_settings_dict["spikes"] == True:
                     if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
                         for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
-                            # create subfolder with subject name
-                            subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                            if not os.path.exists(subject_subfolder):
-                                try:
-                                    os.mkdir(subject_subfolder)
-                                except:
-                                    self.show_info_dialog("Problem creating subfolders")
-                                    # save under main folder
-                                    subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
-                            if self.options["event"] == "---":
-                                try:
-                                    fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
-                                                         self.recent_peak_values,
-                                                         self.spikes_export,
-                                                         self.save_plots,
-                                                         self.group_names_dict[subject],
-                                                         self.settings_dict,
-                                                         (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                except:
-                                    self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                            else:
-                                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                                try:
-                                    fpExplorer_functions.plot_peaks_with_event(self.canvas,subject,self.normalized_dict[subject],
-                                                                    self.recent_peak_values,
-                                                                    custom_event_name,
-                                                                    custom_event_name2,
-                                                                    self.event_data,
-                                                                    self.spikes_export,
-                                                                    self.save_plots,
-                                                                    self.group_names_dict[subject],
-                                                                    self.settings_dict,
-                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                except:
-                                    self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                    # if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
-                    #     pass # single subjects only
-                        # # spikes for averaged signal
-                        # if self.options["event"] == "---":
-                        #     try:
-                        #         fpExplorer_functions.get_batch_spikes(self.canvas,
-                        #                                        self.recent_peak_values,
-                        #                                        self.all_normalized,
-                        #                                        self.settings_dict,
-                        #                                        self.parent_window.batch_export_settings_dict["spikes"],
-                        #                                        (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                        #     except:
-                        #         self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                        # else: # events
-                        #     custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                        #     custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                            
-                        #     fpExplorer_functions.get_batch_spikes_with_event(self.canvas,
-                        #                                           self.recent_peak_values,
-                        #                                           self.all_normalized,
-                        #                                           custom_event_name,
-                        #                                           custom_event_name2,
-                        #                                           self.event_data,
-                        #                                           self.settings_dict,
-                        #                                           self.parent_window.batch_export_settings_dict["spikes"],
-                        #                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
+                            if self.raw_data_dict[subject] != None:
+                                # create subfolder with subject name
+                                subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                                if not os.path.exists(subject_subfolder):
+                                    try:
+                                        os.mkdir(subject_subfolder)
+                                    except:
+                                        self.show_info_dialog("Problem creating subfolders")
+                                        # save under main folder
+                                        subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
+                                if self.options["event"] == "---":
+                                    try:
+                                        fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                                            self.recent_peak_values,
+                                                            self.spikes_export,
+                                                            self.save_plots,
+                                                            self.group_names_dict[subject],
+                                                            self.settings_dict,
+                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                    except:
+                                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                                else:
+                                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                                    try:
+                                        fpExplorer_functions.plot_peaks_with_event(self.canvas,subject,self.normalized_dict[subject],
+                                                                        self.recent_peak_values,
+                                                                        custom_event_name,
+                                                                        custom_event_name2,
+                                                                        self.event_data,
+                                                                        self.spikes_export,
+                                                                        self.save_plots,
+                                                                        self.group_names_dict[subject],
+                                                                        self.settings_dict,
+                                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                    except:
+                                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
                 # close popup window
                 self.peak_options_window.close()
                 self.reset_export_settings()
@@ -4299,107 +4305,83 @@ class PreviewEventBasedWidget(QWidget):
                 # if subject was not previewed yet, read data and add to dict
                 if subject not in self.raw_data_dict:
                     self.get_raw_data(subject, self.parent_window.preview_params[1][subject])
+                if  self.raw_data_dict[subject] != None:
+                    # trim to batch export settings
+                    # key is the subject name, value is a list
+                    # first element of that list is beginning and end seconds to trim
+                    # second element is trimmed data dict ts:timestamps, signal:data,control:data
+                    self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
+                                                                                    self.preview_init_params[0][0]["signal_name"],
+                                                                                    self.preview_init_params[0][0]["control_name"],
+                                                                                    new_trim_start,
+                                                                                    new_trim_end
+                                                                                    )]
                     
-                # trim to batch export settings
-                # key is the subject name, value is a list
-                # first element of that list is beginning and end seconds to trim
-                # second element is trimmed data dict ts:timestamps, signal:data,control:data
-                self.trimmed_raw_data_dict[subject] = [(new_trim_start,new_trim_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[subject],
-                                                                                  self.preview_init_params[0][0]["signal_name"],
-                                                                                  self.preview_init_params[0][0]["control_name"],
-                                                                                  new_trim_start,
-                                                                                  new_trim_end
-                                                                                  )]
-                
-                # always downsample first before normalizing
-                # downsample
-                self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
-                                                                             self.settings_dict[0]["downsample"])
-                # check settings for method to normalize
-                if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
-                    # normalize from downsampled
-                    self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
-                                                                                            self.downsampled_dict[subject],
-                                                                                            self.settings_dict[0]["show_norm_as"],
-                                                                                            self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_window"])
-                if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
-                    # normalize from downsampled
-                    self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
-                                                                                            self.downsampled_dict[subject],
-                                                                                            self.settings_dict[0]["show_norm_as"],
-                                                                                            self.settings_dict[0]["filter"],
-                                                                                            self.settings_dict[0]["filter_window"])
-                if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
-                    # create subfolder with subject name
-                    subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                    if not os.path.exists(subject_subfolder):
-                        try:
-                            os.mkdir(subject_subfolder)
-                        except:
-                            self.show_info_dialog("Problem creating subfolder")
-                            # save under main folder
-                            subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
-                    # save also polynomial fitting by default
-                    fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                              self.settings_dict[0], 
-                                              self.downsampled_dict[subject],
-                                              self.preview_init_params[0][0]["signal_name"],
-                                              self.preview_init_params[0][0]["control_name"],
-                                              subject,
-                                              True,
-                                              subject_subfolder)
-                    if self.parent_window.batch_export_settings_dict["normalized"] == True:
-                        if self.options["event"] == "---":
-                            fpExplorer_functions.plot_normalized_alone(self.canvas,
-                                                       self.batch_options_dict,
-                                                       self.normalized_dict[subject],
-                                                       True,
-                                                       True,
-                                                       (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
-                                                       self.settings_dict)
-                        else:
-                            custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                            custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                            fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
-                                                           self.batch_options_dict,
-                                                           self.normalized_dict[subject],
-                                                           custom_event_name,
-                                                           custom_event_name2,
-                                                           self.event_data,
-                                                           True,
-                                                           True,
-                                                           (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
-                                                           self.settings_dict)
-                    if self.parent_window.batch_export_settings_dict["spikes"] == True:
-                        self.spikes_export = True
-                        self.save_plots = True
+                    # always downsample first before normalizing
+                    # downsample
+                    self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
+                                                                                self.settings_dict[0]["downsample"])
+                    # check settings for method to normalize
+                    if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
+                        # normalize from downsampled
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
+                                                                                                self.downsampled_dict[subject],
+                                                                                                self.settings_dict[0]["show_norm_as"],
+                                                                                                self.settings_dict[0]["filter"],
+                                                                                                self.settings_dict[0]["filter_window"])
+                    if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
+                        # normalize from downsampled
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
+                                                                                                self.downsampled_dict[subject],
+                                                                                                self.settings_dict[0]["show_norm_as"],
+                                                                                                self.settings_dict[0]["filter"],
+                                                                                                self.settings_dict[0]["filter_window"])
+                    if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
+                        # create subfolder with subject name
+                        subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                        if not os.path.exists(subject_subfolder):
+                            try:
+                                os.mkdir(subject_subfolder)
+                            except:
+                                self.show_info_dialog("Problem creating subfolder")
+                                # save under main folder
+                                subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
+                        # save also polynomial fitting by default
+                        fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                self.settings_dict[0], 
+                                                self.downsampled_dict[subject],
+                                                self.preview_init_params[0][0]["signal_name"],
+                                                self.preview_init_params[0][0]["control_name"],
+                                                subject,
+                                                True,
+                                                subject_subfolder)
+                        if self.parent_window.batch_export_settings_dict["normalized"] == True:
+                            if self.options["event"] == "---":
+                                fpExplorer_functions.plot_normalized_alone(self.canvas,
+                                                        self.batch_options_dict,
+                                                        self.normalized_dict[subject],
+                                                        True,
+                                                        True,
+                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
+                                                        self.settings_dict)
+                            else:
+                                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                                fpExplorer_functions.plot_normalized_alone_with_event(self.canvas,
+                                                            self.batch_options_dict,
+                                                            self.normalized_dict[subject],
+                                                            custom_event_name,
+                                                            custom_event_name2,
+                                                            self.event_data,
+                                                            True,
+                                                            True,
+                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]),
+                                                            self.settings_dict)
+                        if self.parent_window.batch_export_settings_dict["spikes"] == True:
+                            self.spikes_export = True
+                            self.save_plots = True
             ### end for loop for each subject   
             if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
-                # average signal
-                # create a list of all normalized signals
-                self.all_normalized = [(subject,self.normalized_dict[subject]) for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]]
-    #            print(all_normalized)
-                # if self.parent_window.batch_export_settings_dict["normalized"] == True:
-                #     if self.options["event"] == "---":
-                #         pass # only for single subjects
-                        # fpExplorer_functions.get_batch_normalized(self.canvas,
-                        #                                self.all_normalized,
-                        #                                self.settings_dict,
-                        #                                self.parent_window.batch_export_settings_dict["normalized"],
-                        #                                (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                    # else:
-                    #     pass # only for single subjects
-                        # custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                        # custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                        # fpExplorer_functions.get_batch_normalized_with_event(self.canvas,
-                        #                                           self.all_normalized,
-                        #                                           custom_event_name,
-                        #                                           custom_event_name2,
-                        #                                           self.event_data,
-                        #                                           self.settings_dict,
-                        #                                           self.parent_window.batch_export_settings_dict["normalized"],
-                        #                                           (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
                 if self.parent_window.batch_export_settings_dict["spikes"] == True:
                     # set batch peaks to true
                     self.batch_peaks = True
@@ -4408,10 +4390,6 @@ class PreviewEventBasedWidget(QWidget):
                 self.batch_peaks = True
                 # remember to open it later
                 self.open_spikes_later = True                  
-#            else: # if user didn't want spike analysis
-#                print("Done batch processing")
-#                self.done_batch_processing_sig.emit()
-#                self.enable_buttons_signal.emit()
         if self.parent_window.batch_export_settings_dict["perievent"] == True:
             self.batch_perievent = True
             self.save_plots = True
