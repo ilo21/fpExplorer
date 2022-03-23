@@ -91,7 +91,10 @@ def get_raw_data(path):
     '''Returns a raw data extracted by tdt from all recording files
     '''
 #    raw_data = tdt.read_block("C://Users//ilosz01//OneDrive - Linköpings universitet//FPproject//Data//1//fear_test")
-    raw_data = tdt.read_block(path) 
+    try:
+        raw_data = tdt.read_block(path) 
+    except:
+        raw_data = None
     return raw_data
 
 def get_channel_names(raw_data):
