@@ -22,6 +22,7 @@ Created on Thu Jan  7 12:08:47 2021
 @author: ilosz01
 """
 
+from tkinter import E
 import fpExplorer_functions
 import os
 import shutil
@@ -420,7 +421,7 @@ class RunOnBatchWindow(QMainWindow):
         super(RunOnBatchWindow, self).__init__()
         self.setWindowTitle("Run On Batch")
         self.setWindowIcon(QtGui.QIcon(ICO))
-        self.resize(800,400)
+        self.resize(800,600)
         self.parent_window = parent_window
         self.parent_window.app_closed.connect(self.exit_app)
         self.preview_window = prewiew_window
@@ -451,7 +452,7 @@ class RunOnBatchWindow(QMainWindow):
         self.export_options = {}
         self.valid_export_data = False
         
-        self.bold_stylesheet = "QRadioButton, .QCheckBox, QPushButton {font-weight: bold}"
+        self.bold_stylesheet = "QRadioButton, .QCheckBox, QPushButton, QLabel {font-weight: bold}"
         
         self.events_present = False
         # check if there are any events
@@ -459,7 +460,7 @@ class RunOnBatchWindow(QMainWindow):
             if fpExplorer_functions.check_events(v)==True:
                 self.events_present = True
             break
-        
+
         # create gui
         self.setupGUI()
         
@@ -506,14 +507,69 @@ class RunOnBatchWindow(QMainWindow):
         self.trimming_widget = QWidget()
         self.trimming_layout = QFormLayout()
         self.trimming_layout.setContentsMargins(20,20,20,20)
-        self.trim_begin_text = QLineEdit("")
+
+        # adjust trimming when subject changed
+        self.trim_beginning_select = QComboBox()
+        self.trim_beginning_select.addItems(["Trim first seconds", "Trim by event"])
+        if "trim_begin_select" in self.batch_params_dict:
+            self.trim_beginning_select.setCurrentText(self.batch_params_dict["trim_begin_select"])
+        self.trim_beginning_select.currentIndexChanged.connect(self.begin_trim_changed)
+        self.trim_beginning_sec = QLineEdit("0")
         if "trim_begin" in self.batch_params_dict:
-            self.trim_begin_text.setText(self.batch_params_dict["trim_begin"])
-        self.trimming_layout.addRow("Trim all beginning (seconds)",self.trim_begin_text)
-        self.trim_end_text = QLineEdit("")
+            self.trim_beginning_sec.setText(self.batch_params_dict["trim_begin"])
+            if self.trim_beginning_select.currentText() == "Trim first seconds":
+                self.trim_beginning_sec.setEnabled(True)
+            else:
+                self.trim_beginning_sec.setEnabled(False)           
+        self.trim_beginning_sec.setValidator(QtGui.QIntValidator())
+        self.trim_beginning_event = QComboBox()
+        if self.events_present == True: # show event option only for eventspreview
+            self.trim_beginning_event.addItems(self.preview_window.events_from_current_subject)
+            if self.trim_beginning_select.currentText() == "Trim first seconds":
+                self.trim_beginning_event.setEnabled(False)
+            else:
+                self.trim_beginning_event.setEnabled(True)
+            if "trim_begin_event" in self.batch_params_dict:
+                self.trim_beginning_event.setCurrentText(self.batch_params_dict["trim_begin_event"])
+        else:
+            self.trim_beginning_event.addItems(["---"])
+        self.trim_ending_select = QComboBox()
+        self.trim_ending_select.addItems(["Trim last seconds", "Trim by event"])
+        if "trim_end_select" in self.batch_params_dict:
+            self.trim_ending_select.setCurrentText(self.batch_params_dict["trim_end_select"])
+        self.trim_ending_select.currentIndexChanged.connect(self.end_trim_changed)
+        self.trim_ending_sec = QLineEdit("0")
         if "trim_end" in self.batch_params_dict:
-            self.trim_end_text.setText(self.batch_params_dict["trim_end"])
-        self.trimming_layout.addRow("Trim all ending (seconds)",self.trim_end_text)
+            self.trim_ending_sec.setText(self.batch_params_dict["trim_end"])
+            if self.trim_ending_select.currentText() == "Trim last seconds":
+                self.trim_ending_sec.setEnabled(True)
+            else:
+                self.trim_ending_sec.setEnabled(False)
+        self.trim_ending_sec.setValidator(QtGui.QIntValidator())
+        self.trim_end_event = QComboBox()
+        if self.events_present == True: # show event option only for eventspreview
+            self.trim_end_event.addItems(self.preview_window.events_from_current_subject)
+            if self.trim_ending_select.currentText() == "Trim last seconds":
+                self.trim_end_event.setEnabled(False)
+            else:
+                self.trim_end_event.setEnabled(True)
+            if "trim_end_event" in self.batch_params_dict:
+                self.trim_end_event.setCurrentText(self.batch_params_dict["trim_end_event"])
+        else:
+            self.trim_end_event.addItems(["---"])
+        self.trim_begin_label = QLabel("Trim beginning")
+        self.trim_begin_label.setStyleSheet(self.bold_stylesheet)
+        self.trim_end_label = QLabel("Trim ending")
+        self.trim_end_label.setStyleSheet(self.bold_stylesheet)
+        if self.events_present == True: # show event option only for eventspreview
+            self.trimming_layout.addRow(self.trim_begin_label,self.trim_beginning_select)
+        self.trimming_layout.addRow("Seconds from beginning",self.trim_beginning_sec)
+        if self.events_present == True: # show event option only for eventspreview
+            self.trimming_layout.addRow("Event to trim",self.trim_beginning_event)
+            self.trimming_layout.addRow(self.trim_end_label,self.trim_ending_select)
+        self.trimming_layout.addRow("Seconds from ending",self.trim_ending_sec)
+        if self.events_present == True: # show event option only for eventspreview
+            self.trimming_layout.addRow("Event to trim",self.trim_end_event)
         
 ##########################
         # AVAILABLE SUBJECTS
@@ -608,6 +664,22 @@ class RunOnBatchWindow(QMainWindow):
         
 #        # use stylesheet
 #        self.export_loc_area.setStyleSheet(STYLESHEET)
+
+    def begin_trim_changed(self):
+        if self.trim_beginning_select.currentText() == "Trim by event":
+            self.trim_beginning_sec.setEnabled(False)
+            self.trim_beginning_event.setEnabled(True)
+        if self.trim_beginning_select.currentText() == "Trim first seconds":
+            self.trim_beginning_sec.setEnabled(True)
+            self.trim_beginning_event.setEnabled(False)
+        
+    def end_trim_changed(self):
+        if self.trim_ending_select.currentText() == "Trim by event":
+            self.trim_ending_sec.setEnabled(False)
+            self.trim_end_event.setEnabled(True)
+        if self.trim_ending_select.currentText() == "Trim last seconds":
+            self.trim_ending_sec.setEnabled(True)
+            self.trim_end_event.setEnabled(False)
         
     def select_all_btn_clicked(self):
         if self.select_all_subjects_btn.isChecked():
@@ -633,8 +705,8 @@ class RunOnBatchWindow(QMainWindow):
         self.file_begin = self.suggested_file_beginning_text.text()
         # get trimming
         try:
-            trim_start = int(self.trim_begin_text.text())
-            trim_end = int(self.trim_end_text.text())
+            trim_start = int(self.trim_beginning_sec.text())
+            trim_end = int(self.trim_ending_sec.text())
         except:
             trim_start = 0
             trim_end = 0
@@ -653,7 +725,7 @@ class RunOnBatchWindow(QMainWindow):
                     if item.text() not in self.selected_subjects:
                         self.selected_subjects.append(item.text())
                         self.selected_subjects_group_names.append(group_name)
-                        # # now fing matching group name
+                        # # now find matching group name
                         # for i in range(len(self.all_subject_names)):
                         #     if item.text() == self.all_subject_names[i]:
                         #         self.selected_subjects_group_names.append(self.all_group_names[i].text())
@@ -674,8 +746,12 @@ class RunOnBatchWindow(QMainWindow):
         self.export_options["export_group_data"] = export_group_data
         self.export_options["dump_path"] = self.dump_path
         self.export_options["file_begin"] = self.file_begin
+        self.export_options["trim_begin_select"] = self.trim_beginning_select.currentText()
+        self.export_options["trim_end_select"] = self.trim_ending_select.currentText()
         self.export_options["trim_begin"] = str(trim_start)
         self.export_options["trim_end"] = str(trim_end)
+        self.export_options["trim_begin_event"] = self.trim_beginning_event.currentText()
+        self.export_options["trim_end_event"] = self.trim_end_event.currentText()
         self.export_options["batch_subjects"] = self.selected_subjects
         self.export_options["batch_subjects_group_names"] = self.selected_subjects_group_names
         self.export_options["updated_group_names"] = self.updated_group_dict
@@ -3209,8 +3285,12 @@ class PreviewEventBasedWidget(QWidget):
                                                         self.settings_dict,
                                                         self.preview_init_params[0][0]["signal_name"],
                                                         self.preview_init_params[0][0]["control_name"])
-                                # if run on batch was selected, select all trials by default
-                                self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                # # if run on batch was selected, select all trials by default
+                                # self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                # if run on batch was selected, get selected trials
+                                self.current_trials = self.perievent_options_dict["trials"]
+                                # add to dictionary
+                                self.trials_dict[subject] = {self.perievent_options_dict["event"]:self.perievent_options_dict["trials"]}
                                 # analyze
                                 analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
                                                                                     self.current_trials,
@@ -3242,83 +3322,92 @@ class PreviewEventBasedWidget(QWidget):
                                         self.trials_layout.addWidget(self.current_trials_widget)
                                         print("Before plot raw",self.current_trials)
 
-
-                                    # create subfolder with subject name
-                                    subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                                    if not os.path.exists(subject_subfolder):
-                                        try:
-                                            os.mkdir(subject_subfolder)
-                                        except:
-                                            self.show_info_dialog("Problem creating subfolder")
-                                            # save under main folder then
-                                            subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
-                                    # plot and save normalized preview
-                                    all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
-                                                        subject,
-                                                        data,
-                                                        self.current_trials,
-                                                        self.perievent_options_dict,
-                                                        self.settings_dict,
-                                                        self.preview_init_params[0][0]["signal_name"],
-                                                        self.preview_init_params[0][0]["control_name"],
-                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                        self.save_plots,
-                                                        self.group_names_dict[subject],
-                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))  
-                                    if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
-                                        all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
-                                    if self.perievent_options_dict["plot_avg"] == True:
-                                        fpExplorer_functions.plot_perievent_average_alone(self.canvas,
-                                                                    subject,
-                                                                    self.current_trials,
-                                                                    self.perievent_options_dict,
-                                                                    analyzed_perievent_dict,
-                                                                    self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                    self.save_plots,
-                                                                    self.group_names_dict[subject],
-                                                                    self.settings_dict,
-                                                                    self.preview_init_params[0][0]["signal_name"],
-                                                                    self.preview_init_params[0][0]["control_name"],
-                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                    if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
-                                        or self.perievent_options_dict["plot_auc"] == True): # we need zcsore data for auc
-                                        if self.perievent_options_dict["plot_zscore"] == True:
-                                            z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
+                                    # check if selected current trials are in subject's data
+                                    available = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                    all_trials_available = True
+                                    for el in self.current_trials:
+                                        if el not in available:
+                                            all_trials_available = False
+                                            break
+                                    if all_trials_available == False:
+                                        self.show_info_dialog("Some of the selected trials not present\nin subject "+subject+" data.")
+                                    else:
+                                        # create subfolder with subject name
+                                        subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                                        if not os.path.exists(subject_subfolder):
+                                            try:
+                                                os.mkdir(subject_subfolder)
+                                            except:
+                                                self.show_info_dialog("Problem creating subfolder")
+                                                # save under main folder then
+                                                subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
+                                        # plot and save normalized preview
+                                        all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
+                                                            subject,
+                                                            data,
+                                                            self.current_trials,
+                                                            self.perievent_options_dict,
+                                                            self.settings_dict,
+                                                            self.preview_init_params[0][0]["signal_name"],
+                                                            self.preview_init_params[0][0]["control_name"],
+                                                            self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                            self.save_plots,
+                                                            self.group_names_dict[subject],
+                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))  
+                                        if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
+                                            all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
+                                        if self.perievent_options_dict["plot_avg"] == True:
+                                            fpExplorer_functions.plot_perievent_average_alone(self.canvas,
                                                                         subject,
-                                                                        data,
+                                                                        self.current_trials,
                                                                         self.perievent_options_dict,
                                                                         analyzed_perievent_dict,
+                                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                        self.save_plots,
+                                                                        self.group_names_dict[subject],
+                                                                        self.settings_dict,
                                                                         self.preview_init_params[0][0]["signal_name"],
+                                                                        self.preview_init_params[0][0]["control_name"],
+                                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                        if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
+                                            or self.perievent_options_dict["plot_auc"] == True): # we need zcsore data for auc
+                                            if self.perievent_options_dict["plot_zscore"] == True:
+                                                z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
+                                                                            subject,
+                                                                            data,
+                                                                            self.perievent_options_dict,
+                                                                            analyzed_perievent_dict,
+                                                                            self.preview_init_params[0][0]["signal_name"],
+                                                                            self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                            self.save_plots,
+                                                                            self.group_names_dict[subject],
+                                                                            self.settings_dict,
+                                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                            else:
+        #                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
+                                                z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                                                                            subject,
+                                                                            data,
+                                                                            self.perievent_options_dict,
+                                                                            analyzed_perievent_dict,
+                                                                            self.preview_init_params[0][0]["signal_name"],
+                                                                            self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                            self.save_plots,
+                                                                            self.group_names_dict[subject],
+                                                                            self.settings_dict,
+                                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                            if self.parent_window.batch_export_settings_dict["export_group_data"] == True: # save for later in order to not repeat tasks
+                                                all_subjects_zscored_dfs.append((subject,z_score_df))
+                                        if self.perievent_options_dict["plot_auc"] == True:
+                                            fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
+                                                                        subject,
+                                                                        self.perievent_options_dict,
+                                                                        analyzed_perievent_dict,
                                                                         self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                         self.save_plots,
                                                                         self.group_names_dict[subject],
                                                                         self.settings_dict,
                                                                         (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                        else:
-    #                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                            z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
-                                                                        subject,
-                                                                        data,
-                                                                        self.perievent_options_dict,
-                                                                        analyzed_perievent_dict,
-                                                                        self.preview_init_params[0][0]["signal_name"],
-                                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                        self.save_plots,
-                                                                        self.group_names_dict[subject],
-                                                                        self.settings_dict,
-                                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                        if self.parent_window.batch_export_settings_dict["export_group_data"] == True: # save for later in order to not repeat tasks
-                                            all_subjects_zscored_dfs.append((subject,z_score_df))
-                                    if self.perievent_options_dict["plot_auc"] == True:
-                                        fpExplorer_functions.plot_perievent_auc_alone(self.canvas,
-                                                                    subject,
-                                                                    self.perievent_options_dict,
-                                                                    analyzed_perievent_dict,
-                                                                    self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                    self.save_plots,
-                                                                    self.group_names_dict[subject],
-                                                                    self.settings_dict,
-                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                 else:
                                     self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
                                     break
@@ -3395,85 +3484,98 @@ class PreviewEventBasedWidget(QWidget):
                                                                     self.preview_init_params[0][0]["signal_name"],
                                                                     self.preview_init_params[0][0]["control_name"])
                                         # if run on batch was selected, select all trials by default
-                                        self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                        # self.current_trials = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                        # if run on batch was selected, get selected trials
+                                        self.current_trials = self.perievent_options_dict["trials"]
+                                        # add to dictionary
+                                        self.trials_dict[subject] = {self.perievent_options_dict["event"]:self.perievent_options_dict["trials"]}
                                         # check if there is any data to plot 
                                         if (len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(data.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
-                                            if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
-                                                or self.perievent_options_dict["plot_auc"] == True):
-                                                # analyze
-                                                analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
-                                                                                                self.current_trials,
-                                                                                            self.perievent_options_dict,
-                                                                                            self.settings_dict,
-                                                                                            self.preview_init_params[0][0]["signal_name"],
-                                                                                            self.preview_init_params[0][0]["control_name"])
+                                            # check if selected current trials are in subject's data
+                                            available = [i+1 for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered))]
+                                            all_trials_available = True
+                                            for el in self.current_trials:
+                                                if el not in available:
+                                                    all_trials_available = False
+                                                    break
+                                            if all_trials_available == False:
+                                                self.show_info_dialog("Some of the selected trials not present\nin subject "+subject+" data.")
+                                            else:
+                                                if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
+                                                    or self.perievent_options_dict["plot_auc"] == True):
+                                                    # analyze
+                                                    analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
+                                                                                                    self.current_trials,
+                                                                                                self.perievent_options_dict,
+                                                                                                self.settings_dict,
+                                                                                                self.preview_init_params[0][0]["signal_name"],
+                                                                                                self.preview_init_params[0][0]["control_name"])
 
-                                                # show buttons of available trials
-                                                self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
-                                                if self.current_perievent == None:
-                                                    self.current_perievent = self.perievent_options_dict['event']
-                                                    # add trials to view
-                                                    self.current_trials_layout = QHBoxLayout()
-                                                    self.current_trials_widget.setLayout(self.current_trials_layout)
-                                                    text_label = QLabel("Include Trials:")
-                                                    self.current_trials_layout.addWidget(text_label)
-                                                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                                                        # create btn
-                                                        # add button to a group
-                                                        # add to list
-                                                        # add to layout
-                                                        btn = QCheckBox(str(i+1))
-                                                        btn.setChecked(True)
-                                                        self.current_trials_layout.addWidget(btn)
-                                                        self.trials_button_group.append(btn)
-                                                        # self.current_trials.append(i+1)
-                                                    self.trials_layout.addWidget(self.current_trials_widget)
-
-                                                    
-                                            if self.perievent_options_dict["plot_avg"] == True:
-                                                # perieventnormalized preview
-                                                all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
-                                                                        subject,
-                                                                        data,
-                                                                        self.current_trials,
-                                                                        self.perievent_options_dict,
-                                                                        self.settings_dict,
-                                                                        self.preview_init_params[0][0]["signal_name"],
-                                                                        self.preview_init_params[0][0]["control_name"],
-                                                                        self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                        self.save_plots,
-                                                                        self.group_names_dict[subject],
-                                                                        (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))  
-                                                all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
-                                            if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
-                                                or self.perievent_options_dict["plot_auc"] == True):
-                                                if self.perievent_options_dict["plot_zscore"] == True:
-                                                    z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
+                                                    # show buttons of available trials
+                                                    self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                                                    if self.current_perievent == None:
+                                                        self.current_perievent = self.perievent_options_dict['event']
+                                                        # add trials to view
+                                                        self.current_trials_layout = QHBoxLayout()
+                                                        self.current_trials_widget.setLayout(self.current_trials_layout)
+                                                        text_label = QLabel("Include Trials:")
+                                                        self.current_trials_layout.addWidget(text_label)
+                                                        for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                                            # create btn
+                                                            # add button to a group
+                                                            # add to list
+                                                            # add to layout
+                                                            btn = QCheckBox(str(i+1))
+                                                            btn.setChecked(True)
+                                                            self.current_trials_layout.addWidget(btn)
+                                                            self.trials_button_group.append(btn)
+                                                            # self.current_trials.append(i+1)
+                                                        self.trials_layout.addWidget(self.current_trials_widget)
+                                                        
+                                                if self.perievent_options_dict["plot_avg"] == True:
+                                                    # perieventnormalized preview
+                                                    all_trials_df = fpExplorer_functions.plot_raw_perievents(self.canvas,
                                                                             subject,
                                                                             data,
+                                                                            self.current_trials,
                                                                             self.perievent_options_dict,
-                                                                            analyzed_perievent_dict,
+                                                                            self.settings_dict,
                                                                             self.preview_init_params[0][0]["signal_name"],
+                                                                            self.preview_init_params[0][0]["control_name"],
                                                                             self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                             self.save_plots,
-                                                                            self.parent_window.preview_params[1][subject],
-                                                                            self.settings_dict,
-                                                                            (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                                                    all_subjects_zscored_dfs.append((subject,z_score_df))
-                                                else:
-    #                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
-                                                    z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
-                                                                            subject,
-                                                                            data,
-                                                                            self.perievent_options_dict,
-                                                                            analyzed_perievent_dict,
-                                                                            self.preview_init_params[0][0]["signal_name"],
-                                                                            self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
-                                                                            self.save_plots,
-                                                                            self.parent_window.preview_params[1][subject],
-                                                                            self.settings_dict,
-                                                                            (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
-                                                    all_subjects_zscored_dfs.append((subject,z_score_df))
+                                                                            self.group_names_dict[subject],
+                                                                            (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))  
+                                                    all_subjects_peri_normalized_dfs.append((subject,all_trials_df))
+                                                if (self.perievent_options_dict["plot_zscore"] == True or self.perievent_options_dict["plot_zscore_trials"] == True 
+                                                    or self.perievent_options_dict["plot_auc"] == True):
+                                                    if self.perievent_options_dict["plot_zscore"] == True:
+                                                        z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
+                                                                                subject,
+                                                                                data,
+                                                                                self.perievent_options_dict,
+                                                                                analyzed_perievent_dict,
+                                                                                self.preview_init_params[0][0]["signal_name"],
+                                                                                self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                                self.save_plots,
+                                                                                self.parent_window.preview_params[1][subject],
+                                                                                self.settings_dict,
+                                                                                (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
+                                                        all_subjects_zscored_dfs.append((subject,z_score_df))
+                                                    else:
+        #                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
+                                                        z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
+                                                                                subject,
+                                                                                data,
+                                                                                self.perievent_options_dict,
+                                                                                analyzed_perievent_dict,
+                                                                                self.preview_init_params[0][0]["signal_name"],
+                                                                                self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
+                                                                                self.save_plots,
+                                                                                self.parent_window.preview_params[1][subject],
+                                                                                self.settings_dict,
+                                                                                (self.parent_window.batch_export_settings_dict["dump_path"],self.parent_window.batch_export_settings_dict["file_begin"]))
+                                                        all_subjects_zscored_dfs.append((subject,z_score_df))
                                         else:
                                             self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
                                             self.perievent_window.enable_buttons()
@@ -3515,6 +3617,29 @@ class PreviewEventBasedWidget(QWidget):
                 # self.reset_export_settings()
                 # reset batch peaks when done
                 self.batch_perievent = False
+                # update trials according to batch settings
+                self.trials_button_group = []
+                # create new buttons
+                new_trials_widget = QWidget()
+                new_trials_layout = QHBoxLayout()
+                new_trials_widget.setLayout(new_trials_layout)
+                text_label = QLabel("Include Trials:")
+                new_trials_layout.addWidget(text_label)
+                for i in range(self.total_current_trials):
+                        # create btn
+                        # add button to a group
+                        # add to list
+                        # add to layout
+                        btn = QCheckBox(str(i+1))
+                        if i+1 in self.current_trials:
+                            btn.setChecked(True)
+                        new_trials_layout.addWidget(btn)
+                        self.trials_button_group.append(btn)                        
+                # replace with updated widget
+                self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                self.current_trials_widget.deleteLater()
+                self.current_trials_widget = new_trials_widget
+                
                 # reset open spikes later
                 if self.open_spikes_later == True:
                     self.peaks_btn_clicked()
@@ -4254,9 +4379,40 @@ class PreviewEventBasedWidget(QWidget):
         self.group_names_dict = self.parent_window.batch_export_settings_dict["updated_group_names"]
         # update group name field of the current subject
         self.subject_group_name.setText(self.group_names_dict[self.subject_comboBox.currentText()])
+
         # update current trimming
-        self.trim_beginning_sec.setText(self.parent_window.batch_export_settings_dict["trim_begin"])
-        self.trim_ending_sec.setText(self.parent_window.batch_export_settings_dict["trim_end"])
+        # get trimming settings
+        # check what method was selected
+        if self.parent_window.batch_export_settings_dict["trim_begin_select"] == "Trim first seconds":
+            self.trim_beginning_sec.setText(self.parent_window.batch_export_settings_dict["trim_begin"])
+        else: # if trim by event
+            trim_begin_event = self.parent_window.batch_export_settings_dict["trim_begin_event"]
+            begin_evt_data_onsets = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_begin_event)[0]
+            trim_beginning = 0 # assign zero in case there is no such event
+            if len(begin_evt_data_onsets) > 0:
+                # use the first onset as trim begin
+                trim_beginning = math.ceil(begin_evt_data_onsets[0])
+            else:
+                self.show_info_dialog("There was a problem reading event "+trim_begin_event+"\nfor subject "+self.options["subject"]+"\nThis data was not trimmed.")
+            self.trim_beginning_sec.setText(str(trim_beginning))
+        if self.parent_window.batch_export_settings_dict["trim_end_select"] == "Trim last seconds":
+            self.trim_ending_sec.setText(self.parent_window.batch_export_settings_dict["trim_end"])
+        else: # if trim by event
+            trim_end_event = self.parent_window.batch_export_settings_dict["trim_end_event"]
+            end_evt_data_onsets = fpExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], trim_end_event)[0]
+            trim_end = 0 # assign zero in case there is no such event
+            if len(end_evt_data_onsets) > 0:
+                last_raw_ts = fpExplorer_functions.get_last_timestamp(
+                                     self.raw_data_dict[self.options["subject"]],
+                                     self.preview_init_params[0][0]["signal_name"],
+                                     )
+                # use last onset as trim begin
+                trim_end = math.ceil(last_raw_ts - end_evt_data_onsets[-1])
+            else:
+                self.show_info_dialog("There was a problem reading event "+trim_end_event+"\nfor subject "+self.options["subject"]+"\nThis data was not trimmed.")
+            self.trim_ending_sec.setText(str(trim_end))
+
+
         # set include to actual status
         if self.subject_comboBox.currentText() in self.parent_window.selected_subjects:
             self.include_cb.setChecked(True)
@@ -4265,8 +4421,10 @@ class PreviewEventBasedWidget(QWidget):
         # disable buttons while processing
         self.disable_buttons_signal.emit()
         print("Started batch processing")
-        new_trim_start = int(self.parent_window.batch_export_settings_dict["trim_begin"])
-        new_trim_end = int(self.parent_window.batch_export_settings_dict["trim_end"])
+        # new_trim_start = int(self.parent_window.batch_export_settings_dict["trim_begin"])
+        # new_trim_end = int(self.parent_window.batch_export_settings_dict["trim_end"])
+        new_trim_start = int(self.trim_beginning_sec.text())
+        new_trim_end = int(self.trim_ending_sec.text())
         
         # set event
         self.options["event"] = self.event_from_data_comboBox.currentText()
@@ -5027,6 +5185,8 @@ class PeriEventOptionsWindow(QMainWindow):
         
         self.export_path = self.options_dict["export_path"]
         self.export_file_begin = self.options_dict["file_beginning"]
+
+        self.bold_label_stylesheet = "QLabel {font-weight: bold}"
         
         # use docks from pyqtgraph
         self.area = DockArea()
@@ -5062,6 +5222,7 @@ class PeriEventOptionsWindow(QMainWindow):
         self.event_name_text = QLineEdit("")
         if 'event_name' in self.options_dict:
             self.event_name_text.setText(self.options_dict['event_name'])
+        self.event_from_file_comboBox.currentIndexChanged.connect(self.update_trials)
         self.event_name_text.setToolTip("i.e, Tone")
         self.event_layout.addWidget(self.event_label)
         self.event_layout.addWidget(self.event_from_file_comboBox)
@@ -5217,6 +5378,30 @@ class PeriEventOptionsWindow(QMainWindow):
             self.export_btn.clicked.connect(self.export_btn_clicked)
             self.export_btn.setStyleSheet(STYLESHEET)
         else:
+            self.current_trials_widget = QWidget()
+            self.trials_layout = QHBoxLayout()
+            self.trials_layout.setAlignment(Qt.AlignCenter)
+            self.trials_button_group = []
+            self.current_trials = []
+            # filter around trimmed
+            event_onsets = fpExplorer_functions.get_event_on_off(self.subject_info[2],self.event_from_file_comboBox.currentText())
+            # print(self.event_from_file_comboBox.currentText())
+            # print("This event has "+str(len(event_onsets[0]))+" trials")
+            for i in range(len(event_onsets[0])):
+                # create btn
+                # add button to a group
+                # add to list
+                # add to layout
+                btn = QCheckBox(str(i+1))
+                btn.setChecked(True)
+                self.trials_button_group.append(btn)
+                self.current_trials.append(i+1)
+                self.trials_layout.addWidget(btn)
+            self.current_trials_widget.setLayout(self.trials_layout)
+            self.trials_label = QLabel("Trials:")
+            self.trials_label.setStyleSheet(self.bold_label_stylesheet)
+            self.export_layout.addWidget(self.trials_label)
+            self.export_layout.addWidget(self.current_trials_widget)
             self.export_batch_btn = QPushButton("Run on Batch and Export")
             self.export_layout.addWidget(self.export_batch_btn)
             self.export_batch_btn.clicked.connect(self.analyze_btn_clicked)
@@ -5237,6 +5422,35 @@ class PeriEventOptionsWindow(QMainWindow):
         
         
         self.disable_buttons_signal.connect(self.disable_buttons)
+
+    def update_trials(self):
+        if self.batch == True:
+            # reset all previous trials
+            self.trials_button_group = []
+            self.current_trials = []
+            # filter around trimmed
+            event_onsets = fpExplorer_functions.get_event_on_off(self.subject_info[2],self.event_from_file_comboBox.currentText())
+            # print(self.event_from_file_comboBox.currentText())
+            # print("This event has "+str(len(event_onsets[0]))+" trials")
+
+            new_trials_widget = QWidget()
+            new_trials_layout = QHBoxLayout()
+            new_trials_layout.setAlignment(Qt.AlignCenter)
+            for i in range(len(event_onsets[0])):
+                # create btn
+                # add button to a group
+                # add to list
+                # add to layout
+                btn = QCheckBox(str(i+1))
+                btn.setChecked(True)
+                self.trials_button_group.append(btn)
+                self.current_trials.append(i+1)
+                new_trials_layout.addWidget(btn)
+            # replace with updated widget
+            new_trials_widget.setLayout(new_trials_layout)
+            self.export_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+            self.current_trials_widget.deleteLater()
+            self.current_trials_widget = new_trials_widget
         
     def zscore_toggle(self):
         if self.plot_zscore_cb.isChecked():
@@ -5340,6 +5554,16 @@ class PeriEventOptionsWindow(QMainWindow):
             self.show_info_dialog("No events were found to run the analysis")
             self.close()
         return valid
+
+    def read_trials(self):
+        checked = []
+        if self.batch == True:
+            for btn in self.trials_button_group:
+                # print(btn.text(),btn.isChecked())
+                if btn.isChecked():
+                    checked.append(int(btn.text()))
+            # print("trials",checked)
+        return checked
     
     def read_options(self):
         self.options_dict["event"] = self.event_from_file_comboBox.currentText()
@@ -5348,6 +5572,8 @@ class PeriEventOptionsWindow(QMainWindow):
         self.options_dict["plot_zscore"] = self.plot_zscore_cb.isChecked()
         self.options_dict["plot_zscore_trials"] = self.plot_zscore_with_trials_cb.isChecked()
         self.options_dict["plot_auc"] = self.plot_auc_cb.isChecked()
+        self.current_trials = self.read_trials()
+        self.options_dict["trials"] = self.current_trials
         try:
             self.options_dict["sec_before"] = abs(int(self.before_sec_text.text()))
             self.options_dict["sec_after"] = abs(int(self.after_sec_text.text()))
