@@ -4419,8 +4419,8 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0.5,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
-    # show only intiger yticks
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    # # show only intiger yticks
+    # ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
@@ -4595,8 +4595,8 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0.5,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
-    # show only intiger yticks
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    # # show only intiger yticks
+    # ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
