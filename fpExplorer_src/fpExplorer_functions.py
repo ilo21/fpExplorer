@@ -675,18 +675,17 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
     
     # bin auc data in one second bins
     # create indexes
-    aucs = []
+    aucs = [[] for i in range(len(zscore_all))]
     start = -perievent_options_dict["sec_before"]
     end = start + 1
     while end < perievent_options_dict["sec_after"]:
         ind = np.where((np.array(ts_control4average)<end) & (np.array(ts_control4average)>start))
-        my_auc = auc(ts_control4average[ind], np.mean(zscore_all, axis=0)[ind])
-        aucs.append(my_auc)
+        for i in range(len(zscore_all)):
+            my_auc = auc(ts_control4average[ind], zscore_all[i][ind])
+            aucs[i].append(my_auc)
         start = end
         end = start+1
         
-        
-    
     # create dictionary with data for AUC plot
     auc_data2plot_dict = {}
     auc_data2plot_dict['auc_data'] = AUC
@@ -701,12 +700,9 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
         
     return analyzed_perievent_dict
     
-# create settings dataframe for csv headers   
+# create settings dataframe for csv
+#  headers   
 def get_settings_df(settings_dict):
-#    self.settings_dict = [{"downsample":10,
-#                              "normalization": "Mulholland dF/F",
-#                              "filter":False,
-#                              "filter_fraction":DEFAULT_SMOOTH_FRAQ}]
     downsample_no = settings_dict[0]["downsample"]
     downsample_rate = settings_dict[0]["entered_downsample"]
     normalization = settings_dict[0]["normalization"]
@@ -723,6 +719,13 @@ def get_settings_df(settings_dict):
                           "filter window":[filter_window],
                           "subjects":subjects,
                           "subject group name":group})
+    if "baseline_from_sec" in settings_dict[0]: # if that is in settings dictionary, all perievent settings are there
+        my_df["baseline_from_sec"] = [settings_dict[0]["baseline_from_sec"]]
+        my_df["baseline_to_sec"] = [settings_dict[0]["baseline_to_sec"]]
+        my_df["auc_pre_from_sec"] = [settings_dict[0]["auc_pre_from"]]
+        my_df["auc_pre_to_sec"] = [settings_dict[0]["auc_pre_to"]]
+        my_df["auc_post_from_sec"] = [settings_dict[0]["auc_post_from"]]
+        my_df["auc_post_to_sec"] = [settings_dict[0]["auc_post_to"]]
     my_df_transposed = my_df.transpose()
     return my_df_transposed
 
@@ -1974,6 +1977,12 @@ def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,
 def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,group_name,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data
     raw_df = None
@@ -2174,6 +2183,12 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
 def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,signal_name,control_name,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get data to plot
@@ -2249,6 +2264,12 @@ def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options
 def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data    
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     raw_df = None
@@ -2343,6 +2364,12 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
 def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data    
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     raw_df = None
@@ -2608,6 +2635,12 @@ def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perieve
 def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):   
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data 
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get data to plot
@@ -2667,7 +2700,12 @@ def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_peri
             f.write("\n")
         raw_df.to_csv(dump_file_path, index=False,mode='a') 
         # export also auc binned in one second bins
-        sec_auc_df = pd.DataFrame({"One second bins AUC":analyzed_perievent_dict["auc_by_sec"]})
+        sec_auc_dfs = []
+        for i in range(len(analyzed_perievent_dict["auc_by_sec"])):
+            d = pd.DataFrame({"Trial_"+str(i+1):analyzed_perievent_dict["auc_by_sec"][i]})
+            sec_auc_dfs.append(d)
+        sec_auc_df = pd.concat(sec_auc_dfs,axis = 1)
+      
         auc_file_name = file_beginning+"_"+ subject+"_"+event_name+"_auc_one_second_bins.csv"
         if file_beginning == subject:
             auc_file_name = file_beginning+"_"+event_name+"_auc_one_second_bins.csv"
@@ -4167,6 +4205,12 @@ def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,even
 def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     show_norm_as = settings_dict[0]["show_norm_as"]
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data 
     all_dfs = copy.deepcopy(my_all_dfs)
     # contains single dataframe with time
@@ -4289,6 +4333,12 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
     
 def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data 
 #    print(len(my_all_dfs))
     all_dfs = copy.deepcopy(my_all_dfs)
@@ -4463,6 +4513,12 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     
 def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data 
 #    print(len(my_all_dfs))
     all_dfs = copy.deepcopy(my_all_dfs)
@@ -4634,13 +4690,21 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     
 def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
+    settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
+    settings_dict[0]["baseline_to_sec"] =perievent_options_dict["baseline_to"]
+    settings_dict[0]["auc_pre_from"] =perievent_options_dict["auc_pre_from"]
+    settings_dict[0]["auc_pre_to"] =perievent_options_dict["auc_pre_to"]
+    settings_dict[0]["auc_post_from"] =perievent_options_dict["auc_post_from"]
+    settings_dict[0]["auc_post_to"] =perievent_options_dict["auc_post_to"]
     dump_path,file_beginning = export_loc_data 
     all_dfs = copy.deepcopy(my_all_dfs)
     # contains single dataframe with time
     ts_df = []
     # contains a list of all subject's dataframe(with all normalized trials)
     zscore_all_dfs = []
-    zscores_means_by_subject = []
+    # zscores_means_by_subject = []
+    zscores_by_trial = [[]]
+    all_new_column_names = []
     # remember all subjects to include in file name
     subjects_end_file = ""
     subjects_group_names = ""
@@ -4648,9 +4712,9 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
         subject,df = el
         subject_string = subject + ","
         subjects_end_file+=subject_string
-        # get means as list
-        means = df['Mean_zscore'].tolist()
-        zscores_means_by_subject.append(means)
+        # # get means as list
+        # means = df['Mean_zscore'].tolist()
+        # zscores_means_by_subject.append(means)
         del df['Mean_zscore']
         del df['Error']
         # if first dataframe keep time
@@ -4661,14 +4725,26 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
         del df['Time (sec)']
         original_cols = list(df.columns)
         new_columns = []
+        trial_idx = 0
         for col in original_cols:
             new_name = subject+"_"+col
             new_columns.append(new_name)
+            all_new_column_names.append(new_name)
+            # add trial data
+            if trial_idx < len(zscores_by_trial):
+                trial_zscore = df[col]
+                zscores_by_trial[trial_idx].append(trial_zscore)
+            else:
+                zscores_by_trial.append([])
+                trial_zscore = df[col]
+                zscores_by_trial[trial_idx].append(trial_zscore)
+            trial_idx +=1
+            
         # replace old column names with new that contain subject name
         df.columns = new_columns
         # add to means list
         zscore_all_dfs.append(df)    
-
+    
     for name in group_names:
         name2write = name+","
         subjects_group_names+=name2write
@@ -4678,12 +4754,27 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     settings_dict[0]["subject"] = subjects_end_file[:-1]
     settings_dict[0]["subject_group_name"] = subjects_group_names[:-1]
     # calculate means
-    # join all trials from all subjects to get means ans errors
+    # join all trials from all subjects to get means and errors
     df_all_trials = pd.concat(zscore_all_dfs,axis=1)
     # print(df_all_trials)
     transposed_df = df_all_trials.transpose()
+    # print(transposed_df)
     means_df = transposed_df.mean(axis=0)
     means_df = pd.DataFrame({"Mean":means_df.tolist()})
+
+    # create data frames by trial
+    by_trials_dfs = []
+    for i in range(len(zscores_by_trial)):
+        single_trial_df = pd.concat(zscores_by_trial[i],axis=1)
+        # transpose to get means
+        T_single_trial_df = single_trial_df.transpose()
+        trial_means = T_single_trial_df.mean(axis=0)
+        single_trial_means = pd.DataFrame({i+1:trial_means.tolist()})
+        by_trials_dfs.append(single_trial_means)
+    # join means by trial into single dataframe
+    by_trials_df = pd.concat(by_trials_dfs,axis=1)
+    # print(by_trials_df.head(20))
+
 #    standard_devs_df = transposed_df.std(axis=0)
 #    stds = standard_devs_df.tolist()
 #    se = [stds[i]/np.sqrt(df_all_trials.shape[1]) for i in range(len(stds))]
@@ -4700,16 +4791,16 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     post_ind = np.where((np.array(ts)>perievent_options_dict["auc_post_from"]) & (np.array(ts)<perievent_options_dict["auc_post_to"]))
     AUC_post= auc(ts[post_ind], mean_zscore[post_ind])
     AUC = [AUC_pre, AUC_post]   
-    # run a two-sample T-test
-    t_stat,p = stats.ttest_ind(mean_zscore[pre_ind],
-                               mean_zscore[post_ind], equal_var=False)
+    # # run a two-sample T-test
+    # t_stat,p = stats.ttest_ind(mean_zscore[pre_ind],
+    #                            mean_zscore[post_ind], equal_var=False)
 
     aucs_pre_by_trial =[]
     aucs_post_by_trial = []
     zscore_all = []
     # get each trials zscores
-    for col in df_all_trials.columns:
-        zscore_all.append(np.asarray(df_all_trials[col].tolist()))
+    for col in by_trials_df.columns:
+        zscore_all.append(np.asarray(by_trials_df[col].tolist()))
     for i in range(len(zscore_all)):
         pre = auc(ts[pre_ind], zscore_all[i][pre_ind])
         aucs_pre_by_trial.append(pre)
@@ -4725,13 +4816,19 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
 
     # bin auc data in one second bins
     # create indexes
-    aucs = []
+    # print(df_all_trials.head(20))
+    col_names = df_all_trials.columns.tolist()
+    aucs = [[] for i in range(len(col_names))]
     start = -perievent_options_dict["sec_before"]
     end = start + 1
     while end < perievent_options_dict["sec_after"]:
         ind = np.where((np.array(ts)<end) & (np.array(ts)>start))
-        my_auc = auc(ts[ind], mean_zscore[ind])
-        aucs.append(my_auc)
+        for i in range(len(col_names)):
+            trial_zscore = np.asarray(df_all_trials[col_names[i]].tolist())
+            # if i == 0:
+            #     print(trial_zscore[ind])
+            my_auc = auc(ts[ind], trial_zscore[ind])
+            aucs[i].append(my_auc)
         start = end
         end = start+1
         
@@ -4783,7 +4880,11 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     raw_df.to_csv(dump_file_path, index=False,mode='a')
     
     # export also auc binned in one second bins
-    sec_auc_df = pd.DataFrame({"One second bins AUC":aucs})
+    sec_auc_dfs = []
+    for i in range(len(aucs)):
+        d = pd.DataFrame({col_names[i]:aucs[i]})
+        sec_auc_dfs.append(d)
+    sec_auc_df = pd.concat(sec_auc_dfs,axis = 1)
     auc_file_name = file_beginning+"_auc_one_second_bins.csv"
     dump_file_path = os.path.join(dump_path,auc_file_name)
     settings_df.to_csv(dump_file_path,header=False)            
