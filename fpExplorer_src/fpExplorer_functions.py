@@ -258,60 +258,18 @@ def downsample_tdt(signal_dict,downsample_n):
         GCaMP_data_means = GCaMP_data_means[:len(ts_adjusted)]
         control_data_means = control_data_means[:len(ts_adjusted)]
     
-#    print(len(GCaMP_data))
-#    print(len(GCaMP_data_means))
-#    print(len(control_data))
-#    print(len(control_data_means))
-#    print(ts_adjusted)    
-#     # debug
-#    a = np.array([1, 2, 3, 4,5,6,7,8,9,10])
-#    a_means = []
-#    for i in range(0, len(a), downsample_n):
-#        a_means.append(np.mean(a[i:i+downsample_n-1])) # This is the moving window mean
-#        print(a[i:i+downsample_n-1])
-#    print(a)
-#    print(a_means)    
     return {"ts":ts_adjusted,"signal":GCaMP_data_means,"control":control_data_means}
 
 # Mulholland dff
 def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_window):
-    # debug
-#    a = np.array([1, 2, 3, 4])
-#    test_add = a + 1
-##    print(test_add)
-#    b = np.ones(4) + 1
-#    print(b)
-##    print(a-b)  # element wise
-##    print(2*a+1)  # element wise
-#    c = np.array([1, 2, 3, 4])
-#    print(c)
-#    print(b-c)
-#    print((b-c)/c)
     #####################
     # change lists to numpy array for calculations
     # create new timestamps for the data (from zero)
-#    ts_arr = create_timestamps(raw_data,GCAMP_CHNL,signal_dict["signal"])
     ts_arr = np.asarray(signal_dict["ts"])
     signal_arr =np.asarray(signal_dict["signal"])
     control_arr = np.asarray(signal_dict["control"])
     if smooth == True:
         print("Start smoothing",smooth_window)
-        # smooth data using lowess filter
-        # https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html
-        # https://github.com/djamesbarker/pMAT/blob/master/pMAT%20v1-2%20MATLAB/pmat.m
-#        lowess = sm.nonparametric.lowess
-#        signal_arr = lowess(signal_arr,ts_arr,frac=smooth_fraq,it=0,missing='none',return_sorted=False)
-#        control_arr = lowess(control_arr, ts_arr, frac=smooth_fraq,it=0,missing='none',return_sorted=False)
-#        xout_sig, signal_arr, weigts_sig = loess_1d(ts_arr, signal_arr, frac=smooth_fraq)
-#        xout_cont, control_arr, weigts_cont = loess_1d(ts_arr, control_arr, frac=smooth_fraq)
-        # working lowess (super slow)
-#        signal_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(signal_arr), bandwidth=smooth_fraq, polynomialDegree=1)
-#        control_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(control_arr), bandwidth=smooth_fraq, polynomialDegree=1)
-###################################################################################
-# GAUSSIAN
-        # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-        # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
-
         a = 1
         b = np.divide(np.ones((smooth_window,)), smooth_window)
         control_arr = filtfilt(b, a, control_arr)
@@ -377,20 +335,6 @@ def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_window):
     
     if smooth == True:
         print("Start smoothing",smooth_window)
-        # smooth data using lowess filter
-        # https://www.statsmodels.org/stable/generated/statsmodels.nonparametric.smoothers_lowess.lowess.html
-        # https://github.com/djamesbarker/pMAT/blob/master/pMAT%20v1-2%20MATLAB/pmat.m
-#        lowess = sm.nonparametric.lowess
-#        signal_arr = lowess(signal_arr,ts_arr,frac=smooth_fraq,it=0,missing='none',return_sorted=False)
-#        control_arr = lowess(control_arr, ts_arr, frac=smooth_fraq,it=0,missing='none',return_sorted=False)
-        # working lowess
-#        signal_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(signal_arr), bandwidth=smooth_fraq, polynomialDegree=1)
-#        control_arr = lowess.lowess(pd.Series(ts_arr), pd.Series(control_arr), bandwidth=smooth_fraq, polynomialDegree=1)
-#############################################################################################################################
-# GAUSSIAN
-        # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-        # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
-
         a = 1
         b = np.divide(np.ones((smooth_window,)), smooth_window)
         control_arr = filtfilt(b, a, control_arr)
@@ -562,13 +506,7 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
         # https://github.com/djamesbarker/pMAT
         for x, y in zip(control_perievent_data, GCaMP_perievent_data):
             x = np.array(x)
-            y = np.array(y)
-            
-#            bls = np.polyfit(x, y, 1)
-#            fit_line = np.multiply(bls[0], x) + bls[1]
-#            dff = (y - fit_line)/fit_line * 100
-#            y_dff_all.append(dff)
-            
+            y = np.array(y)           
             # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
             mu = np.mean(x)
             std = np.std(x, ddof=0)
@@ -591,21 +529,6 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
         for x, y in zip(control_perievent_data, GCaMP_perievent_data):
             x = np.array(x)
             y = np.array(y)
-            
-#            bls_signal = np.polyfit(ts_signal4average, y, 1)
-#            F0_signal = np.multiply(bls_signal[0], ts_signal4average) + bls_signal[1]
-#            dFF_signal = (y - F0_signal)/F0_signal *100
-#             
-#            bls_control = np.polyfit(ts_control4average,x,1)
-#            F0_control = np.multiply(bls_control[0], ts_control4average) + bls_control[1]
-#            dFF_control = (x - F0_control)/F0_control *100
-#            dFFnorm = dFF_signal - dFF_control
-#            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-#            # to make 0 the mean value for DF/F
-#            negative = dFFnorm[dFFnorm<0]
-#            dFF = dFFnorm-np.mean(negative)
-#            y_dff_all.append(dFF)
-             
              
             bls_signal = np.polynomial.polynomial.Polynomial.fit(ts_signal4average, y, 1)
             F0_signal = polyval(ts_signal4average,bls_signal.convert().coef)
@@ -2034,10 +1957,6 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         for x, y in zip(control_perievent_data, GCaMP_perievent_data):
             x = np.array(x)
             y = np.array(y)
-#            bls = np.polyfit(x, y, 1)
-#            fit_line = np.multiply(bls[0], x) + bls[1]
-#            dff = (y - fit_line)/fit_line * 100
-#            y_dff_all.append(dff)
             
             # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
             mu = np.mean(x)
@@ -4915,35 +4834,41 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
     total_seconds = ts_arr[-1]-ts_arr[0]
     # start time from zero
     ts_reset = [i*total_seconds/len(ts_arr) for i in range(len(ts_arr))]
-    if normalization == 'Standard Polynomial Fitting':        
-        if smooth == True:
-            print("Start smoothing",smooth_window)
-            a = 1
-            b = np.divide(np.ones((smooth_window,)), smooth_window)
-            control_arr = filtfilt(b, a, control_arr)
-            signal_arr = filtfilt(b, a, signal_arr)
-            # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-            # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
-            print("Done smoothing")
-            
+
+    if smooth == True:
+        print("Start smoothing",smooth_window)
+        a = 1
+        b = np.divide(np.ones((smooth_window,)), smooth_window)
+        control_arr = filtfilt(b, a, control_arr)
+        signal_arr = filtfilt(b, a, signal_arr)
+        print("Done smoothing")
+
+    # in order to suggest if user should normalize using modified method
+    # check if signals in both channels do not decrease equally
+    # fit time axis to the 465nm stream 
+    bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_reset,signal_arr,1)
+    # fit time axis the 405nm stream
+    bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_reset,control_arr,1)
+    # the below returns first: slope, second: intercept
+    print("bls_Ca",bls_Ca.convert().coef[::-1])
+    # the below returns first: slope, second: intercept
+    print("bls_ref",bls_ref.convert().coef[::-1])
+    # put those values in a dictionary
+    slope_intercept_dict = {"signal_slope_intercept":bls_Ca.convert().coef[::-1],
+                            "control_slope_intercept":bls_ref.convert().coef[::-1]
+    }
+
+    if normalization == 'Standard Polynomial Fitting':                   
         # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
         mu = np.mean(control_arr)
         std = np.std(control_arr, ddof=0)
         # Call np.polyfit(), using the shifted and scaled version of control_arr
-    #    cscaled = np.polyfit((control_arr - mu)/std, signal_arr, 1) # depreciated
         cscaled = np.polynomial.polynomial.Polynomial.fit((control_arr - mu)/std, signal_arr, 1)
         # Create a poly1d object that can be called
-    #    pscaled = np.poly1d(cscaled) # old obsolete function
         # https://numpy.org/doc/stable/reference/routines.polynomials.html
         pscaled = Polynomial(cscaled.convert().coef)
         # Inputs to pscaled must be shifted and scaled using mu and std
-        F0 = pscaled((control_arr - mu)/std)
-#        dffnorm = (signal_arr - F0)/F0 * 100
-#        # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-#        # to make 0 the mean value for DF/F
-#        negative = dffnorm[dffnorm<0]
-#        dff=dffnorm-np.mean(negative)
-    
+        F0 = pscaled((control_arr - mu)/std)    
         # plot
         # clear previous figure
         canvas.fig.clf()
@@ -4966,39 +4891,9 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
     
         canvas.draw()
     
-    if normalization == 'Modified Polynomial Fitting':
-        if smooth == True:
-            print("Start smoothing",smooth_window)
-            a = 1
-            b = np.divide(np.ones((smooth_window,)), smooth_window)
-            control_arr = filtfilt(b, a, control_arr)
-            signal_arr = filtfilt(b, a, signal_arr)
-            # signal_arr = gaussian_filter(signal_arr, sigma=smooth_fraq)
-            # control_arr = gaussian_filter(control_arr, sigma=smooth_fraq)
-            print("Done smoothing")
-            
-        # fit time axis to the 465nm stream  
-    #    bls_Ca = np.polyfit(ts_arr,signal_arr,1) # deprecieted
-        bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_reset,signal_arr,1)
-    #    print("bls_Ca",bls_Ca.convert().coef[::-1])
-    #    F0Ca = np.polyval(bls_Ca,ts_arr) # deprecieted
+    if normalization == 'Modified Polynomial Fitting':           
         F0Ca = polyval(ts_reset,bls_Ca.convert().coef)
-        # dF/F for the 465 channel
-#        dFFCa = (signal_arr - F0Ca)/F0Ca *100
-        # fit time axis the 405nm stream
-    #    bls_ref = np.polyfit(ts_arr,control_arr,1) # depreciated
-        bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_reset,control_arr,1)
-    #    F0Ref = np.polyval(bls_ref,ts_arr) # deprecieted
         F0Ref = polyval(ts_reset,bls_ref.convert().coef)
-        # dF/F for the 405 channel
-#        dFFRef = (control_arr - F0Ref)/F0Ref *100
-#    #    print(dFFRef)
-#        dFFnorm = dFFCa - dFFRef
-#        # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-#        # to make 0 the mean value for DF/F
-#        negative = dFFnorm[dFFnorm<0]
-#        dFF=dFFnorm-np.mean(negative)
- 
         # plot
         # clear previous figure
         canvas.fig.clf()
@@ -5042,6 +4937,7 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
         canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
     else:
         canvas.draw()
+    return slope_intercept_dict
     
    
     
