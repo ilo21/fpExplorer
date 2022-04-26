@@ -1640,7 +1640,7 @@ class PreviewContinuousWidget(QWidget):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
             if self.read_options() == True:
-                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                slope_intercept_dict = fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                                 self.settings_dict[0], 
                                                 self.downsampled_dict[self.options["subject"]],
                                                 self.preview_init_params[0][0]["signal_name"],
@@ -1648,6 +1648,14 @@ class PreviewContinuousWidget(QWidget):
                                                 self.options["subject"],
                                                 False,
                                                 "")
+                # show the equation of fitted lines
+                signal_slope_intercept = slope_intercept_dict["signal_slope_intercept"]
+                control_slope_intercept = slope_intercept_dict["control_slope_intercept"]
+                signal_b_direction = "+ " if signal_slope_intercept[1] >= 0 else "- "
+                control_b_direction = "+ " if control_slope_intercept[1] >= 0 else "- "
+                info_text = "Signal fitted: y = "+str(round(signal_slope_intercept[0],4))+"x "+signal_b_direction+str(round(signal_slope_intercept[1],2))\
+                            +"\nControl fitted: y = "+str(round(control_slope_intercept[0],4))+"x "+control_b_direction+str(round(control_slope_intercept[1],2))
+                self.show_info_dialog(info_text)
         else: # prompt user to check normalize first
             self.show_info_dialog("Please check Normalize check box first.")
         self.enable_buttons_signal.emit()
@@ -3121,7 +3129,7 @@ class PreviewEventBasedWidget(QWidget):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
             if self.read_options() == True:
-                fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                slope_intercept_dict = fpExplorer_functions.show_polynomial_fitting(self.canvas,
                                                 self.settings_dict[0], 
                                                 self.downsampled_dict[self.options["subject"]],
                                                 self.preview_init_params[0][0]["signal_name"],
@@ -3129,6 +3137,14 @@ class PreviewEventBasedWidget(QWidget):
                                                 self.options["subject"],
                                                 False,
                                                 "")
+                # show the equation of fitted lines
+                signal_slope_intercept = slope_intercept_dict["signal_slope_intercept"]
+                control_slope_intercept = slope_intercept_dict["control_slope_intercept"]
+                signal_b_direction = "+ " if signal_slope_intercept[1] >= 0 else "- "
+                control_b_direction = "+ " if control_slope_intercept[1] >= 0 else "- "
+                info_text = "Signal fitted: y = "+str(round(signal_slope_intercept[0],4))+"x "+signal_b_direction+str(round(signal_slope_intercept[1],2))\
+                            +"\nControl fitted: y = "+str(round(control_slope_intercept[0],4))+"x "+control_b_direction+str(round(control_slope_intercept[1],2))
+                self.show_info_dialog(info_text)
         else: # prompt user to check normalize first
             self.show_info_dialog("Please check Normalize check box first.")
         self.enable_buttons_signal.emit()
