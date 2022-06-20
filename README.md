@@ -1,5 +1,5 @@
-# <div align="center">fpExplorer<br><br>![icon64x64](https://user-images.githubusercontent.com/87764674/174671214-01d6a9e9-39bc-4bd4-8a02-e519a0bd834f.png)
-  <br> [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Created my free logo at LogoMakr.com](https://img.shields.io/badge/Created%20my%20free%20logo%20at-LogoMakr.com-blue)](https://logomakr.com/)<br></div>
+# <div align="center">fpExplorer<br><br>![icon64x64](https://user-images.githubusercontent.com/87764674/174671214-01d6a9e9-39bc-4bd4-8a02-e519a0bd834f.png)<br> [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Created my free logo at LogoMakr.com](https://img.shields.io/badge/Created%20my%20free%20logo%20at-LogoMakr.com-blue)](https://logomakr.com/)
+  <br></div>
 ## What is it?
 fpExplorer is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems. This is our attempt to standardize and simplify analysis approaches.<br>
 <br>![example_github](https://user-images.githubusercontent.com/87764674/174671613-e8300626-7b84-4b78-83f8-14845f46a8f3.PNG)
@@ -59,7 +59,7 @@ You can find more information about managing conda environments [here](https://c
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
 - The application was developed and extensively tested on Windows 10 platform. We have only minimally tested running it on MacOS and Linux systems.
 - Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software (Subject-> Experiment or Experiment->Structure)
-- Currently supported events are only the ones that start with Prt or Note (e.g., "PrtA 253", "Note 1")
+- Currently supported events are only the ones that don't start with Cam or Tick (e.g., "PrtA 253", "Note 1")
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
 - [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
