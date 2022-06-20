@@ -42,7 +42,9 @@ from sklearn.metrics import auc
 #import statsmodels.api as sm
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.signal import find_peaks, filtfilt
+from scipy.interpolate import interp1d
 import os
 import copy
 
@@ -83,6 +85,9 @@ MY_HSPACE = 0.5
 AXIS_LABEL_FONTSIZE = 14
 TITLE_FONT_SIZE = 15
 FIGURE_TITLE_FONT_SIZE = 16
+
+SIGNAL_COLOR_RGB = '#1A36F2'
+CONTROL_COLOR_RGB = '#FC2908'
 
 DPI4SVG = 1200
 ################################
@@ -260,6 +265,27 @@ def downsample_tdt(signal_dict,downsample_n):
     
     return {"ts":ts_adjusted,"signal":GCaMP_data_means,"control":control_data_means}
 
+# use 1D linear interpolation to downsample precisely in Hz
+def downsample(signal_dict,target_Hz):
+    GCaMP_data = signal_dict["signal"]
+    control_data = signal_dict["control"]
+    ts_original = signal_dict["ts"]
+    ts = signal_dict["ts"]
+    if ts[0] > 1: # if data was trimmed go back from zero
+        ts = [el-ts[0] for el in ts]
+    # round last time to full integer
+    last = math.floor(ts[-1])
+    ts_adjusted = np.linspace(1/target_Hz,last,last*target_Hz)
+    GCaMP_interpolated = interp1d(ts, GCaMP_data)
+    GCaMP_resampled_data = GCaMP_interpolated(ts_adjusted)
+    control_interpolated = interp1d(ts, control_data)
+    control_resampled_data = control_interpolated(ts_adjusted)
+    # reconstruct time
+    if ts_original[0] > 1: # if data was trimmed go back to start like the original
+        ts_adjusted = [el+ts_original[0] for el in ts_adjusted]
+    print(ts_original[0],ts_adjusted[0])
+    return {"ts":ts_adjusted,"signal":GCaMP_resampled_data,"control":control_resampled_data}
+
 # Mulholland dff
 def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_window):
     #####################
@@ -378,7 +404,7 @@ def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_window):
 def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signal_name,control_name):
     event_name_split = perievent_options_dict["event"].split(" ")
     before = -perievent_options_dict["sec_before"]
-    till = perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]
+    till = perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]+0.1
     trange = [before,till]
     modified_data = tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
     all_control_filtered = modified_data.streams[control_name].filtered
@@ -389,46 +415,37 @@ def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signa
         of each segment could vary by one sample. Let's find the minimum length 
         so we can trim the excess off before calculating the median.
         '''
-    try:
-        nans = 0
-        min1 = np.min([np.size(x) for x in modified_data.streams[signal_name].filtered])
-        min2 = np.min([np.size(x) for x in modified_data.streams[control_name].filtered])
-        modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
-        modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
-        # downsample data as well
-        N = settings_dict[0]["downsample"] # Average every N samples into 1 value
-        # print("Total seconds:",perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"])
-        # print("Total samples before downsampling:",len(modified_data.streams[signal_name].filtered[0]))
-        # samples_after = settings_dict[0]["entered_downsample"]*(perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"])
-        # print("Total samples after:",samples_after)
+    # try:
+    min1 = np.min([np.size(x) for x in modified_data.streams[signal_name].filtered])
+    min2 = np.min([np.size(x) for x in modified_data.streams[control_name].filtered])
+    modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
+    modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
+    # downsample data as well
+    N = settings_dict[0]["downsample"] # Average every N samples into 1 value
     
-        control = []
-        signal = []
+    control = []
+    signal = []
+    fs = get_frequency(raw_data,signal_name)
+    try:
         for lst in modified_data.streams[control_name].filtered:
-            small_lst = []
-            for i in range(0, min2, N):
-                val = np.median(lst[i:i+N-1])
-                if math.isnan(val):
-                    nans +=1
-                small_lst.append(val) # This is the moving window median
-            control.append(small_lst)
-            
+            ts = np.linspace(1, len(lst), len(lst))/fs
+            # round last time to full integer
+            last = math.floor(ts[-1])
+            # make new times till total expected
+            ts_adjusted = np.linspace(1/N,last,last*N)
+            control_interpolated = interp1d(ts, lst)
+            resampled_data = control_interpolated(ts_adjusted)
+            control.append(resampled_data)
         for lst in modified_data.streams[signal_name].filtered:
-            small_lst = []
-            for i in range(0, min1, N):
-                val = np.median(lst[i:i+N-1])
-                if math.isnan(val):
-                    nans +=1
-                small_lst.append(val) # This is the moving window median
-            signal.append(small_lst)
-
+            ts = np.linspace(1, len(lst), len(lst))/fs
+            # round last time to full integer
+            last = math.floor(ts[-1])
+            ts_adjusted = np.linspace(1/N,last,last*N)
+            signal_interpolated = interp1d(ts, lst)
+            resampled_data = signal_interpolated(ts_adjusted)
+            signal.append(resampled_data)
         modified_data.streams[signal_name].filtered_downsampled = signal
-        modified_data.streams[control_name].filtered_downsampled = control      
-        # sometimes the last median value is nan
-        # if that is the case, remove that from all
-        if nans > 0:
-            modified_data.streams[signal_name].filtered_downsampled = [x[:-1] for x in signal]
-            modified_data.streams[control_name].filtered_downsampled = [x[:-1] for x in control]
+        modified_data.streams[control_name].filtered_downsampled = control   
     except:
         print("Not enough data that satisfy your request. Try changing event or times around event.")
     
@@ -457,8 +474,9 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
     
     # Create the time vector for each stream store
     N = settings_dict[0]["downsample"]
-    ts_signal4average = -perievent_options_dict["sec_before"] + np.linspace(1, len(mean_signal), len(mean_signal))/data.streams[signal_name].fs*N
-    ts_control4average = -perievent_options_dict["sec_before"] + np.linspace(1, len(mean_control), len(mean_control))/data.streams[control_name].fs*N
+    tFrom0 = np.linspace(1,len(mean_signal),len(mean_signal))/N
+    ts_signal4average = -perievent_options_dict["sec_before"] + tFrom0
+    ts_control4average = ts_signal4average
     
     # Subtract DC offset to get signals on top of one another
     mean_signal = mean_signal - dc_signal
@@ -484,15 +502,9 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
         b = np.divide(np.ones((settings_dict[0]["filter_window"],)), settings_dict[0]["filter_window"])
         for i in range(len(GCaMP_perievent_data)):
             single_evt = filtfilt(b, a, GCaMP_perievent_data[i])
-            # single_evt = gaussian_filter(GCaMP_perievent_data[i], sigma=settings_dict[0]["filter_window"])
-#            single_evt = lowess.lowess(pd.Series(ts_signal4average), pd.Series(GCaMP_perievent_data[i]), 
-#                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
             temp_signal_smoothed.append(single_evt)
         for i in range(len(control_perievent_data)):
             single_evt = filtfilt(b, a, control_perievent_data[i])
-            # single_evt = gaussian_filter(control_perievent_data[i], sigma=settings_dict[0]["filter_window"])
-#            single_evt = lowess.lowess(pd.Series(ts_control4average), pd.Series(control_perievent_data[i]), 
-#                                       bandwidth=settings_dict[0]["filter_fraction"], polynomialDegree=1)
             temp_control_smoothed.append(single_evt)
         if len(temp_signal_smoothed) > 0 and len(temp_control_smoothed) > 0:
             GCaMP_perievent_data = temp_signal_smoothed
@@ -692,11 +704,11 @@ def plot_raw(canvas,subject,raw_data,signal_name,control_name,export,save_plots,
     ax.cla()  # Clear the canvas
     # plot the lines
     ax.plot(ts, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
 
@@ -777,11 +789,11 @@ def plot_trimmed(canvas,subject,signal_dict,export,save_plots,export_loc_data,si
    
     # plot the lines
     ax.plot(ts_reset, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_reset,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     
@@ -859,11 +871,11 @@ def plot_with_event(canvas,subject,signal_dict,event_name,event2_name,event_data
     
     # plot the lines
     ax.plot(ts_reset, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_reset,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     
@@ -983,11 +995,11 @@ def plot_downsampled_alone(canvas,options_dict,downsampled_signal_dict,export,sa
 
     # plot downsampled
     ax.plot(ts_reset,GCaMP_downsampled_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_reset,control_downsampled_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # create title, axis labels, and legend
@@ -1055,11 +1067,11 @@ def plot_downsampled_alone_with_event(canvas,options_dict,downsampled_signal_dic
 
     # plot downsampled
     ax.plot(ts_reset,GCaMP_downsampled_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_reset,control_downsampled_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     
@@ -1178,7 +1190,7 @@ def plot_normalized_alone(canvas,options_dict,normalized_dict,export,save_plots,
     
     # plot downsampled that starts from zero
     ax.plot(ts_reset,normalized_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     # create title, axis labels, and legend
@@ -1254,7 +1266,7 @@ def plot_normalized_alone_with_event(canvas,options_dict,normalized_dict,event_n
     
     # plot downsampled
     ax.plot(ts_reset,normalized_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
 
@@ -1395,15 +1407,15 @@ def plot_downsampled_and_normalized_alone(canvas,subject,downsampled_signal_dict
     
     # plot downsampled
     ax.plot(ts_reset_downsampled,GCaMP_downsampled_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_reset_downsampled,control_downsampled_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     ax2.plot(ts_reset_normalized,normalized_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     # create title, axis labels, and legend
@@ -1458,15 +1470,15 @@ def plot_downsampled_and_normalized_with_event(canvas,subject,downsampled_signal
     
     # plot downsampled
     ax.plot(ts_reset_downsampled,GCaMP_downsampled_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_reset_downsampled,control_downsampled_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     ax2.plot(ts_reset_normalized,normalized_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     
@@ -1570,11 +1582,11 @@ def plot_separate_only(canvas,subject,trimmed_signal_dict,downsampled_signal_dic
 
     # plot the trimmed 
     ax.plot(ts_reset, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax2.plot(ts_reset,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     
@@ -1627,11 +1639,11 @@ def plot_separate_with_event(canvas,subject,trimmed_signal_dict,downsampled_sign
 
     # plot the trimmed 
     ax.plot(ts_reset, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax2.plot(ts_reset,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     
@@ -1729,15 +1741,15 @@ def plot_separate_with_normalized(canvas,subject,trimmed_signal_dict,downsampled
     ax3 = canvas.fig.add_subplot(313,sharex=ax)
 
     ax.plot(ts_reset, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax2.plot(ts_reset,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     ax3.plot(ts_reset_normalized,normalized_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     # create title, axis labels, and legend
@@ -1801,15 +1813,15 @@ def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,
     ax3 = canvas.fig.add_subplot(313,sharex=ax)
 
     ax.plot(ts_reset, GCaMP_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax2.plot(ts_reset,control_data,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     ax3.plot(ts_reset_normalized,normalized_data,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     
@@ -1896,7 +1908,7 @@ def plot_separate_with_normalized_with_event(canvas,subject,trimmed_signal_dict,
                     hspace=MY_HSPACE) 
     canvas.draw()
     
-# plot rwa but downsampled perievents
+# plot raw but downsampled perievents
 def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_options_dict,settings_dict,signal_name,control_name,export,save_plots,group_name,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
@@ -1917,12 +1929,17 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         # print(current_trials)
         GCaMP_perievent_data = [GCaMP_perievent_data[trial-1] for trial in current_trials]
         control_perievent_data = [control_perievent_data[trial-1] for trial in current_trials]
-    # debug to assert that all perievent data is the same lenght
-#    for i in range(len(GCaMP_perievent_data)):
-#        print(len(GCaMP_perievent_data[i]))
+    
     N = settings_dict[0]["downsample"]
-    ts1 = -perievent_options_dict["sec_before"] + np.linspace(1, len(GCaMP_perievent_data[0]), len(GCaMP_perievent_data[0]))/modified_data.streams[signal_name].fs*N
-    ts2 = -perievent_options_dict["sec_before"] + np.linspace(1, len(control_perievent_data[0]), len(control_perievent_data[0]))/modified_data.streams[control_name].fs*N
+    # !!! Create times in sec first to get last time value not total samples!!!
+    t1From0 = np.linspace(1/N,(perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]),(perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"])*N)
+    # print(t1From0)
+    ts1 = -perievent_options_dict["sec_before"] + t1From0
+    # print(ts1)
+    ts2 = ts1
+
+    # ts1 = -perievent_options_dict["sec_before"] + np.linspace(1, len(GCaMP_perievent_data[0]), len(GCaMP_perievent_data[0]))/modified_data.streams[signal_name].fs*N
+    # ts2 = -perievent_options_dict["sec_before"] + np.linspace(1, len(control_perievent_data[0]), len(control_perievent_data[0]))/modified_data.streams[control_name].fs*N
     total_plots = len(GCaMP_perievent_data) # total number of events
     
     if settings_dict[0]["filter"] == True:
@@ -2033,7 +2050,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         else:
             ax = canvas.fig.add_subplot(int(coord[i]),sharex=first_ax, sharey=first_ax)
 
-        ax.plot(ts1,y_dff_all[i],color='green',linewidth=1,label = "normalized\nsignal")
+        ax.plot(ts1,y_dff_all[i],color=SIGNAL_COLOR_RGB,linewidth=1,label = "normalized\nsignal")
         # plot event as vertical line
         p3=ax.axvline(x=0, linewidth=2, color='k', alpha=0.5,label=event_name)
         # hide top and right border
@@ -2123,20 +2140,20 @@ def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(111)
     ax.plot(ts_signal, signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_control, control,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
-                      facecolor='green', alpha=0.1)
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.1)
     ax.fill_between(ts_control, control+std_control, control-std_control,
-                      facecolor='red', alpha=0.1)
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.1)
     
     my_title = 'Average From '+ str(len(current_trials))+' Trials. Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -2202,17 +2219,17 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(211)
     ax2 = canvas.fig.add_subplot(212)
-   
+
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     mean_zscore = np.mean(zscore_all, axis=0)
-    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Mean Z-Score')
+    ax2.plot(ts, mean_zscore, linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
     ax2.fill_between(ts, mean_zscore+zerror,
-                          mean_zscore-zerror, facecolor='green', alpha=0.2, label="Standard\nerror")
+                          mean_zscore-zerror, facecolor=SIGNAL_COLOR_RGB, alpha=0.2, label="Standard\nerror")
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
     my_title = 'Subject: ' + subject
@@ -2227,6 +2244,7 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     ax2.spines['right'].set_visible(False)
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
+    ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     
     # set the spacing between subplots 
@@ -2236,6 +2254,7 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
                     top=MY_TOP,  
                     wspace=MY_WSPACE,  
                     hspace=MY_HSPACE) 
+    
     # create a list of dataframes to join later
     dfs = []
     # add time
@@ -2304,19 +2323,19 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     ax2 = canvas.fig.add_subplot(212)
    
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     mean_zscore = np.mean(zscore_all, axis=0)
-    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Mean Z-Score')
+    ax2.plot(ts, mean_zscore, linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
     # plot all trials
     for i in range(len(zscore_all)):
         if i == 0:
-            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2, label='Trials')
         else:
-            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2)
 
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
@@ -2333,6 +2352,7 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     
     # set the spacing between subplots 
     canvas.fig.subplots_adjust(left=MY_LEFT, 
@@ -2409,31 +2429,31 @@ def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_opti
     
     # average
     ax.plot(ts_signal, signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_control, control,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
-                      facecolor='green', alpha=0.1)
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.1)
     ax.fill_between(ts_control, control+std_control, control-std_control,
-                      facecolor='red', alpha=0.1)
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.1)
     
     # zscore
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
     ax3.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
-                          ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2, label="Standard\nerror")
+                          ,np.mean(zscore_all, axis=0)-zerror, facecolor=SIGNAL_COLOR_RGB, alpha=0.2, label="Standard\nerror")
     ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     
     my_title = 'Subject: ' + subject
@@ -2445,6 +2465,7 @@ def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_opti
     ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
@@ -2456,6 +2477,7 @@ def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_opti
     ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     
     # set the spacing between subplots 
     canvas.fig.subplots_adjust(left=MY_LEFT, 
@@ -2490,35 +2512,35 @@ def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perieve
     
     # average
     ax.plot(ts_signal, signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_control, control,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
-                      facecolor='green', alpha=0.1)
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.1)
     ax.fill_between(ts_control, control+std_control, control-std_control,
-                      facecolor='red', alpha=0.1)
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.1)
     
     # zscore
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
     # plot all trials
     for i in range(len(zscore_all)):
         if i == 0:
-            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2, label='Trials')
         else:
-            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2)
     ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     
     my_title = 'Subject: ' + subject
@@ -2530,6 +2552,7 @@ def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perieve
     ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
@@ -2541,6 +2564,7 @@ def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perieve
     ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     
     # set the spacing between subplots 
     canvas.fig.subplots_adjust(left=MY_LEFT, 
@@ -2671,20 +2695,20 @@ def plot_perievent_avg_auc(canvas,subject,current_trials,perievent_options_dict,
     ax2 = canvas.fig.add_subplot(212)
     
     ax.plot(ts_signal, signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_control, control,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
-                      facecolor='green', alpha=0.1)
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.1)
     ax.fill_between(ts_control, control+std_control, control-std_control,
-                      facecolor='red', alpha=0.1)
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.1)
     # polt bars with error bars
     ax2.bar(np.arange(len(AUC)), AUC, color=[.8, .8, .8], align='center', alpha=0.5)
     ax2.axhline(y=0, linewidth=0.5, color='k')
@@ -2743,14 +2767,14 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax3 = canvas.fig.add_subplot(313)
     
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
+    ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color=SIGNAL_COLOR_RGB,label='Mean Z-Score')
     ax2.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
-                          ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2,label="Standard\nerror")
+                          ,np.mean(zscore_all, axis=0)-zerror, facecolor=SIGNAL_COLOR_RGB, alpha=0.2,label="Standard\nerror")
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
@@ -2779,6 +2803,7 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -2822,18 +2847,18 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     ax3 = canvas.fig.add_subplot(313)
     
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green',label='Mean Z-Score')
+    ax2.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color=SIGNAL_COLOR_RGB,label='Mean Z-Score')
     # plot all trials
     for i in range(len(zscore_all)):
         if i == 0:
-            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2, label='Trials')
         else:
-            ax2.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+            ax2.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2)
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
@@ -2861,6 +2886,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     # hide top and right border
     ax3.spines['top'].set_visible(False)
     ax3.spines['right'].set_visible(False)
@@ -2912,30 +2938,30 @@ def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dic
     ax4 = canvas.fig.add_subplot(414)
     
     ax.plot(ts_signal, signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_control, control,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
-                      facecolor='green', alpha=0.1)
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.1)
     ax.fill_between(ts_control, control+std_control, control-std_control,
-                      facecolor='red', alpha=0.1)
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.1)
     
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
     ax3.fill_between(ts, np.mean(zscore_all, axis=0)+zerror
-                          ,np.mean(zscore_all, axis=0)-zerror, facecolor='green', alpha=0.2,label="Standard\nerror")
+                          ,np.mean(zscore_all, axis=0)-zerror, facecolor=SIGNAL_COLOR_RGB, alpha=0.2,label="Standard\nerror")
     ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
@@ -2960,6 +2986,7 @@ def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dic
 #    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks(np.arange(0.5,len(zscore_all), 1))
@@ -2969,6 +2996,7 @@ def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dic
     ax3.spines['right'].set_visible(False)
     ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
 #    ax3.set_xlabel('Seconds')
     # hide top and right border
     ax4.spines['top'].set_visible(False)
@@ -3019,34 +3047,34 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perieve
     ax4 = canvas.fig.add_subplot(414)
     
     ax.plot(ts_signal, signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
     ax.plot(ts_control, control,
-             color='red',
+             color=CONTROL_COLOR_RGB,
              linewidth=1,
              label = "control")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts_signal, signal+std_signal, signal-std_signal,
-                      facecolor='green', alpha=0.1)
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.1)
     ax.fill_between(ts_control, control+std_control, control-std_control,
-                      facecolor='red', alpha=0.1)
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.1)
     
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax2.imshow(zscore_all, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax2.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax2,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color='green', label='Mean Z-Score')
+    ax3.plot(ts, np.mean(zscore_all, axis=0), linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
     # plot all trials
     for i in range(len(zscore_all)):
         if i == 0:
-            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2, label='Trials')
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2, label='Trials')
         else:
-            ax3.plot(ts, zscore_all[i], linewidth=0.5, color='green', alpha=0.2)
+            ax3.plot(ts, zscore_all[i], linewidth=0.5, color=SIGNAL_COLOR_RGB, alpha=0.2)
     ax3.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
     
     # AUC
@@ -3071,6 +3099,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perieve
 #    ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_ylabel('mV', fontsize=AXIS_LABEL_FONTSIZE)
     ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     ax2.set_title('Individual z-Score Traces',fontsize=TITLE_FONT_SIZE)
     ax2.set_ylabel('Trials',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_yticks(np.arange(0.5,len(zscore_all), 1))
@@ -3080,6 +3109,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perieve
     ax3.spines['right'].set_visible(False)
     ax3.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax3.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
 #    ax3.set_xlabel('Seconds')
     # hide top and right border
     ax4.spines['top'].set_visible(False)
@@ -3204,7 +3234,7 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings
     ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
     
     ax.plot(ts_reset,normalized_signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
 #    ax.plot(peaks, normalized_signal[peaks], "xr")
@@ -3362,14 +3392,14 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
     ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
     
     ax.plot(ts_reset,normalized_signal,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized\nsignal")
 #    ax.plot(peaks, normalized_signal[peaks], "xr")
     ax.plot(translated_peaks, normalized_signal[peaks], "xr")
     
     total_label = str(total_peaks)+ " Spikes Found"
-    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label=total_label)
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color=CONTROL_COLOR_RGB,label=total_label)
     
     if len(event_data[0][0]) > 0:
         # first event
@@ -3528,12 +3558,12 @@ def get_batch_normalized(canvas,my_all_normalized,settings_dict,export,export_lo
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(111)
     ax.plot(ts_reset, means,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     # plot standard error bands
     ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='g', alpha=0.2,label = 'Standard error')
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.2,label = 'Standard error')
     
     my_title = 'Normalized batch'
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -3615,12 +3645,12 @@ def get_batch_normalized_with_event(canvas,my_all_normalized,event_name,event2_n
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(111)
     ax.plot(ts_reset, means,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "normalized")
     # plot standard error bands
     ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='g', alpha=0.2,label = 'Standard error')
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.2,label = 'Standard error')
     
     if len(event_data[0][0]) > 0:
         # first event
@@ -3833,17 +3863,17 @@ def get_batch_spikes(canvas,options,my_all_normalized,settings_dict,export,expor
     ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
     
     ax.plot(ts_reset,means,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
 
     ax.plot(translated_peaks, np.array(means)[peaks], "xr")
     # plot standard error bands
     ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='red', alpha=0.2,label = 'Standard error')
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.2,label = 'Standard error')
     
     total_label = str(total_peaks)+ " Spikes Found"
-    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color=CONTROL_COLOR_RGB,label = total_label)
     
     my_title = 'Batch Spikes'
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -4015,17 +4045,17 @@ def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,even
     ax2 = canvas.fig.add_subplot(3,1,3,sharex=ax)
     
     ax.plot(ts_reset,means,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
 
     ax.plot(translated_peaks, np.array(means)[peaks], "xr")
     # plot standard error bands
     ax.fill_between(ts_reset, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='red', alpha=0.2,label = 'Standard error')
+                      facecolor=CONTROL_COLOR_RGB, alpha=0.2,label = 'Standard error')
     
     total_label = str(total_peaks)+ " Spikes Found"
-    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
+    ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color=CONTROL_COLOR_RGB,label = total_label)
     
     if len(event_data[0][0]) > 0:
         # first event
@@ -4084,8 +4114,7 @@ def get_batch_spikes_with_event(canvas,options,my_all_normalized,event_name,even
                     top=MY_TOP,  
                     wspace=0,  
                     hspace=0) 
-    
-    
+       
     # export
     if export == True:
         file_name = file_beginning + subjects_end_file+"_Spikes.csv"
@@ -4161,12 +4190,6 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
             new_dfs_list.append(single_df)
         group_trials_dfs.append(pd.concat(new_dfs_list,axis=1))
         group_idx +=1
-        # new_columns = []
-        # for col in original_cols:
-        #     new_name = subject+"_"+col
-        #     new_columns.append(new_name)
-        # # replace old column names with new that contain subject name
-        # df.columns = new_columns
         trials_dfs.append(df)
     # add subjects and their group names 
     group_df.extend(group_trials_dfs)
@@ -4184,10 +4207,6 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
     # create df with all subject info for csv
     ts_df.extend(trials_dfs)
     main_df = pd.concat(ts_df,axis=1)  
-    
-#    file_name = file_beginning +subjects_end_file+".csv"
-#    dump_file_path = os.path.join(dump_path,file_name)
-#    main_df.to_csv(dump_file_path)
     
     # calculate mean across all trials
     means_form_all_trials_df = pd.concat(trials_dfs,axis=1)
@@ -4210,14 +4229,14 @@ def get_batch_perievent_normalized(canvas,my_all_dfs,group_names,perievent_optio
     ax = canvas.fig.add_subplot(111)
     ts = main_df["Time (sec)"].tolist()
     ax.plot(ts, mean_by_subject,
-             color='green',
+             color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "Average")
     # plot a vertical line at t=0
     ax.axvline(x=0, linewidth=2, color='k', alpha=0.3,label=event_name)
     # plot standard error bands
     ax.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='g', alpha=0.2,label = 'Standard error')
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.2,label = 'Standard error')
     
     my_title = 'Total Subjects: ' + str(len(all_dfs))
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -4299,12 +4318,6 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
             new_dfs_list.append(single_df)
         group_trials_dfs.append(pd.concat(new_dfs_list,axis=1))
         group_idx +=1
-        # new_columns = []
-        # for col in original_cols:
-        #     new_name = subject+"_"+col
-        #     new_columns.append(new_name)
-        # # replace old column names with new that contain subject name
-        # df.columns = new_columns
         # add to means list
         zscore_all_dfs.append(df) 
         # add each trial column to a separate list
@@ -4351,9 +4364,7 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     
     # create main dataframe
     raw_df= pd.concat([ts_df[0],df_all_trials,means_df,se_df],axis=1)
-#    file_name = file_beginning +subjects_end_file+"_perievent_zscore.csv"
-#    dump_file_path = os.path.join(dump_path,file_name)
-#    raw_df.to_csv(dump_file_path)
+
     # get data to plot
     ts = ts_df[0]['Time (sec)'].tolist()
     mean_zscore = means_df['Mean'].tolist()
@@ -4367,17 +4378,14 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     ax2 = canvas.fig.add_subplot(212)
     
     # Heat Map based on z score of control fit subtracted signal
-#    cs = ax.imshow(zscores_means_by_subject, cmap=plt.cm.jet, interpolation='none', aspect="auto",
-#                    extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
-#                            len(zscores_means_by_subject),0])
-    cs = ax.imshow(zscores_by_trials_list, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax.imshow(zscores_by_trials_list, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscores_by_trials_list),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Group Mean')
+    ax2.plot(ts, mean_zscore, linewidth=2, color=SIGNAL_COLOR_RGB, label='Group Mean')
     ax2.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
-                      facecolor='g', alpha=0.2,label = 'Standard error')
+                      facecolor=SIGNAL_COLOR_RGB, alpha=0.2,label = 'Standard error')
 
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
@@ -4388,8 +4396,6 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0.5,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
-    # # show only intiger yticks
-    # ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
@@ -4397,6 +4403,7 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     
     # set the spacing between subplots 
     canvas.fig.subplots_adjust(left=MY_LEFT, 
@@ -4424,11 +4431,7 @@ def get_batch_perievent_zscored(canvas,my_all_dfs,group_names,perievent_options_
     plot_file_name = file_beginning +"_perievent_zscore.svg"
     dump_plot_file_path = os.path.join(dump_path,plot_file_name)
     canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
-#    # debug
-#    for el in my_all_dfs:
-#        subject,df = el
-#        print(subject)
-#        print(df)
+
     
 def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,perievent_options_dict,settings_dict,export_loc_data):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
@@ -4479,12 +4482,6 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
             new_dfs_list.append(single_df)
         group_trials_dfs.append(pd.concat(new_dfs_list,axis=1))
         group_idx +=1
-        # new_columns = []
-        # for col in original_cols:
-        #     new_name = subject+"_"+col
-        #     new_columns.append(new_name)
-        # # replace old column names with new that contain subject name
-        # df.columns = new_columns
         # add to means list
         zscore_all_dfs.append(df)  
         # add each trial column to a separate list
@@ -4531,15 +4528,10 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     
     # create main dataframe
     raw_df= pd.concat([ts_df[0],df_all_trials,means_df,se_df],axis=1)
-#    file_name = file_beginning +subjects_end_file+"_perievent_zscore.csv"
-#    dump_file_path = os.path.join(dump_path,file_name)
-#    raw_df.to_csv(dump_file_path)
     # get data to plot
     ts = ts_df[0]['Time (sec)'].tolist()
     mean_zscore = means_df['Mean'].tolist()
-#    positive_std_err_plot = [mean_zscore[i]+se[i] for i in range(len(se))]
-#    negative_std_err_plot = [mean_zscore[i]-se[i] for i in range(len(se))]
-#    
+
     # plot
     # clear previous figure
     canvas.fig.clf()
@@ -4547,19 +4539,17 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     ax2 = canvas.fig.add_subplot(212)
     
     # Heat Map based on z score of control fit subtracted signal
-    cs = ax.imshow(zscores_by_trials_list, cmap=plt.cm.jet, interpolation='none', aspect="auto",
+    cs = ax.imshow(zscores_by_trials_list, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscores_by_trials_list),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
-    ax2.plot(ts, mean_zscore, linewidth=2, color='green', label='Group Mean')
-#    ax2.fill_between(ts, positive_std_err_plot, negative_std_err_plot,
-#                      facecolor='red', alpha=0.2,label = 'Standard error')
+    ax2.plot(ts, mean_zscore, linewidth=2, color=SIGNAL_COLOR_RGB, label='Group Mean')
     for i in range(len(zscores_means_by_subject)):
         if i == 0:
-            ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color='green', label='Subject Mean')
+            ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color=SIGNAL_COLOR_RGB, label='Subject Mean')
         else:
-            ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color='green')
+            ax2.plot(ts, zscores_means_by_subject[i], linewidth=0.5, alpha=0.2, color=SIGNAL_COLOR_RGB)
 
     ax2.axvline(x=0, linewidth=2, color='k', alpha=0.3, label=event_name)
   
@@ -4570,8 +4560,6 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     ax.set_xlabel('Seconds from Event Onset',fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_yticks(np.arange(0.5,len(zscores_by_trials_list), 1))
     ax.set_yticklabels(np.arange(1, len(zscores_by_trials_list)+1, 1))
-    # # show only intiger yticks
-    # ax.yaxis.set_major_locator(MaxNLocator(integer=True))
     
     ax2.set_ylabel('z-Score',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
@@ -4579,6 +4567,7 @@ def get_batch_perievent_zscored_with_trials(canvas,my_all_dfs,group_names,periev
     ax2.spines['top'].set_visible(False)
     ax2.spines['right'].set_visible(False)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     
     # set the spacing between subplots 
     canvas.fig.subplots_adjust(left=MY_LEFT, 
@@ -4631,9 +4620,6 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
         subject,df = el
         subject_string = subject + ","
         subjects_end_file+=subject_string
-        # # get means as list
-        # means = df['Mean_zscore'].tolist()
-        # zscores_means_by_subject.append(means)
         del df['Mean_zscore']
         del df['Error']
         # if first dataframe keep time
@@ -4692,13 +4678,7 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
         by_trials_dfs.append(single_trial_means)
     # join means by trial into single dataframe
     by_trials_df = pd.concat(by_trials_dfs,axis=1)
-    # print(by_trials_df.head(20))
-
-#    standard_devs_df = transposed_df.std(axis=0)
-#    stds = standard_devs_df.tolist()
-#    se = [stds[i]/np.sqrt(df_all_trials.shape[1]) for i in range(len(stds))]
-#    se_df = pd.DataFrame({"Error":se})
-    
+    # print(by_trials_df.head(20))   
 
     mean_zscore = np.asarray(means_df['Mean'].tolist())
     ts = np.asarray(ts_df[0]['Time (sec)'].tolist())
@@ -4710,9 +4690,7 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     post_ind = np.where((np.array(ts)>perievent_options_dict["auc_post_from"]) & (np.array(ts)<perievent_options_dict["auc_post_to"]))
     AUC_post= auc(ts[post_ind], mean_zscore[post_ind])
     AUC = [AUC_pre, AUC_post]   
-    # # run a two-sample T-test
-    # t_stat,p = stats.ttest_ind(mean_zscore[pre_ind],
-    #                            mean_zscore[post_ind], equal_var=False)
+
 
     aucs_pre_by_trial =[]
     aucs_post_by_trial = []
@@ -4726,8 +4704,6 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
         post = auc(ts[post_ind], zscore_all[i][post_ind])
         aucs_post_by_trial.append(post)
 
-    # print("pre mean",np.mean(np.asarray(aucs_pre_by_trial)),AUC_pre)
-    # print("post mean",np.mean(np.asarray(aucs_post_by_trial)),AUC_post)
     AUC_pre_err = np.std(np.asarray(aucs_pre_by_trial)/np.sqrt(len(aucs_pre_by_trial)))
     AUC_post_err = np.std(np.asarray(aucs_post_by_trial)/np.sqrt(len(aucs_post_by_trial)))
     # print("errors",AUC_pre_err,AUC_post_err)
@@ -4762,10 +4738,6 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     x1, x2 = 0, 1 # columns indices for labels
     # y, h, col = max(AUC) + 2, 2, 'k'
     y, h, col = max(AUC) + max([AUC_pre_err,AUC_post_err]), 2, 'k'
-    # # plot significance bar if p < .05
-    # if p < 0.05:
-    #     ax.plot([x1, x1, x2, x2], [y, y+h, y+h, y], lw=1.5, c=col)
-    #     ax.text((x1+x2)*.5, y+h, "*", ha='center', va='bottom', color=col)
         
     my_title = 'Total Subjects: ' + str(len(all_dfs))+ "; Event: "+event_name
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -4790,8 +4762,7 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     settings_df.to_csv(dump_file_path,header=False)            
     with open(dump_file_path,'a') as f:
         f.write("\n")
-    # raw_df= pd.DataFrame({"pre_AUC":[AUC[0]],
-    #                              "post_AUC" : [AUC[1]]})
+
     # save each trial's auc instead
     raw_df= pd.DataFrame({"Trial":[i+1 for i in range(len(aucs_pre_by_trial))],
                                  "Pre_AUC" : aucs_pre_by_trial,
@@ -4874,7 +4845,7 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
         canvas.fig.clf()
         ax = canvas.fig.add_subplot(111)
         
-        ax.plot(ts_reset, signal_arr, linewidth=1, color='green', label='F'+signal_name)
+        ax.plot(ts_reset, signal_arr, linewidth=1, color=SIGNAL_COLOR_RGB, label='F'+signal_name)
         ax.plot(ts_reset, F0, linewidth=1, color='k', label='F0')
         
         my_title = "Check polynomial fitting: " + normalization
@@ -4900,10 +4871,10 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
         ax = canvas.fig.add_subplot(211)
         ax2 = canvas.fig.add_subplot(212)
         
-        ax.plot(ts_reset, signal_arr, linewidth=1, color='green', label='F'+signal_name)
+        ax.plot(ts_reset, signal_arr, linewidth=1, color=SIGNAL_COLOR_RGB, label='F'+signal_name)
         ax.plot(ts_reset, F0Ca, linewidth=1, color='k', label='F0')
         
-        ax2.plot(ts_reset, control_arr, linewidth=1, color='r', label='F'+control_name)
+        ax2.plot(ts_reset, control_arr, linewidth=1, color=CONTROL_COLOR_RGB, label='F'+control_name)
         ax2.plot(ts_reset, F0Ref, linewidth=1, color='k', label='F0')
         
         my_title = "Check polynomial fitting: " + normalization

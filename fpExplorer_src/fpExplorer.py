@@ -24,6 +24,7 @@ Created on Thu Jan  7 12:08:47 2021
 
 from tkinter import E
 import fpExplorer_functions
+import fpExplorer_csv
 import os
 import shutil
 import math
@@ -41,6 +42,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 #icon https://logomakr.com/9OpQfD
+# icon red logomakr.com/app/5ZHHL6
+# icon blue logomakr.com/app/0bpASg
 # description how to create icons resources
 # https://www.learnpyqt.com/courses/packaging-and-distribution/packaging-pyqt5-pyside2-applications-windows-pyinstaller/
 import resources
@@ -64,9 +67,9 @@ STYLESHEET = \
 # how low in downsampling can go
 MAX_DOWNSAMPLE_PCT = 50
 # how high in downsampling can you go
-MIN_DOWNSAMPLE_PCT = 1
+MIN_DOWNSAMPLE_PCT = 0.5
 # default_samples to average 1% of original sampling rate
-DEFAULT_DOWNSAMPLE_PCT = 1
+DEFAULT_DOWNSAMPLE_PCT = 10
 MAX_SMOOTH_WINDOW = 100
 DEFAULT_SMOOTH_WINDOW = 10
 DEFAULT_EXPORT_FOLDER = "_fpExplorerAnalysis"
@@ -96,6 +99,8 @@ class MyMainWidget(QMainWindow):
         # user input from select data window
         self.select_data_window_content = []
         self.select_data_window = None
+        self.select_custom_data_window_content = []
+        self.select_custom_data_window = None
         # when app is started creeate select data window to show on top of the app
         if (len(self.select_data_window_content)==0):
             self.select_data_window = SelectDataWindow(self,self.select_data_window_content)
@@ -138,9 +143,8 @@ class MyMainWidget(QMainWindow):
         self.area.addDock(self.bottom_dock_widget, 'bottom', self.top_dock_widget)  # place the bottom dock at bottom edge of top dock
         
         # define fields
-        self.select_data_btn = QPushButton('Select Data')
-#        self.preview_single_btn = QPushButton('Preview Single')
-#        self.run_on_batch_btn = QPushButton('Run On Batch')
+        self.select_data_btn = QPushButton('Select TDT Data')
+        self.select_custom_data_btn = QPushButton('Select Custom Data')
         self.settings_btn = QPushButton('Settings')
         self.run_on_batch_btn = QPushButton('Run on Batch')
         self.open_doc_btn = QPushButton('Documentation')
@@ -155,6 +159,7 @@ class MyMainWidget(QMainWindow):
         self.box_layout.setContentsMargins(10,10,10,10)
         # place widgets to the layout in their proper positions
         self.box_layout.addWidget(self.select_data_btn)
+        # self.box_layout.addWidget(self.select_custom_data_btn)
         self.box_layout.addWidget(self.run_on_batch_btn)
         self.box_layout.addWidget(self.settings_btn)
         self.box_layout.addWidget(self.open_doc_btn)
@@ -169,6 +174,7 @@ class MyMainWidget(QMainWindow):
         
         # connect buttons to fpExplorer_functions
         self.select_data_btn.clicked.connect(self.select_data_btn_clicked)
+        self.select_custom_data_btn.clicked.connect(self.select_custom_data_btn_clicked)
         self.settings_btn.clicked.connect(self.settings_btn_clicked)
         self.run_on_batch_btn.clicked.connect(self.run_on_batch_btn_clicked)
         self.open_doc_btn.clicked.connect(self.open_doc_btn_clicked)
@@ -186,6 +192,10 @@ class MyMainWidget(QMainWindow):
         self.select_data_window.show()
         # emit signal that the window is open
         self.select_data_open_signal.emit()
+
+    def select_custom_data_btn_clicked(self):
+        self.select_custom_data_window = fpExplorer_csv.SelectCvsDataWindow(self,self.select_custom_data_window_content)
+        self.select_custom_data_window.show()
         
     def settings_btn_clicked(self):
         self.disable_buttons()
@@ -413,7 +423,11 @@ class MyMainWidget(QMainWindow):
         
         
 ################### end MyMainWidget class   
-        
+
+##################################
+# CLASS FOR RUN ON BATCH WINDOW  #
+##################################
+#        
 class RunOnBatchWindow(QMainWindow):
     
     got_batch_options_sig = pyqtSignal(list)
@@ -804,7 +818,9 @@ class RunOnBatchWindow(QMainWindow):
         msgBox.setWindowTitle("Info!")
         msgBox.setStandardButtons(QMessageBox.Ok)
         msgBox.exec()
-        
+
+########################## end RunOnBatch class  
+      
 #################################
 # CLASS FOR SELECT DATA WINDOW  #
 #################################
@@ -818,7 +834,7 @@ class SelectDataWindow(QMainWindow):
     got_user_input_sig = pyqtSignal(list)
     def __init__(self,parent_window,user_input):
         super(SelectDataWindow, self).__init__()
-        self.setWindowTitle("Select Data")
+        self.setWindowTitle("Select TDT Data")
         self.setWindowIcon(QtGui.QIcon(ICO))
         self.resize(650,250)
         self.parent_window = parent_window
@@ -1466,13 +1482,13 @@ class PreviewContinuousWidget(QWidget):
             # if downsample was selected
             if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True:
                 # add to downdampled dict
-                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                             self.settings_dict[0]["downsample"])
             # if normalize was selected
             if self.normalize_cb.isChecked() or self.normalized_export == True:
                 # always downsample first before normalizing
                 # downsample
-                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                         self.settings_dict[0]["downsample"])
                 # check settings for method to normalize
                 if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
@@ -1766,7 +1782,7 @@ class PreviewContinuousWidget(QWidget):
                                                                                                                           )]
             # always downsample first before normalizing
             # downsample
-            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                          self.settings_dict[0]["downsample"])
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
@@ -2062,7 +2078,7 @@ class PreviewContinuousWidget(QWidget):
                     
                     # always downsample first before normalizing
                     # downsample
-                    self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
+                    self.downsampled_dict[subject] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[subject][1],
                                                                                 self.settings_dict[0]["downsample"])
                     # check settings for method to normalize
                     if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
@@ -2635,13 +2651,13 @@ class PreviewEventBasedWidget(QWidget):
             # if downsample was selected
             if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True or self.separate_signal_contol_cb.isChecked():
                 # add to downdampled dict
-                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                             self.settings_dict[0]["downsample"])
             # if normalize was selected
             if self.normalize_cb.isChecked() or self.normalized_export == True:
                 # always downsample first before normalizing
                 # downsample
-                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+                self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                         self.settings_dict[0]["downsample"])
                 # check settings for method to normalize
                 if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
@@ -3142,8 +3158,11 @@ class PreviewEventBasedWidget(QWidget):
                 control_slope_intercept = slope_intercept_dict["control_slope_intercept"]
                 signal_b_direction = "+ " if signal_slope_intercept[1] >= 0 else "- "
                 control_b_direction = "+ " if control_slope_intercept[1] >= 0 else "- "
-                info_text = "Signal fitted: y = "+str(round(signal_slope_intercept[0],4))+"x "+signal_b_direction+str(round(signal_slope_intercept[1],2))\
-                            +"\nControl fitted: y = "+str(round(control_slope_intercept[0],4))+"x "+control_b_direction+str(round(control_slope_intercept[1],2))
+                info_text = "\nSignal fitted: y = "+str(round(signal_slope_intercept[0],4))+"x "+signal_b_direction+str(round(signal_slope_intercept[1],2))\
+                            +"\nControl fitted: y = "+str(round(control_slope_intercept[0],4))+"x "+control_b_direction+str(round(control_slope_intercept[1],2))+"\n"
+                # if they slopes of signal and control have oposite directions, add suggestion
+                if signal_slope_intercept[0]*control_slope_intercept[0] < 0:
+                    info_text = "!!! Warning !!!\nWe suggest using Modified Polynomial Fitting to normalize this data.\nYou can change normalization method under application's Settings.\n"+info_text
                 self.show_info_dialog(info_text)
         else: # prompt user to check normalize first
             self.show_info_dialog("Please check Normalize check box first.")
@@ -4315,7 +4334,7 @@ class PreviewEventBasedWidget(QWidget):
                                                                                                                           )]
             # always downsample first before normalizing
             # downsample
-            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[self.options["subject"]][1],
+            self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                          self.settings_dict[0]["downsample"])
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
@@ -4493,7 +4512,7 @@ class PreviewEventBasedWidget(QWidget):
                     
                     # always downsample first before normalizing
                     # downsample
-                    self.downsampled_dict[subject] = fpExplorer_functions.downsample_tdt(self.trimmed_raw_data_dict[subject][1],
+                    self.downsampled_dict[subject] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[subject][1],
                                                                                 self.settings_dict[0]["downsample"])
                     # check settings for method to normalize
                     if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
@@ -5022,27 +5041,12 @@ class SettingsWindow(QMainWindow):
             # print("Frequency:",self.current_fs)
 
         # calculate min, max and sugested sample rates
-        self.suggested_downsample_samples = round(self.current_fs*DEFAULT_DOWNSAMPLE_PCT/100)
-        self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
+        # self.suggested_downsample_samples = round(self.current_fs*DEFAULT_DOWNSAMPLE_PCT/100)
+        # self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
         self.min_downsampe_rate = round(self.current_fs*MIN_DOWNSAMPLE_PCT/100)
-        self.max_downsample_rate = round(self.current_fs*MAX_DOWNSAMPLE_PCT/100)
-        # # create a list of available sampling rates, display only divisible by 5
-        # sampling_rates = [str(self.min_downsampe_rate)]
-        self.min_samples = round(self.current_fs/self.max_downsample_rate)
-        self.max_samples = round(self.current_fs/self.min_downsampe_rate)
-        # first_samples = max_samples
-        # next_samples = first_samples-1
-        # diff = self.max_downsample_rate - self.min_downsampe_rate
-        # for i in range(diff):
-        #     if next_samples >= min_samples:
-        #         new_sample_no = round(self.current_fs/(self.min_downsampe_rate+i))
-        #         if (new_sample_no != first_samples) and (self.min_downsampe_rate+i)%5==0:
-        #             sampling_rates.append(str(self.min_downsampe_rate+i))
-        #             first_samples = new_sample_no
-        #             next_samples = first_samples-1
-        #             # print(new_sample_no,self.min_downsampe_rate+i)
-        #             if new_sample_no == self.suggested_downsample_samples:
-        #                 self.suggested_downsample_rate = self.min_downsampe_rate+i
+        self.max_downsample_rate = self.current_fs
+        # self.min_samples = round(self.current_fs/self.max_downsample_rate)
+        # self.max_samples = round(self.current_fs/self.min_downsampe_rate)
         
         # create widget with settings
         self.settings_main_widget = QWidget()
@@ -5055,19 +5059,13 @@ class SettingsWindow(QMainWindow):
         self.settings_layout.setVerticalSpacing(15)
         # self.downsample_text = QComboBox()
         self.downsample_text = QLineEdit(str(self.settings[0]["downsample"]))
-        # self.downsample_text.addItems(sampling_rates)
-        # if self.settings[0]["entered_downsample"] == None:
-        #     self.downsample_text.setCurrentText(str(self.suggested_downsample_rate))
-        # else:
-        #     self.downsample_text.setCurrentText(str(self.settings[0]["entered_downsample"]))
         self.downsample_text.setValidator(QtGui.QIntValidator())
-        self.downsample_text.setToolTip("Integers from 2 to "+str(self.max_samples))
-        # self.downsample_text.setToolTip("Between "+str(self.min_downsampe_rate)+" and "+str(self.max_downsample_rate)+"Hz")
-        self.downsample_label = QLabel("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz")
+        self.downsample_text.setToolTip("Integers from "+str(self.min_downsampe_rate)+" to "+str(round(self.max_downsample_rate)))
+        self.downsample_label = QLabel("Downsample to (in Hz)\nOriginal rate: "+str(round(self.current_fs))+" Hz")
         self.settings_layout.addRow(self.downsample_label,self.downsample_text)
-        self.update_rate_btn = QPushButton("Preview new rate")
-        self.after_rate_label = QLabel("After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
-        self.settings_layout.addRow(self.after_rate_label,self.update_rate_btn)
+        # self.update_rate_btn = QPushButton("Preview new rate")
+        # self.after_rate_label = QLabel("After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+        # self.settings_layout.addRow(self.after_rate_label,self.update_rate_btn)
         self.normalization_method_comboBox = QComboBox()
         self.normalization_method_comboBox.addItems(["Standard Polynomial Fitting","Modified Polynomial Fitting"])
         self.normalization_method_comboBox.setCurrentText(self.settings[0]["normalization"])
@@ -5079,8 +5077,6 @@ class SettingsWindow(QMainWindow):
         self.filter_cb = QCheckBox("Filter")
         self.filter_cb.setChecked(self.settings[0]["filter"])
         self.settings_layout.addRow("Smooth data:",QLabel("The window around each sample (in samples):"))
-        # The fraction of the data used when estimating each y-value
-#        self.smooth_text = QLineEdit(str(DEFAULT_SMOOTH_FRAQ*100))
         self.smooth_text = QLineEdit(str(self.settings[0]["filter_window"]))
         self.smooth_text.setToolTip("From 0 to "+str(MAX_SMOOTH_WINDOW))
         self.smooth_text.setValidator(QtGui.QIntValidator())
@@ -5094,20 +5090,20 @@ class SettingsWindow(QMainWindow):
         
         # set the window's main layout
         self.settings_main_widget.setLayout(self.settings_main_layout)
-        # make the hint button with updated sampling rate smaller than regular buttons
-        self.update_rate_btn.setStyleSheet("QPushButton {padding: 2px; margin-left:0px; margin-right:0px; margin-top:0px; margin-bottom:0px; font-size: 10pt; font-weight: normal;}")
+        # # make the hint button with updated sampling rate smaller than regular buttons
+        # self.update_rate_btn.setStyleSheet("QPushButton {padding: 2px; margin-left:0px; margin-right:0px; margin-top:0px; margin-bottom:0px; font-size: 10pt; font-weight: normal;}")
         
         # use main stylesheet
         self.setStyleSheet(STYLESHEET)
         
         self.save_settings_btn.clicked.connect(self.save_settings_btn_clicked)
-        self.update_rate_btn.clicked.connect(self.update_rate)
+        # self.update_rate_btn.clicked.connect(self.update_rate)
 
-    def update_rate(self):
-        # message = "After downsampling "+str(int(self.downsample_text.text()))+" times,\nyour new sampling rate will be "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz"
-        # self.show_info_dialog(message)
-        # self.downsample_label.setText("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
-        self.after_rate_label.setText("After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+    # def update_rate(self):
+    #     # message = "After downsampling "+str(int(self.downsample_text.text()))+" times,\nyour new sampling rate will be "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz"
+    #     # self.show_info_dialog(message)
+    #     # self.downsample_label.setText("Downsample X times (Suggested: 10-20 times)\nOriginal rate: "+str(round(self.current_fs))+" Hz; After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
+    #     self.after_rate_label.setText("After downsampling: "+str(round(self.current_fs/int(self.downsample_text.text()))) +" Hz")
 
     def save_settings_btn_clicked(self):
         # read user settings
@@ -5120,13 +5116,13 @@ class SettingsWindow(QMainWindow):
     def read_user_settings(self):
         # reads all fields and sets new values for main app window
         # read downsampling settings
-        if int(self.downsample_text.text()) >= self.min_samples and int(self.downsample_text.text()) <= self.max_samples: 
+        if int(self.downsample_text.text()) >= self.min_downsampe_rate and int(self.downsample_text.text()) <= self.max_downsample_rate: 
             self.settings[0]["downsample"] = int(self.downsample_text.text())
             # samples = round(self.current_fs/int(self.downsample_text.currentText()))
             # self.settings[0]["downsample"] = samples
             self.settings[0]["entered_downsample"] = round(self.current_fs/int(self.downsample_text.text()))
         else:
-            self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_samples)+" and " + str(self.max_samples))
+            self.show_info_dialog("Downsample was not updated.\nEnter values between "+str(self.min_downsampe_rate)+" and " + str(self.max_downsample_rate))
         # don't loose filter fraq information
         if self.filter_cb.isChecked() == False:
             self.settings[0]["filter_window"] = DEFAULT_SMOOTH_WINDOW
