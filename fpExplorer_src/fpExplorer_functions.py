@@ -74,7 +74,7 @@ import copy
 ##############################
 # location of all plots legend
 MY_LEGEND_LOC='upper left'
-MY_LEGENG_POS = (0.96, 1)
+MY_LEGENG_POS = (0.96, 1.1)
 MY_LEFT = 0.06
 MY_RIGHT = 0.9
 MY_TOP = 0.9
@@ -2225,6 +2225,8 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
     canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
+    # canvas.fig.colorbar(cs, ax=ax,pad=0.005, fraction=0.02,aspect=25)
+    print("Thank you")
     # plot the z-score trace for the signal with std error bands
     mean_zscore = np.mean(zscore_all, axis=0)
     ax2.plot(ts, mean_zscore, linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')

@@ -70,6 +70,8 @@ MAX_DOWNSAMPLE_PCT = 50
 MIN_DOWNSAMPLE_PCT = 0.5
 # default_samples to average 1% of original sampling rate
 DEFAULT_DOWNSAMPLE_PCT = 10
+# change to hardcoded default of 100 Hz
+DEFAULT_HZ = 100
 MAX_SMOOTH_WINDOW = 100
 DEFAULT_SMOOTH_WINDOW = 10
 DEFAULT_EXPORT_FOLDER = "_fpExplorerAnalysis"
@@ -1209,6 +1211,7 @@ class PreviewContinuousWidget(QWidget):
         # read first subject's frequency and create suggested downsampled rate
         self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+        self.suggested_downsample_samples = DEFAULT_HZ
         self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
         # keep trimmed data separately with latest trimming settings
         # first element of that list is beginning and end seconds to trim
@@ -1980,7 +1983,8 @@ class PreviewContinuousWidget(QWidget):
         # read new subject's frequency and update suggested downsampled rate (only if it is different)
         new_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         if new_fs != self.current_fs:
-            self.suggested_downsample_samples = int(int(new_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            # self.suggested_downsample_samples = int(int(new_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            self.suggested_downsample_samples = DEFAULT_HZ
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
             self.settings[0]["entered_downsample"] = round(new_fs/self.suggested_downsample_samples)
         if self.subject_comboBox.currentText() in self.group_names_dict:
@@ -2218,7 +2222,8 @@ class PreviewEventBasedWidget(QWidget):
                                      )
         # read first subject's frequency and create suggested downsampled rate
         self.current_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
-        self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+        # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+        self.suggested_downsample_samples = DEFAULT_HZ
         self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
         self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
         self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
@@ -3084,7 +3089,8 @@ class PreviewEventBasedWidget(QWidget):
         # read new subject's frequency and update suggested downsampled rate (only if it is different)
         new_fs = fpExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         if new_fs != self.current_fs:
-            self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            self.suggested_downsample_samples = DEFAULT_HZ
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
             self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
             self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
