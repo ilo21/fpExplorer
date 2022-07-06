@@ -14,7 +14,7 @@ We provide users with a Python source code as well as an independent windows app
 <br>
 ## Installation
 - Windows application: <br>
-The installation file for the desktop application is available [here](https://github.com/ilo21/fpExplorer/releases). Download the fpATinstaller.exe file and run it.
+The installation file for the desktop application is available [here](https://github.com/ilo21/fpExplorer/releases). Download the fpExplorer.Installer.exe file and run it.
 ## Development
 - Install [Anaconda](https://www.anaconda.com/products/individual) Python Distribution.
 - Create a separate environment for the development.
