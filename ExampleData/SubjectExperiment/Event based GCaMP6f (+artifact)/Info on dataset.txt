@@ -1,5 +1,0 @@
-Experiment: recall test conditioned fear memory
-Subject: 40
-Brain region: Prelimbic Cortex (CamKII-expressing neurons)
-Fluorescent sensor: GCaMP6f
-Relevant event marker: PrtA 253 (= onset 30s tone)

@@ -1,5 +1,0 @@
-Experiment: recording in homecage, freely moving subject
-Subject: 213D1
-Brain region: Striatum (dopamine D1 receptor-expressing neurons)
-Fluorescent sensor: GCaMP7s
-Relevant event marker: none

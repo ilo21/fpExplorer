@@ -1,5 +1,0 @@
-Experiment: recall test conditioned fear memory
-Subject: 1
-Brain region: Basolateral Amygdala (CamKII-expressing neurons)
-Fluorescent sensor: GCaMP6s
-Relevant event marker: PrtA 253 (= onset 30s tone)
