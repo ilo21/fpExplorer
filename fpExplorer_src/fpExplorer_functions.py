@@ -120,7 +120,7 @@ def get_events(raw_data):
     my_event_list = []
     # iterate over all events that start with Ptr
     for evt in all_epocs_list:
-        # exclude cam from events
+        # exclude cam or tickfrom events
         if evt.lower().startswith("cam") == False and evt.lower().startswith("tick") == False:
         # if evt.startswith("Prt") or evt.startswith("Note"):
             # create set of unique events
@@ -283,11 +283,11 @@ def downsample(signal_dict,target_Hz):
     # reconstruct time
     if ts_original[0] > 1: # if data was trimmed go back to start like the original
         ts_adjusted = [el+ts_original[0] for el in ts_adjusted]
-    print(ts_original[0],ts_adjusted[0])
+    # print(ts_original[0],ts_adjusted[0])
     return {"ts":ts_adjusted,"signal":GCaMP_resampled_data,"control":control_resampled_data}
 
 # Mulholland dff
-def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_window):
+def normalize_dff(signal_dict,show_as,smooth,smooth_window):
     #####################
     # change lists to numpy array for calculations
     # create new timestamps for the data (from zero)
@@ -353,7 +353,7 @@ def normalize_dff(raw_data,signal_dict,show_as,smooth,smooth_window):
 
 
 # https://github.com/djamesbarker/pMAT
-def normalize_pMat(raw_data,signal_dict,show_as,smooth,smooth_window):
+def normalize_pMat(signal_dict,show_as,smooth,smooth_window):
     # change lists to numpy array for calculations
     ts_arr = np.asarray(signal_dict["ts"])
     signal_arr =np.asarray(signal_dict["signal"])
@@ -406,7 +406,16 @@ def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signa
     before = -perievent_options_dict["sec_before"]
     till = perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]+0.1
     trange = [before,till]
-    modified_data = tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
+    # modified_data = tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
+    try:    # some data was not readable by tdt.epoc_filter
+        modified_data= tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
+    except: 
+        print("Problem getting on off event data by tdt.epoc_filter")
+        print(event_name_split[0]) # some names end with _ and that gets replaced in data tank
+        if event_name_split[0][-1] == "_":
+            adjusted_name = event_name_split[0][:-1]+"/"
+            print(adjusted_name)
+            modified_data= tdt.epoc_filter(raw_data, adjusted_name, t=trange, values=[int(event_name_split[1])], tref=True)
     all_control_filtered = modified_data.streams[control_name].filtered
     all_signal_filtered = modified_data.streams[signal_name].filtered
     modified_data.streams[signal_name].filtered = all_signal_filtered
@@ -421,7 +430,7 @@ def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signa
     modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
     modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
     # downsample data as well
-    N = settings_dict[0]["downsample"] # Average every N samples into 1 value
+    N = settings_dict[0]["downsample"] 
     
     control = []
     signal = []
@@ -455,8 +464,12 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
     # create a dictionary with analysed data for plotting
     analyzed_perievent_dict = {}
     # get downsampled data from around event 
-    GCaMP_perievent_data = data.streams[signal_name].filtered_downsampled
-    control_perievent_data = data.streams[control_name].filtered_downsampled
+    if len(signal_name) > 0 and len(control_name) > 0:
+        GCaMP_perievent_data = data.streams[signal_name].filtered_downsampled
+        control_perievent_data = data.streams[control_name].filtered_downsampled
+    else:
+        GCaMP_perievent_data = data["signal"]
+        control_perievent_data = data["control"]
 
     # only selected trials
     if len(current_trials) > 0:
@@ -466,10 +479,10 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
     
     # Create a mean signal, standard error(median absolute deviation in pMat) of signal, and DC offset
     mean_signal = np.mean(GCaMP_perievent_data, axis=0)
-    std_signal = np.std(GCaMP_perievent_data, axis=0) / np.sqrt(len(data.streams[signal_name].filtered))
+    std_signal = np.std(GCaMP_perievent_data, axis=0) / np.sqrt(len(GCaMP_perievent_data))
     dc_signal = np.mean(mean_signal)
     mean_control = np.mean(control_perievent_data, axis=0)
-    std_control = np.std(control_perievent_data, axis=0) / np.sqrt(len(data.streams[control_name].filtered))
+    std_control = np.std(control_perievent_data, axis=0) / np.sqrt(len(control_perievent_data))
     dc_control = np.mean(mean_control)
     
     # Create the time vector for each stream store
@@ -1941,6 +1954,9 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
     # ts1 = -perievent_options_dict["sec_before"] + np.linspace(1, len(GCaMP_perievent_data[0]), len(GCaMP_perievent_data[0]))/modified_data.streams[signal_name].fs*N
     # ts2 = -perievent_options_dict["sec_before"] + np.linspace(1, len(control_perievent_data[0]), len(control_perievent_data[0]))/modified_data.streams[control_name].fs*N
     total_plots = len(GCaMP_perievent_data) # total number of events
+    # allow to show only up till 9 plots
+    if total_plots > 9:
+        total_plots = 9
     
     if settings_dict[0]["filter"] == True:
         print("Start smoothing",settings_dict[0]["filter_window"])
@@ -2197,7 +2213,7 @@ def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options
         canvas.draw()
     
     
-def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,group_name,settings_dict,export_loc_data):
+def plot_perievent_zscore_alone(canvas,subject, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -2218,15 +2234,13 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(211)
-    ax2 = canvas.fig.add_subplot(212)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
 
     # Heat Map based on z score of control fit subtracted signal
     cs = ax.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
                     extent=[-perievent_options_dict['sec_before'], perievent_options_dict['sec_after'], 
                             len(zscore_all),0])
-    canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
-    # canvas.fig.colorbar(cs, ax=ax,pad=0.005, fraction=0.02,aspect=25)
-    print("Thank you")
+    cb = canvas.fig.colorbar(cs, ax=ax,pad=0.01, fraction=0.02)
     # plot the z-score trace for the signal with std error bands
     mean_zscore = np.mean(zscore_all, axis=0)
     ax2.plot(ts, mean_zscore, linewidth=2, color=SIGNAL_COLOR_RGB, label='Mean Z-Score')
@@ -2248,14 +2262,24 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax.get_position().bounds
+    # print(ax.get_position().bounds)
+    # print("zscore:")
+    x_zscore,y_zscore,width_zscore,height_zscore = ax2.get_position().bounds
+    # print(ax2.get_position().bounds)
+    # readjust the position of zscore to match the sice of heatmap
+    ax2.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
     
     # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     
     # create a list of dataframes to join later
     dfs = []
@@ -2301,7 +2325,7 @@ def plot_perievent_zscore_alone(canvas,subject,data, perievent_options_dict,anal
         canvas.draw()
     return raw_df
 
-def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name,export,save_plots,group_name,settings_dict,export_loc_data):
+def plot_perievent_zscore_with_trials_alone(canvas,subject, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -2322,7 +2346,7 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(211)
-    ax2 = canvas.fig.add_subplot(212)
+    ax2 = canvas.fig.add_subplot(212,sharex=ax)
    
     # Heat Map based on z score of control fit subtracted signal
     cs = ax.imshow(zscore_all, cmap=plt.cm.bwr, interpolation='none', aspect="auto",
@@ -2355,14 +2379,24 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
     ax2.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax2.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax.get_position().bounds
+    # print(ax.get_position().bounds)
+    # print("zscore:")
+    x_zscore,y_zscore,width_zscore,height_zscore = ax2.get_position().bounds
+    # print(ax2.get_position().bounds)
+    # readjust the position of zscore to match the sice of heatmap
+    ax2.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
     
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     # create a list of dataframes to join later
     dfs = []
     # add time
@@ -2407,7 +2441,7 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject,data, perievent_optio
         canvas.draw()
     return raw_df    
     
-def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_perievent_avg_zscore(canvas,subject,current_trials, perievent_options_dict,analyzed_perievent_dict):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     
     # get data to plot avg
@@ -2426,8 +2460,8 @@ def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_opti
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(311)
-    ax2 = canvas.fig.add_subplot(312)
-    ax3 = canvas.fig.add_subplot(313)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax)
+    ax3 = canvas.fig.add_subplot(313,sharex=ax)
     
     # average
     ax.plot(ts_signal, signal,
@@ -2480,17 +2514,30 @@ def plot_perievent_avg_zscore(canvas,subject,current_trials,data, perievent_opti
     ax3.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax3.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax2.get_position().bounds
+    # print(ax.get_position().bounds)
+    # Average
+    x_average,y_average,width_average,height_average = ax.get_position().bounds
+    # print(ax.get_position().bounds)
+    # readjust the position to match the sice of heatmap
+    ax.set_position([x_average,y_average,width_heatmap,height_average])
+    x_zscore,y_zscore,width_zscore,height_zscore = ax3.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax3.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
     
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_perievent_avg_zscore_trials(canvas,subject,current_trials, perievent_options_dict,analyzed_perievent_dict):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     
     # get data to plot avg
@@ -2509,8 +2556,8 @@ def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perieve
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(311)
-    ax2 = canvas.fig.add_subplot(312)
-    ax3 = canvas.fig.add_subplot(313)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax)
+    ax3 = canvas.fig.add_subplot(313,sharex=ax)
     
     # average
     ax.plot(ts_signal, signal,
@@ -2567,14 +2614,27 @@ def plot_perievent_avg_zscore_trials(canvas,subject,current_trials,data, perieve
     ax3.set_xlabel('Seconds',fontsize=AXIS_LABEL_FONTSIZE)
     ax3.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
     ax3.set_xlim([-perievent_options_dict['sec_before'], perievent_options_dict['sec_after']])
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax2.get_position().bounds
+    # print(ax.get_position().bounds)
+    # Average
+    x_average,y_average,width_average,height_average = ax.get_position().bounds
+    # print(ax.get_position().bounds)
+    # readjust the position to match the sice of heatmap
+    ax.set_position([x_average,y_average,width_heatmap,height_average])
+    x_zscore,y_zscore,width_zscore,height_zscore = ax3.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax3.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
     
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     canvas.draw()
     
 def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):   
@@ -2749,7 +2809,7 @@ def plot_perievent_avg_auc(canvas,subject,current_trials,perievent_options_dict,
     
     canvas.draw()
     
-def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_perievent_zscore_auc(canvas,subject, perievent_options_dict,analyzed_perievent_dict):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get data to plot
     ts = analyzed_perievent_dict["zscore"]["ts"]
@@ -2765,7 +2825,7 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(311)
-    ax2 = canvas.fig.add_subplot(312)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax)
     ax3 = canvas.fig.add_subplot(313)
     
     # Heat Map based on z score of control fit subtracted signal
@@ -2819,17 +2879,27 @@ def plot_perievent_zscore_auc(canvas,subject,data, perievent_options_dict,analyz
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
     ax3.set_xticklabels(['', 'PRE', 'POST', ''])
     ax3.set_yticks([min(AUC),max(AUC)])
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax.get_position().bounds
+    x_zscore,y_zscore,width_zscore,height_zscore = ax2.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax2.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
+    x_auc,y_auc,width_auc,height_auc = ax3.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax3.set_position([x_auc,y_auc,width_heatmap,height_auc])
     
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_perievent_zscore_trials_auc(canvas,subject, perievent_options_dict,analyzed_perievent_dict):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get data to plot
     ts = analyzed_perievent_dict["zscore"]["ts"]
@@ -2845,7 +2915,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(311)
-    ax2 = canvas.fig.add_subplot(312)
+    ax2 = canvas.fig.add_subplot(312,sharex=ax)
     ax3 = canvas.fig.add_subplot(313)
     
     # Heat Map based on z score of control fit subtracted signal
@@ -2902,17 +2972,27 @@ def plot_perievent_zscore_trials_auc(canvas,subject,data, perievent_options_dict
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
     ax3.set_xticklabels(['', 'PRE', 'POST', ''])
     ax3.set_yticks([min(AUC),max(AUC)])
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax.get_position().bounds
+    x_zscore,y_zscore,width_zscore,height_zscore = ax2.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax2.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
+    x_auc,y_auc,width_auc,height_auc = ax3.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax3.set_position([x_auc,y_auc,width_heatmap,height_auc])
     
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_all_perievent(canvas,subject,current_trials, perievent_options_dict,analyzed_perievent_dict):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get avg data to plot
     ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
@@ -2935,8 +3015,8 @@ def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dic
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(411)
-    ax2 = canvas.fig.add_subplot(412)
-    ax3 = canvas.fig.add_subplot(413)
+    ax2 = canvas.fig.add_subplot(412,sharex=ax)
+    ax3 = canvas.fig.add_subplot(413,sharex=ax)
     ax4 = canvas.fig.add_subplot(414)
     
     ax.plot(ts_signal, signal,
@@ -3013,16 +3093,31 @@ def plot_all_perievent(canvas,subject,current_trials,data, perievent_options_dic
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
     ax4.set_xticklabels(['', 'PRE', 'POST', ''])
     ax4.set_yticks([min(AUC),max(AUC)])
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax2.get_position().bounds
+    # Average
+    x_average,y_average,width_average,height_average = ax.get_position().bounds
+    # readjust the position to match the sice of heatmap
+    ax.set_position([x_average,y_average,width_heatmap,height_average])
+    x_zscore,y_zscore,width_zscore,height_zscore = ax3.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax3.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
+    x_auc,y_auc,width_auc,height_auc = ax4.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax4.set_position([x_auc,y_auc,width_heatmap,height_auc])
+
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     canvas.draw()
 
-def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perievent_options_dict,analyzed_perievent_dict,signal_name):
+def plot_all_perievent_zscore_trials(canvas,subject,current_trials, perievent_options_dict,analyzed_perievent_dict):
     event_name = perievent_options_dict["event_name"] if len(perievent_options_dict["event_name"]) > 0 else perievent_options_dict["event"]
     # get avg data to plot
     ts_signal = analyzed_perievent_dict["average"]["ts_signal"]
@@ -3044,8 +3139,8 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perieve
     # clear previous figure
     canvas.fig.clf()
     ax = canvas.fig.add_subplot(411)
-    ax2 = canvas.fig.add_subplot(412)
-    ax3 = canvas.fig.add_subplot(413)
+    ax2 = canvas.fig.add_subplot(412,sharex=ax)
+    ax3 = canvas.fig.add_subplot(413,sharex=ax)
     ax4 = canvas.fig.add_subplot(414)
     
     ax.plot(ts_signal, signal,
@@ -3126,13 +3221,28 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials,data, perieve
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
     ax4.set_xticklabels(['', 'PRE', 'POST', ''])
     ax4.set_yticks([min(AUC),max(AUC)])
-    # set the spacing between subplots 
-    canvas.fig.subplots_adjust(left=MY_LEFT, 
-                    bottom=MY_BOTTOM,  
-                    right=MY_RIGHT,  
-                    top=MY_TOP,  
-                    wspace=MY_WSPACE,  
-                    hspace=MY_HSPACE) 
+
+    # bounds returns (x0,y0,width,height)
+    # print("heatmap:")
+    x_heatmap,y_heatmap,width_heatmap,height_heatmap = ax2.get_position().bounds
+    # Average
+    x_average,y_average,width_average,height_average = ax.get_position().bounds
+    # readjust the position to match the sice of heatmap
+    ax.set_position([x_average,y_average,width_heatmap,height_average])
+    x_zscore,y_zscore,width_zscore,height_zscore = ax3.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax3.set_position([x_zscore,y_zscore,width_heatmap,height_zscore])
+    x_auc,y_auc,width_auc,height_auc = ax4.get_position().bounds
+    # readjust the position of zscore to match the sice of heatmap
+    ax4.set_position([x_auc,y_auc,width_heatmap,height_auc])
+
+    # # set the spacing between subplots 
+    # canvas.fig.subplots_adjust(left=MY_LEFT, 
+    #                 bottom=MY_BOTTOM,  
+    #                 right=MY_RIGHT,  
+    #                 top=MY_TOP,  
+    #                 wspace=MY_WSPACE,  
+    #                 hspace=MY_HSPACE) 
     canvas.draw()
     
 def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings_dict,export_loc_data):

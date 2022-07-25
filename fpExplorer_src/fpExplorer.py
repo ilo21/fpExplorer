@@ -38,6 +38,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationTool
 from matplotlib.figure import Figure
 import types
 import pandas as pd
+import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -103,10 +104,10 @@ class MyMainWidget(QMainWindow):
         self.select_data_window = None
         self.select_custom_data_window_content = []
         self.select_custom_data_window = None
-        # when app is started creeate select data window to show on top of the app
-        if (len(self.select_data_window_content)==0):
-            self.select_data_window = SelectDataWindow(self,self.select_data_window_content)
-            self.select_data_window.got_user_input_sig.connect(self.get_select_data_window_user_input)
+        # # when app is started create select data window to show on top of the app
+        # if (len(self.select_data_window_content)==0):
+        #     self.select_data_window = SelectDataWindow(self,self.select_data_window_content)
+        #     self.select_data_window.got_user_input_sig.connect(self.get_select_data_window_user_input)
         # list with general settings dictionary as first element 
         self.settings_dict = [{"downsample":None,
                               "entered_downsample":None,
@@ -151,7 +152,7 @@ class MyMainWidget(QMainWindow):
         self.run_on_batch_btn = QPushButton('Run on Batch')
         self.open_doc_btn = QPushButton('Documentation')
         
-        # disable all buttons except settings when the app starts
+        # disable when the app starts
         self.settings_btn.setEnabled(False)
         self.run_on_batch_btn.setEnabled(False)
         
@@ -161,7 +162,7 @@ class MyMainWidget(QMainWindow):
         self.box_layout.setContentsMargins(10,10,10,10)
         # place widgets to the layout in their proper positions
         self.box_layout.addWidget(self.select_data_btn)
-        # self.box_layout.addWidget(self.select_custom_data_btn)
+        self.box_layout.addWidget(self.select_custom_data_btn)
         self.box_layout.addWidget(self.run_on_batch_btn)
         self.box_layout.addWidget(self.settings_btn)
         self.box_layout.addWidget(self.open_doc_btn)
@@ -197,7 +198,10 @@ class MyMainWidget(QMainWindow):
 
     def select_custom_data_btn_clicked(self):
         self.select_custom_data_window = fpExplorer_csv.SelectCvsDataWindow(self,self.select_custom_data_window_content)
+        self.select_custom_data_window.close_select_data_sig.connect(self.got_select_data_window_closed)
+        self.select_custom_data_window.got_valid_user_input_sig.connect(self.show_csv_preview)
         self.select_custom_data_window.show()
+        self.disable_buttons()
         
     def settings_btn_clicked(self):
         self.disable_buttons()
@@ -265,13 +269,17 @@ class MyMainWidget(QMainWindow):
         
     def enable_all_buttons(self):
         self.select_data_btn.setEnabled(True)
-        self.settings_btn.setEnabled(True)
-        self.run_on_batch_btn.setEnabled(True)
+        self.select_custom_data_btn.setEnabled(True)
         self.open_doc_btn.setEnabled(True)
+        if (len(self.select_data_window_content)>0 or len(self.select_custom_data_window_content)>0):
+            self.settings_btn.setEnabled(True)
+            self.run_on_batch_btn.setEnabled(True)
+            self.open_doc_btn.setEnabled(True)
         QApplication.processEvents() 
         
     def disable_buttons(self):
         self.select_data_btn.setEnabled(False)
+        self.select_custom_data_btn.setEnabled(False)
         self.settings_btn.setEnabled(False)
         self.run_on_batch_btn.setEnabled(False)
         self.open_doc_btn.setEnabled(False)
@@ -282,9 +290,10 @@ class MyMainWidget(QMainWindow):
         self.select_data_window.close()
         # enable all buttons
         self.enable_all_buttons()
+        self.select_custom_data_window_content = []
         # create list of init_params to start previewing
         self.preview_params = [self.select_data_window_content,self.batch_paths_dict]
-#        print("preview_params from main\n",self.preview_params)
+        # print("preview_params from main\n",self.preview_params)
         if self.preview_widget != None: # clear preview before creating next one
             self.preview_widget.close()    
             self.preview_widget.deleteLater()
@@ -311,6 +320,26 @@ class MyMainWidget(QMainWindow):
             self.preview_widget.setLayout(self.preview_main_layout)
             self.bottom_dock_widget.addWidget(self.preview_widget)
         print(self.select_data_window_content)
+
+    @pyqtSlot(list)
+    def show_csv_preview(self,user_info):
+        self.select_custom_data_window.close()
+        self.preview_params = []
+        # create list of init_params to start previewing
+        self.select_custom_data_window_content = user_info
+        # enable all buttons
+        self.enable_all_buttons()
+        print("preview_params from main\n", self.select_custom_data_window_content)
+        if self.preview_widget != None: # clear preview before creating next one
+            self.preview_widget.close()    
+            self.preview_widget.deleteLater()
+            self.preview_widget = None
+        # automatically add preview to the main window
+        self.preview_widget = fpExplorer_csv.PreviewEventBasedWidget(self,self.select_custom_data_window_content)
+        # self.preview_widget.done_batch_processing_sig.connect(self.close_batch_window)
+        # add widget to dock
+        self.preview_widget.setLayout(self.preview_main_layout)
+        self.bottom_dock_widget.addWidget(self.preview_widget)
         
     @pyqtSlot()   
     def close_batch_window(self):
@@ -389,7 +418,6 @@ class MyMainWidget(QMainWindow):
     # receives signal that select folder window is closed
     # enables buttons 
     def got_select_data_window_closed(self):
-        print("enable")
         self.enable_all_buttons()
 
         
@@ -1496,14 +1524,14 @@ class PreviewContinuousWidget(QWidget):
                 # check settings for method to normalize
                 if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                     # normalize from downsampled
-                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_window"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
-                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
@@ -1790,14 +1818,14 @@ class PreviewContinuousWidget(QWidget):
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_window"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
@@ -2087,14 +2115,14 @@ class PreviewContinuousWidget(QWidget):
                     # check settings for method to normalize
                     if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                         # normalize from downsampled
-                        self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(
                                                                                                 self.downsampled_dict[subject],
                                                                                                 self.settings_dict[0]["show_norm_as"],
                                                                                                 self.settings_dict[0]["filter"],
                                                                                                 self.settings_dict[0]["filter_window"])
                     if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                         # normalize from downsampled
-                        self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(
                                                                                                 self.downsampled_dict[subject],
                                                                                                 self.settings_dict[0]["show_norm_as"],
                                                                                                 self.settings_dict[0]["filter"],
@@ -2667,14 +2695,14 @@ class PreviewEventBasedWidget(QWidget):
                 # check settings for method to normalize
                 if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                     # normalize from downsampled
-                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_window"])
                 if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                     # normalize from downsampled
-                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
@@ -3246,6 +3274,19 @@ class PreviewEventBasedWidget(QWidget):
         # print("trials",checked)
         return checked
 
+    def read_trials_range(self):
+        checked = []
+        start_trial = abs(int(self.from_trial.text()))
+        end_trial = abs(int(self.to_trial.text()))
+        if start_trial > end_trial:
+            self.show_info_dialog("Last trial cannot be earlier than the first.")
+            return checked
+        if start_trial < 1 or start_trial >= self.total_current_trials or end_trial < 1 or end_trial > self.total_current_trials:
+            self.show_info_dialog("All trials need to be within the available range.")
+            return checked
+        checked = np.linspace(start_trial,end_trial,(end_trial-start_trial+1),dtype = int)
+        return checked
+
 
     @pyqtSlot(list) 
     # receives a list with perievent options read from perievent window
@@ -3255,35 +3296,66 @@ class PreviewEventBasedWidget(QWidget):
         if self.current_perievent == self.perievent_options_dict['event'] and len(self.current_trials)>0: 
             # read the trials radio buttons
             try:
-                self.current_trials = self.read_trials()
-                print("Trials read from previous")
+                if self.total_current_trials < 10:
+                    print("Less than 10 events")
+                    if len(self.read_trials()) > 0:
+                        self.current_trials = self.read_trials()
+                else:
+                    print("More than 9 events")
+                    # if user did not enter the right range, don't override previous
+                    if len(self.read_trials_range()) > 0:
+                        self.current_trials = self.read_trials_range()
+                print("Trials read from previous",self.current_trials)
                 if self.options["subject"] in self.trials_dict:
                     self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
                 else:
                     self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
             except:
-                self.trials_button_group = []
-                # create new buttons
-                new_trials_widget = QWidget()
-                new_trials_layout = QHBoxLayout()
-                new_trials_widget.setLayout(new_trials_layout)
-                text_label = QLabel("Include Trials:")
-                new_trials_layout.addWidget(text_label)
-                for i in range(self.total_current_trials):
-                        # create btn
-                        # add button to a group
-                        # add to list
-                        # add to layout
-                        btn = QCheckBox(str(i+1))
-                        if i+1 in self.current_trials:
-                            btn.setChecked(True)
-                        new_trials_layout.addWidget(btn)
-                        self.trials_button_group.append(btn)                        
-                # replace with updated widget
-                self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
-                self.current_trials_widget.deleteLater()
-                self.current_trials_widget = new_trials_widget
-                print("Trials not read from previous",self.current_trials)
+                if self.total_current_trials < 10:
+                    self.trials_button_group = []
+                    # create new buttons
+                    new_trials_widget = QWidget()
+                    new_trials_layout = QHBoxLayout()
+                    new_trials_widget.setLayout(new_trials_layout)
+                    text_label = QLabel("Include Trials:")
+                    new_trials_layout.addWidget(text_label)
+                    for i in range(self.total_current_trials):
+                            # create btn
+                            # add button to a group
+                            # add to list
+                            # add to layout
+                            btn = QCheckBox(str(i+1))
+                            if i+1 in self.current_trials:
+                                btn.setChecked(True)
+                            new_trials_layout.addWidget(btn)
+                            self.trials_button_group.append(btn)                        
+                    # replace with updated widget
+                    self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                    self.current_trials_widget.deleteLater()
+                    self.current_trials_widget = new_trials_widget
+                    print("Trials not read from previous",self.current_trials)
+                else: # for more than 9 trials select the range of trials
+                    # create new buttons
+                    new_trials_widget = QWidget()
+                    new_trials_layout = QHBoxLayout()
+                    new_trials_layout.setAlignment(Qt.AlignRight)
+                    new_trials_widget.setLayout(new_trials_layout)
+                    text_label = QLabel("Include From Trial:")
+                    new_trials_layout.addWidget(text_label)
+                    self.from_trial = QLineEdit(str(1))
+                    self.from_trial.setValidator(QtGui.QIntValidator())
+                    new_trials_layout.addWidget(self.from_trial)
+                    till_trial_label = QLabel("To Trial:")
+                    new_trials_layout.addWidget(till_trial_label)
+                    self.to_trial = QLineEdit(str(self.total_current_trials))
+                    self.to_trial.setValidator(QtGui.QIntValidator())
+                    self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                    new_trials_layout.addWidget(self.to_trial)                   
+                    # replace with updated widget
+                    self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                    self.current_trials_widget.deleteLater()
+                    self.current_trials_widget = new_trials_widget
+                    print("Trials not read from previous",self.current_trials)
         if self.batch_perievent == True:    
             if "perievent" in self.parent_window.batch_export_settings_dict:
                 if self.parent_window.batch_export_settings_dict["perievent"] == True:
@@ -3415,10 +3487,8 @@ class PreviewEventBasedWidget(QWidget):
                                             if self.perievent_options_dict["plot_zscore"] == True:
                                                 z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                                             subject,
-                                                                            data,
                                                                             self.perievent_options_dict,
                                                                             analyzed_perievent_dict,
-                                                                            self.preview_init_params[0][0]["signal_name"],
                                                                             self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                             self.save_plots,
                                                                             self.group_names_dict[subject],
@@ -3428,10 +3498,8 @@ class PreviewEventBasedWidget(QWidget):
         #                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
                                                 z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                                             subject,
-                                                                            data,
                                                                             self.perievent_options_dict,
                                                                             analyzed_perievent_dict,
-                                                                            self.preview_init_params[0][0]["signal_name"],
                                                                             self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                             self.save_plots,
                                                                             self.group_names_dict[subject],
@@ -3593,10 +3661,8 @@ class PreviewEventBasedWidget(QWidget):
                                                     if self.perievent_options_dict["plot_zscore"] == True:
                                                         z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                                                 subject,
-                                                                                data,
                                                                                 self.perievent_options_dict,
                                                                                 analyzed_perievent_dict,
-                                                                                self.preview_init_params[0][0]["signal_name"],
                                                                                 self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                                 self.save_plots,
                                                                                 self.parent_window.preview_params[1][subject],
@@ -3607,10 +3673,8 @@ class PreviewEventBasedWidget(QWidget):
         #                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
                                                         z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                                                 subject,
-                                                                                data,
                                                                                 self.perievent_options_dict,
                                                                                 analyzed_perievent_dict,
-                                                                                self.preview_init_params[0][0]["signal_name"],
                                                                                 self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
                                                                                 self.save_plots,
                                                                                 self.parent_window.preview_params[1][subject],
@@ -3658,24 +3722,43 @@ class PreviewEventBasedWidget(QWidget):
                 # self.reset_export_settings()
                 # reset batch peaks when done
                 self.batch_perievent = False
-                # update trials according to batch settings
-                self.trials_button_group = []
-                # create new buttons
-                new_trials_widget = QWidget()
-                new_trials_layout = QHBoxLayout()
-                new_trials_widget.setLayout(new_trials_layout)
-                text_label = QLabel("Include Trials:")
-                new_trials_layout.addWidget(text_label)
-                for i in range(self.total_current_trials):
-                        # create btn
-                        # add button to a group
-                        # add to list
-                        # add to layout
-                        btn = QCheckBox(str(i+1))
-                        if i+1 in self.current_trials:
-                            btn.setChecked(True)
-                        new_trials_layout.addWidget(btn)
-                        self.trials_button_group.append(btn)                        
+                if self.total_current_trials < 10:
+                    # update trials according to batch settings
+                    self.trials_button_group = []
+                    # create new buttons
+                    new_trials_widget = QWidget()
+                    new_trials_layout = QHBoxLayout()
+                    new_trials_widget.setLayout(new_trials_layout)
+                    text_label = QLabel("Include Trials:")
+                    new_trials_layout.addWidget(text_label)
+                    for i in range(self.total_current_trials):
+                            # create btn
+                            # add button to a group
+                            # add to list
+                            # add to layout
+                            btn = QCheckBox(str(i+1))
+                            if i+1 in self.current_trials:
+                                btn.setChecked(True)
+                            new_trials_layout.addWidget(btn)
+                            self.trials_button_group.append(btn)    
+                else: # more than 9 trials
+                    new_trials_widget = QWidget()
+                    new_trials_layout = QHBoxLayout()
+                    new_trials_layout.setAlignment(Qt.AlignRight)
+                    new_trials_widget.setLayout(new_trials_layout)
+                    text_label = QLabel("Include From Trial:")
+                    new_trials_layout.addWidget(text_label)
+                    self.from_trial = QLineEdit(str(1))
+                    self.from_trial.setValidator(QtGui.QIntValidator())
+                    new_trials_layout.addWidget(self.from_trial)
+                    till_trial_label = QLabel("To Trial:")
+                    new_trials_layout.addWidget(till_trial_label)
+                    self.to_trial = QLineEdit(str(self.total_current_trials))
+                    self.to_trial.setValidator(QtGui.QIntValidator())
+                    self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                    new_trials_layout.addWidget(self.to_trial)  
+                    self.current_trials = np.linspace(1,self.total_current_trials,self.total_current_trials,dtype=int) 
+                    self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}               
                 # replace with updated widget
                 self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
                 self.current_trials_widget.deleteLater()
@@ -3727,22 +3810,41 @@ class PreviewEventBasedWidget(QWidget):
                 self.total_current_trials = len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
                 if self.current_perievent == None:
                     self.current_perievent = self.perievent_options_dict['event']
-                    # add trials to view
-                    self.current_trials_layout = QHBoxLayout()
-                    self.current_trials_widget.setLayout(self.current_trials_layout)
-                    text_label = QLabel("Include Trials:")
-                    self.current_trials_layout.addWidget(text_label)
-                    for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                        # create btn
-                        # add button to a group
-                        # add to list
-                        # add to layout
-                        btn = QCheckBox(str(i+1))
-                        btn.setChecked(True)
-                        self.current_trials_layout.addWidget(btn)
-                        self.trials_button_group.append(btn)
-                        self.current_trials.append(i+1)
-                    self.trials_layout.addWidget(self.current_trials_widget)
+                    if self.total_current_trials < 10:
+                        # add trials to view
+                        self.current_trials_layout = QHBoxLayout()
+                        self.current_trials_widget.setLayout(self.current_trials_layout)
+                        text_label = QLabel("Include Trials:")
+                        self.current_trials_layout.addWidget(text_label)
+                        for i in range(self.total_current_trials):
+                            # create btn
+                            # add button to a group
+                            # add to list
+                            # add to layout
+                            btn = QCheckBox(str(i+1))
+                            btn.setChecked(True)
+                            self.current_trials_layout.addWidget(btn)
+                            self.trials_button_group.append(btn)
+                            self.current_trials.append(i+1)
+                        self.trials_layout.addWidget(self.current_trials_widget)
+                    else: # for more than 9 trials select the range of trials
+                        # create new buttons
+                        self.current_trials_layout = QHBoxLayout()
+                        self.current_trials_layout.setAlignment(Qt.AlignRight)
+                        self.current_trials_widget.setLayout(self.current_trials_layout)
+                        text_label = QLabel("Include From Trial:")
+                        self.current_trials_layout.addWidget(text_label)
+                        self.from_trial = QLineEdit(str(1))
+                        self.from_trial.setValidator(QtGui.QIntValidator())
+                        self.current_trials_layout.addWidget(self.from_trial)
+                        till_trial_label = QLabel("To Trial:")
+                        self.current_trials_layout.addWidget(till_trial_label)
+                        self.to_trial = QLineEdit(str(self.total_current_trials))
+                        self.to_trial.setValidator(QtGui.QIntValidator())
+                        self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                        self.current_trials_layout.addWidget(self.to_trial)  
+                        self.trials_layout.addWidget(self.current_trials_widget)
+                        self.current_trials = np.linspace(1,self.total_current_trials,self.total_current_trials,dtype=int)            
                     if self.options["subject"] in self.trials_dict:
                         self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
                     else:
@@ -3750,65 +3852,16 @@ class PreviewEventBasedWidget(QWidget):
                 elif self.current_perievent != self.perievent_options_dict['event']:  # if new event different from previous       
                     # clear current trials and buttons group
                     self.current_trials = []
-                    self.trials_button_group = []
-                    # create new buttons
-                    new_trials_widget = QWidget()
-                    new_trials_layout = QHBoxLayout()
-                    new_trials_widget.setLayout(new_trials_layout)
-                    text_label = QLabel("Include Trials:")
-                    new_trials_layout.addWidget(text_label)
-                    if self.options["subject"] not in self.trials_dict:
-                        for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                            # create btn
-                            # add button to a group
-                            # add to list
-                            # add to layout
-                            btn = QCheckBox(str(i+1))
-                            btn.setChecked(True)
-                            new_trials_layout.addWidget(btn)
-                            self.trials_button_group.append(btn)
-                            self.current_trials.append(i+1)
-                        self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
-                    else: # subject already had some events trials previewed
-                        if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
-                            self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
-                            for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                                btn = QCheckBox(str(i+1))
-                                if i+1 in self.current_trials:
-                                    btn.setChecked(True)
-                                new_trials_layout.addWidget(btn)
-                                self.trials_button_group.append(btn)
-                        else: # add event for that subject
-                            for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
-                                # create btn
-                                # add button to a group
-                                # add to list
-                                # add to layout
-                                btn = QCheckBox(str(i+1))
-                                btn.setChecked(True)
-                                new_trials_layout.addWidget(btn)
-                                self.trials_button_group.append(btn)
-                                self.current_trials.append(i+1)
-                            self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']] = self.current_trials
-                    # replace with updated widget
-                    self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
-                    self.current_trials_widget.deleteLater()
-                    self.current_trials_widget = new_trials_widget
-                    # set new event
-                    self.current_perievent = self.perievent_options_dict['event']
-                else: # if same event and/or new subject
-                    # create new buttons
-                    new_trials_widget = QWidget()
-                    new_trials_layout = QHBoxLayout()
-                    new_trials_widget.setLayout(new_trials_layout)
-                    text_label = QLabel("Include Trials:")
-                    new_trials_layout.addWidget(text_label)
-                    if len(self.trials_button_group) > 0:
-                        for btn in self.trials_button_group:
-                            new_trials_layout.addWidget(btn)
-                    else:
+                    if self.total_current_trials < 10:
+                        self.trials_button_group = []
+                        # create new buttons
+                        new_trials_widget = QWidget()
+                        new_trials_layout = QHBoxLayout()
+                        new_trials_widget.setLayout(new_trials_layout)
+                        text_label = QLabel("Include Trials:")
+                        new_trials_layout.addWidget(text_label)
                         if self.options["subject"] not in self.trials_dict:
-                            for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                            for i in range(self.total_current_trials):
                                 # create btn
                                 # add button to a group
                                 # add to list
@@ -3822,14 +3875,14 @@ class PreviewEventBasedWidget(QWidget):
                         else: # subject already had some events trials previewed
                             if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
                                 self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
-                                for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                for i in range(self.total_current_trials):
                                     btn = QCheckBox(str(i+1))
                                     if i+1 in self.current_trials:
                                         btn.setChecked(True)
                                     new_trials_layout.addWidget(btn)
                                     self.trials_button_group.append(btn)
                             else: # add event for that subject
-                                for i in range(len(data.streams[self.preview_init_params[0][0]["signal_name"]].filtered)):
+                                for i in range(self.total_current_trials):
                                     # create btn
                                     # add button to a group
                                     # add to list
@@ -3839,7 +3892,152 @@ class PreviewEventBasedWidget(QWidget):
                                     new_trials_layout.addWidget(btn)
                                     self.trials_button_group.append(btn)
                                     self.current_trials.append(i+1)
-                                self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
+                                self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']] = self.current_trials
+                        # replace with updated widget
+                        self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                        self.current_trials_widget.deleteLater()
+                        self.current_trials_widget = new_trials_widget
+                    else: # for more than 9 trials select the range of trials
+                        # create new buttons
+                        new_trials_widget = QWidget()
+                        new_trials_layout = QHBoxLayout()
+                        new_trials_layout.setAlignment(Qt.AlignRight)
+                        new_trials_widget.setLayout(new_trials_layout)
+                        text_label = QLabel("Include From Trial:")
+                        new_trials_layout.addWidget(text_label)
+                        if self.options["subject"] not in self.trials_dict:
+                            self.from_trial = QLineEdit(str(1))
+                            self.from_trial.setValidator(QtGui.QIntValidator())
+                            new_trials_layout.addWidget(self.from_trial)
+                            till_trial_label = QLabel("To Trial:")
+                            new_trials_layout.addWidget(till_trial_label)
+                            self.to_trial = QLineEdit(str(self.total_current_trials))
+                            self.to_trial.setValidator(QtGui.QIntValidator())
+                            self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                            new_trials_layout.addWidget(self.to_trial)  
+                            self.current_trials = np.linspace(1,self.total_current_trials,self.total_current_trials,dtype=int) 
+                            self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
+                        else: # subject already had some events trials previewed
+                            if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
+                                self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
+                                self.from_trial = QLineEdit(str(self.current_trials[0]))
+                                self.from_trial.setValidator(QtGui.QIntValidator())
+                                new_trials_layout.addWidget(self.from_trial)
+                                till_trial_label = QLabel("To Trial:")
+                                new_trials_layout.addWidget(till_trial_label)
+                                self.to_trial = QLineEdit(str(self.current_trials[-1]))
+                                self.to_trial.setValidator(QtGui.QIntValidator())
+                                self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                                new_trials_layout.addWidget(self.to_trial)  
+                            else: # add event for that subject
+                                self.from_trial = QLineEdit(str(1))
+                                self.from_trial.setValidator(QtGui.QIntValidator())
+                                new_trials_layout.addWidget(self.from_trial)
+                                till_trial_label = QLabel("To Trial:")
+                                new_trials_layout.addWidget(till_trial_label)
+                                self.to_trial = QLineEdit(str(self.total_current_trials))
+                                self.to_trial.setValidator(QtGui.QIntValidator())
+                                self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                                new_trials_layout.addWidget(self.to_trial)  
+                                self.current_trials = np.linspace(1,self.total_current_trials,self.total_current_trials,dtype=int)    
+                                self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']] = self.current_trials
+                                         
+                        # replace with updated widget
+                        self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
+                        self.current_trials_widget.deleteLater()
+                        self.current_trials_widget = new_trials_widget
+                    # set new event
+                    self.current_perievent = self.perievent_options_dict['event']
+                else: # if same event and/or new subject
+                    if self.total_current_trials < 10:
+                        # create new buttons
+                        new_trials_widget = QWidget()
+                        new_trials_layout = QHBoxLayout()
+                        new_trials_widget.setLayout(new_trials_layout)
+                        text_label = QLabel("Include Trials:")
+                        new_trials_layout.addWidget(text_label)
+                        if len(self.trials_button_group) > 0:
+                            for btn in self.trials_button_group:
+                                new_trials_layout.addWidget(btn)
+                        else:
+                            if self.options["subject"] not in self.trials_dict:
+                                for i in range(self.total_current_trials):
+                                    # create btn
+                                    # add button to a group
+                                    # add to list
+                                    # add to layout
+                                    btn = QCheckBox(str(i+1))
+                                    btn.setChecked(True)
+                                    new_trials_layout.addWidget(btn)
+                                    self.trials_button_group.append(btn)
+                                    self.current_trials.append(i+1)
+                                self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
+                            else: # subject already had some events trials previewed
+                                if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
+                                    self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
+                                    for i in range(self.total_current_trials):
+                                        btn = QCheckBox(str(i+1))
+                                        if i+1 in self.current_trials:
+                                            btn.setChecked(True)
+                                        new_trials_layout.addWidget(btn)
+                                        self.trials_button_group.append(btn)
+                                else: # add event for that subject
+                                    for i in range(self.total_current_trials):
+                                        # create btn
+                                        # add button to a group
+                                        # add to list
+                                        # add to layout
+                                        btn = QCheckBox(str(i+1))
+                                        btn.setChecked(True)
+                                        new_trials_layout.addWidget(btn)
+                                        self.trials_button_group.append(btn)
+                                        self.current_trials.append(i+1)
+                                    self.trials_dict[self.options["subject"]][self.current_perievent] = self.current_trials
+                    else: # more than 9 events
+                        # create new buttons
+                        new_trials_widget = QWidget()
+                        new_trials_layout = QHBoxLayout()
+                        new_trials_layout.setAlignment(Qt.AlignRight)
+                        new_trials_widget.setLayout(new_trials_layout)
+                        text_label = QLabel("Include From Trial:")
+                        new_trials_layout.addWidget(text_label)
+                        if self.options["subject"] not in self.trials_dict:
+                            self.from_trial = QLineEdit(str(1))
+                            self.from_trial.setValidator(QtGui.QIntValidator())
+                            new_trials_layout.addWidget(self.from_trial)
+                            till_trial_label = QLabel("To Trial:")
+                            new_trials_layout.addWidget(till_trial_label)
+                            self.to_trial = QLineEdit(str(self.total_current_trials))
+                            self.to_trial.setValidator(QtGui.QIntValidator())
+                            self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                            new_trials_layout.addWidget(self.to_trial)  
+                            self.current_trials = np.linspace(1,self.total_current_trials,self.total_current_trials,dtype=int) 
+                            self.trials_dict[self.options["subject"]] = {self.current_perievent:self.current_trials}
+                        else: # subject already had some events trials previewed
+                            if self.perievent_options_dict['event'] in self.trials_dict[self.options["subject"]]:
+                                self.current_trials = self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']]
+                                self.from_trial = QLineEdit(str(self.current_trials[0]))
+                                self.from_trial.setValidator(QtGui.QIntValidator())
+                                new_trials_layout.addWidget(self.from_trial)
+                                till_trial_label = QLabel("To Trial:")
+                                new_trials_layout.addWidget(till_trial_label)
+                                self.to_trial = QLineEdit(str(self.current_trials[-1]))
+                                self.to_trial.setValidator(QtGui.QIntValidator())
+                                self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                                new_trials_layout.addWidget(self.to_trial) 
+                            else: # add event for that subject
+                                self.from_trial = QLineEdit(str(1))
+                                self.from_trial.setValidator(QtGui.QIntValidator())
+                                new_trials_layout.addWidget(self.from_trial)
+                                till_trial_label = QLabel("To Trial:")
+                                new_trials_layout.addWidget(till_trial_label)
+                                self.to_trial = QLineEdit(str(self.total_current_trials))
+                                self.to_trial.setValidator(QtGui.QIntValidator())
+                                self.to_trial.setToolTip("Max: "+str(self.total_current_trials))
+                                new_trials_layout.addWidget(self.to_trial)  
+                                self.current_trials = np.linspace(1,self.total_current_trials,self.total_current_trials,dtype=int)    
+                                self.trials_dict[self.options["subject"]][self.perievent_options_dict['event']] = self.current_trials
+
                     # replace with updated widget
                     self.trials_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
                     self.current_trials_widget.deleteLater()
@@ -3850,6 +4048,8 @@ class PreviewEventBasedWidget(QWidget):
 
                 # if user clicked on preview in perievent options window, show preview
                 if self.perievent_options_dict["preview"] == True:
+                    if self.total_current_trials > 9:
+                        self.show_info_dialog("You can preview max 9 events at the same time.\nBut you can include as many as you want in the analysis.")
                     # plot normalized preview
                     fpExplorer_functions.plot_raw_perievents(self.canvas,
                                                   self.options["subject"],
@@ -3891,10 +4091,8 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                       self.options["subject"],
-                                                      data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
                                                       self.group_names_dict[self.options["subject"]],
@@ -3905,10 +4103,8 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                       self.options["subject"],
-                                                      data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
                                                       self.group_names_dict[self.options["subject"]],
@@ -3932,20 +4128,16 @@ class PreviewEventBasedWidget(QWidget):
                         fpExplorer_functions.plot_perievent_avg_zscore(self.canvas,
                                                       self.options["subject"],
                                                       self.current_trials,
-                                                      data,
                                                       self.perievent_options_dict,
-                                                      analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"])
+                                                      analyzed_perievent_dict)
                     # avg and zscore with trials
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_avg_zscore_trials(self.canvas,
                                                       self.options["subject"],
                                                       self.current_trials,
-                                                      data,
                                                       self.perievent_options_dict,
-                                                      analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"])
+                                                      analyzed_perievent_dict)
                     # avg and auc
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
@@ -3959,39 +4151,31 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_perievent_zscore_auc(self.canvas,
                                                       self.options["subject"],
-                                                      data,
                                                       self.perievent_options_dict,
-                                                      analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"])
+                                                      analyzed_perievent_dict)
                     #zscore with trials and auc
                     elif (self.perievent_options_dict["plot_avg"] == False and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_perievent_zscore_trials_auc(self.canvas,
                                                       self.options["subject"],
-                                                      data,
                                                       self.perievent_options_dict,
-                                                      analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"])
+                                                      analyzed_perievent_dict)
                     # all 4 plots (zscore with error)
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == True
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_all_perievent(self.canvas,
                                                       self.options["subject"],
                                                       self.current_trials,
-                                                      data,
                                                       self.perievent_options_dict,
-                                                      analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"])
+                                                      analyzed_perievent_dict)
                     # all 4 plots (zscore with trials)
                     elif (self.perievent_options_dict["plot_avg"] == True and self.perievent_options_dict["plot_zscore"] == False
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == True):
                         fpExplorer_functions.plot_all_perievent_zscore_trials(self.canvas,
                                                       self.options["subject"],
                                                       self.current_trials,
-                                                      data,
                                                       self.perievent_options_dict,
-                                                      analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"])
+                                                      analyzed_perievent_dict)
                 # if user clicked on analyze in perievent options window, analyze
                 if self.perievent_options_dict["export"] == True:
                     analyzed_perievent_dict = fpExplorer_functions.analyze_perievent_data(data,
@@ -4028,10 +4212,8 @@ class PreviewEventBasedWidget(QWidget):
                     if self.perievent_options_dict["plot_zscore"] == True:
                         fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                       self.options["subject"],
-                                                      data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
                                                       self.group_names_dict[self.options["subject"]],
@@ -4040,10 +4222,8 @@ class PreviewEventBasedWidget(QWidget):
                     if self.perievent_options_dict["plot_zscore_trials"] == True:
                         fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                       self.options["subject"],
-                                                      data,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
-                                                      self.preview_init_params[0][0]["signal_name"],
                                                       self.perievent_options_dict["export"],
                                                       self.save_plots,
                                                       self.group_names_dict[self.options["subject"]],
@@ -4345,14 +4525,14 @@ class PreviewEventBasedWidget(QWidget):
             # check settings for method to normalize
             if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_window"])
             if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                 # normalize from downsampled
-                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[self.options["subject"]],
+                self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(
                                                                                         self.downsampled_dict[self.options["subject"]],
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
@@ -4523,14 +4703,14 @@ class PreviewEventBasedWidget(QWidget):
                     # check settings for method to normalize
                     if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
                         # normalize from downsampled
-                        self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(self.raw_data_dict[subject],
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_dff(
                                                                                                 self.downsampled_dict[subject],
                                                                                                 self.settings_dict[0]["show_norm_as"],
                                                                                                 self.settings_dict[0]["filter"],
                                                                                                 self.settings_dict[0]["filter_window"])
                     if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
                         # normalize from downsampled
-                        self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(self.raw_data_dict[subject],
+                        self.normalized_dict[subject] = fpExplorer_functions.normalize_pMat(
                                                                                                 self.downsampled_dict[subject],
                                                                                                 self.settings_dict[0]["show_norm_as"],
                                                                                                 self.settings_dict[0]["filter"],
@@ -4859,7 +5039,11 @@ class PeakSettingsWindow(QMainWindow):
             self.select_folder_btn = QPushButton(" Select Export Folder ")
             self.selected_folder_text = QLineEdit("")
             # start with default path
-            default_path = os.path.join(self.parent_window.preview_params[1][self.subject_name],DEFAULT_EXPORT_FOLDER)
+            if len(self.parent_window.preview_params) > 0:
+                default_path = os.path.join(self.parent_window.preview_params[1][self.subject_name],DEFAULT_EXPORT_FOLDER)
+            else:
+                source_folder, tail = os.path.split(self.parent_window.select_custom_data_window_content[0]["subject_paths"][self.subject_name][0])
+                default_path = os.path.join(source_folder,DEFAULT_EXPORT_FOLDER)
             if len(self.export_path) > 0:
                 self.selected_folder_text.setText(self.export_path)
             else:
@@ -5042,9 +5226,10 @@ class SettingsWindow(QMainWindow):
         self.settings = settings
         self.current_fs = 0
         if self.parent_window.preview_widget != 0:
-            current_subject = self.parent_window.preview_widget.options["subject"]
-            self.current_fs = fpExplorer_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
-            # print("Frequency:",self.current_fs)
+            self.current_fs = self.parent_window.preview_widget.current_fs
+            # current_subject = self.parent_window.preview_widget.options["subject"]
+            # self.current_fs = fpExplorer_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
+            print("Frequency:",self.current_fs)
 
         # calculate min, max and sugested sample rates
         # self.suggested_downsample_samples = round(self.current_fs*DEFAULT_DOWNSAMPLE_PCT/100)
@@ -5377,16 +5562,15 @@ class PeriEventOptionsWindow(QMainWindow):
             self.export_loc_layout.setContentsMargins(10,10,10,10)
             self.select_folder_btn = QPushButton(" Select Export Folder ")
             self.selected_folder_text = QLineEdit('')
-#            if len(self.export_path) > 0:
-#                self.selected_folder_text.setText(self.export_path)
-#            else: # create default subfolder
             # always create default subfolder
-            default_path = os.path.join(self.parent_window.preview_params[1][self.subject_info[0]],DEFAULT_EXPORT_FOLDER)
+            if len(self.parent_window.preview_params) > 0:
+                default_path = os.path.join(self.parent_window.preview_params[1][subject_info[0]],DEFAULT_EXPORT_FOLDER)
+            else:
+                source_folder, tail = os.path.split(self.parent_window.select_custom_data_window_content[0]["subject_paths"][subject_info[0]][0])
+                default_path = os.path.join(source_folder,DEFAULT_EXPORT_FOLDER)
             self.selected_folder_text.setText(default_path)
             self.export_loc_layout.addRow(self.select_folder_btn,self.selected_folder_text)
             self.suggested_file_beginning_text = QLineEdit(subject_info[0])
-#            if len(self.export_file_begin) > 0:
-#                self.suggested_file_beginning_text.setText(self.export_file_begin)
             self.export_loc_layout.addRow("Suggested file name beginning:",self.suggested_file_beginning_text)
             self.export_layout.addLayout(self.export_loc_layout)
             self.export_btn = QPushButton("Export Data")
@@ -5396,29 +5580,52 @@ class PeriEventOptionsWindow(QMainWindow):
             self.export_btn.clicked.connect(self.export_btn_clicked)
             self.export_btn.setStyleSheet(STYLESHEET)
         else:
+            self.current_trials = []
             self.current_trials_widget = QWidget()
             self.trials_layout = QHBoxLayout()
             self.trials_layout.setAlignment(Qt.AlignCenter)
-            self.trials_button_group = []
-            self.current_trials = []
-            # filter around trimmed
-            event_onsets = fpExplorer_functions.get_event_on_off(self.subject_info[2],self.event_from_file_comboBox.currentText())
-            # print(self.event_from_file_comboBox.currentText())
-            # print("This event has "+str(len(event_onsets[0]))+" trials")
-            for i in range(len(event_onsets[0])):
-                # create btn
-                # add button to a group
-                # add to list
-                # add to layout
-                btn = QCheckBox(str(i+1))
-                btn.setChecked(True)
-                self.trials_button_group.append(btn)
-                self.current_trials.append(i+1)
-                self.trials_layout.addWidget(btn)
-            self.current_trials_widget.setLayout(self.trials_layout)
-            self.trials_label = QLabel("Trials:")
-            self.trials_label.setStyleSheet(self.bold_label_stylesheet)
-            self.export_layout.addWidget(self.trials_label)
+            # get event onsets
+            self.event_onsets = fpExplorer_functions.get_event_on_off(self.subject_info[2],self.event_from_file_comboBox.currentText())
+            if len(self.event_onsets[0]) == 0:
+                # try using a custom method
+                self.event_onsets = self.parent_window.get_event_on_off(self.parent_window.events_dict[self.options["subject"]], self.event_from_file_comboBox.currentText())
+            print(self.event_from_file_comboBox.currentText())
+            print("This event has "+str(len(self.event_onsets[0]))+" trials")
+            if len(self.event_onsets[0]) < 10 and len(self.event_onsets[0]) > 0:
+                self.trials_button_group = []
+                self.labelLayout = QVBoxLayout()
+                self.trials_label = QLabel("Trials:")
+                self.trials_label.setStyleSheet(self.bold_label_stylesheet)
+                self.labelLayout.addWidget(self.trials_label)
+                for i in range(len(self.event_onsets[0])):
+                    # create btn
+                    # add button to a group
+                    # add to list
+                    # add to layout
+                    btn = QCheckBox(str(i+1))
+                    btn.setChecked(True)
+                    self.trials_button_group.append(btn)
+                    self.current_trials.append(i+1)
+                    self.trials_layout.addWidget(btn)
+                self.labelLayout.addLayout(self.trials_layout)
+                self.current_trials_widget.setLayout(self.labelLayout)
+            elif len(self.event_onsets[0]) > 9 and len(self.event_onsets[0]) > 0:
+                text_label = QLabel("Include From Trial:")
+                text_label.setStyleSheet(self.bold_label_stylesheet)
+                self.trials_layout.addWidget(text_label)
+                self.from_trial = QLineEdit(str(1))
+                self.from_trial.setValidator(QtGui.QIntValidator())
+                self.trials_layout.addWidget(self.from_trial)
+                till_trial_label = QLabel("To Trial:")
+                till_trial_label.setStyleSheet(self.bold_label_stylesheet)
+                self.trials_layout.addWidget(till_trial_label)
+                self.to_trial = QLineEdit(str(len(self.event_onsets[0])))
+                self.to_trial.setValidator(QtGui.QIntValidator())
+                self.to_trial.setToolTip("Max: "+str(len(self.event_onsets[0])))
+                self.trials_layout.addWidget(self.to_trial) 
+                self.current_trials = np.linspace(1,len(self.event_onsets[0]),len(self.event_onsets[0]),dtype=int)   
+                self.current_trials_widget.setLayout(self.trials_layout)
+
             self.export_layout.addWidget(self.current_trials_widget)
             self.export_batch_btn = QPushButton("Run on Batch and Export")
             self.export_layout.addWidget(self.export_batch_btn)
@@ -5444,28 +5651,55 @@ class PeriEventOptionsWindow(QMainWindow):
     def update_trials(self):
         if self.batch == True:
             # reset all previous trials
-            self.trials_button_group = []
             self.current_trials = []
-            # filter around trimmed
-            event_onsets = fpExplorer_functions.get_event_on_off(self.subject_info[2],self.event_from_file_comboBox.currentText())
+            # get event onsets
+            self.event_onsets = fpExplorer_functions.get_event_on_off(self.subject_info[2],self.event_from_file_comboBox.currentText())
+            if len(self.event_onsets[0]) == 0:
+                # try using a custom method
+                self.event_onsets = self.parent_window.get_event_on_off(self.parent_window.events_dict[self.options["subject"]], self.event_from_file_comboBox.currentText())
             # print(self.event_from_file_comboBox.currentText())
             # print("This event has "+str(len(event_onsets[0]))+" trials")
 
             new_trials_widget = QWidget()
-            new_trials_layout = QHBoxLayout()
-            new_trials_layout.setAlignment(Qt.AlignCenter)
-            for i in range(len(event_onsets[0])):
-                # create btn
-                # add button to a group
-                # add to list
-                # add to layout
-                btn = QCheckBox(str(i+1))
-                btn.setChecked(True)
-                self.trials_button_group.append(btn)
-                self.current_trials.append(i+1)
-                new_trials_layout.addWidget(btn)
+            if len(self.event_onsets[0]) < 10 and len(self.event_onsets[0]) > 0:
+                new_trials_layout = QHBoxLayout()
+                updated_layout = QVBoxLayout()
+                trials_label = QLabel("Trials:")
+                trials_label.setStyleSheet(self.bold_label_stylesheet)
+                updated_layout.addWidget(trials_label)
+                new_trials_layout.setAlignment(Qt.AlignCenter)
+                self.trials_button_group = []
+                for i in range(len(self.event_onsets[0])):
+                    # create btn
+                    # add button to a group
+                    # add to list
+                    # add to layout
+                    btn = QCheckBox(str(i+1))
+                    btn.setChecked(True)
+                    self.trials_button_group.append(btn)
+                    self.current_trials.append(i+1)
+                    new_trials_layout.addWidget(btn)
+                updated_layout.addLayout(new_trials_layout)
+                new_trials_widget.setLayout(updated_layout)
+            elif len(self.event_onsets[0]) > 9 and len(self.event_onsets[0]) > 0:
+                new_trials_layout = QHBoxLayout()
+                new_trials_layout.setAlignment(Qt.AlignCenter)
+                text_label = QLabel("Include From Trial:")
+                text_label.setStyleSheet(self.bold_label_stylesheet)
+                new_trials_layout.addWidget(text_label)
+                self.from_trial = QLineEdit(str(1))
+                self.from_trial.setValidator(QtGui.QIntValidator())
+                new_trials_layout.addWidget(self.from_trial)
+                till_trial_label = QLabel("To Trial:")
+                till_trial_label.setStyleSheet(self.bold_label_stylesheet)
+                new_trials_layout.addWidget(till_trial_label)
+                self.to_trial = QLineEdit(str(len(self.event_onsets[0])))
+                self.to_trial.setValidator(QtGui.QIntValidator())
+                self.to_trial.setToolTip("Max: "+str(len(self.event_onsets[0])))
+                new_trials_layout.addWidget(self.to_trial) 
+                self.current_trials = np.linspace(1,len(self.event_onsets[0]),len(self.event_onsets[0]),dtype=int)   
+                new_trials_widget.setLayout(new_trials_layout)
             # replace with updated widget
-            new_trials_widget.setLayout(new_trials_layout)
             self.export_layout.replaceWidget(self.current_trials_widget,new_trials_widget)
             self.current_trials_widget.deleteLater()
             self.current_trials_widget = new_trials_widget
@@ -5575,12 +5809,24 @@ class PeriEventOptionsWindow(QMainWindow):
 
     def read_trials(self):
         checked = []
-        if self.batch == True:
-            for btn in self.trials_button_group:
-                # print(btn.text(),btn.isChecked())
-                if btn.isChecked():
-                    checked.append(int(btn.text()))
-            # print("trials",checked)
+        for btn in self.trials_button_group:
+            # print(btn.text(),btn.isChecked())
+            if btn.isChecked():
+                checked.append(int(btn.text()))
+        # print("trials",checked)
+        return checked
+
+    def read_trials_range(self):
+        checked = []
+        start_trial = abs(int(self.from_trial.text()))
+        end_trial = abs(int(self.to_trial.text()))
+        if start_trial > end_trial:
+            self.show_info_dialog("Last trial cannot be earlier than the first.")
+            return checked
+        if start_trial < 1 or start_trial >= len(self.event_onsets[0]) or end_trial < 1 or end_trial > len(self.event_onsets[0]):
+            self.show_info_dialog("All trials need to be within the available range.")
+            return checked
+        checked = np.linspace(start_trial,end_trial,(end_trial-start_trial+1),dtype = int)
         return checked
     
     def read_options(self):
@@ -5590,7 +5836,12 @@ class PeriEventOptionsWindow(QMainWindow):
         self.options_dict["plot_zscore"] = self.plot_zscore_cb.isChecked()
         self.options_dict["plot_zscore_trials"] = self.plot_zscore_with_trials_cb.isChecked()
         self.options_dict["plot_auc"] = self.plot_auc_cb.isChecked()
-        self.current_trials = self.read_trials()
+        self.current_trials = []
+        if self.batch == True:
+            if len(self.event_onsets[0]) < 10 and len(self.event_onsets[0]) > 0:
+                self.current_trials = self.read_trials()
+            elif len(self.event_onsets[0]) > 9 and len(self.event_onsets[0]) > 0:
+                self.current_trials = self.read_trials_range()
         self.options_dict["trials"] = self.current_trials
         try:
             self.options_dict["sec_before"] = abs(int(self.before_sec_text.text()))
@@ -5658,9 +5909,17 @@ class ExportDataWindow(QMainWindow):
         # third el=raw data for current subject
         self.subject_info = params[0]
         self.init_dict = params[1]
+        print(self.init_dict)
         self.export_path = params[2]
         self.file_begin = params[3]
-        self.event_based = self.init_dict[0][0]["event_based"]
+        self.event_based = False
+        try:
+            self.event_based = self.init_dict[0][0]["event_based"]
+        except:
+            if len(self.init_dict[0]["subject_paths"][self.subject_info][1]) > 0:
+                self.event_based = True
+            else:
+                self.event_based = False
         
         # tbd
         self.export_options_list = []
@@ -5691,7 +5950,12 @@ class ExportDataWindow(QMainWindow):
 #            self.selected_folder_text.setText(self.export_path)
 #        else: # create default subfolder
         # always create default subfolder for current subject
-        default_path = os.path.join(self.parent_window.parent_window.preview_params[1][self.subject_info],DEFAULT_EXPORT_FOLDER)
+        try:
+            default_path = os.path.join(self.parent_window.preview_params[1][self.subject_info],DEFAULT_EXPORT_FOLDER)
+        except:
+            source_folder, tail = os.path.split(self.main_window.select_custom_data_window_content[0]["subject_paths"][self.subject_info][0])
+            default_path = os.path.join(source_folder,DEFAULT_EXPORT_FOLDER)
+        # default_path = os.path.join(self.parent_window.parent_window.preview_params[1][self.subject_info],DEFAULT_EXPORT_FOLDER)
         self.selected_folder_text.setText(default_path)
         self.export_loc_layout.addRow(self.select_folder_btn,self.selected_folder_text)
         self.suggested_file_beginning_text = QLineEdit(self.subject_info)
@@ -5836,8 +6100,9 @@ if __name__ == "__main__":
     app = QApplication([])
     main_widget = MyMainWidget()
     main_widget.showMaximized()
-    # show select data window on top when app is started
-    main_widget.select_data_window.show()
+    # main_widget.show()
+    # # show select data window on top when app is started
+    # main_widget.select_data_window.show()
     app.exec_()
 
     print('Done')
