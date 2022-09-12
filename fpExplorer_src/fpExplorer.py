@@ -5951,7 +5951,7 @@ class ExportDataWindow(QMainWindow):
 #        else: # create default subfolder
         # always create default subfolder for current subject
         try:
-            default_path = os.path.join(self.parent_window.preview_params[1][self.subject_info],DEFAULT_EXPORT_FOLDER)
+            default_path = os.path.join(self.parent_window.parent_window.preview_params[1][self.subject_info],DEFAULT_EXPORT_FOLDER)
         except:
             source_folder, tail = os.path.split(self.main_window.select_custom_data_window_content[0]["subject_paths"][self.subject_info][0])
             default_path = os.path.join(source_folder,DEFAULT_EXPORT_FOLDER)
