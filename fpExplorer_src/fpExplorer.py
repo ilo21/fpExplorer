@@ -3487,6 +3487,7 @@ class PreviewEventBasedWidget(QWidget):
                                             if self.perievent_options_dict["plot_zscore"] == True:
                                                 z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                                             subject,
+                                                                            self.current_trials,
                                                                             self.perievent_options_dict,
                                                                             analyzed_perievent_dict,
                                                                             self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
@@ -3498,6 +3499,7 @@ class PreviewEventBasedWidget(QWidget):
         #                                    if self.perievent_options_dict["plot_zscore_trials"] == True:
                                                 z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                                             subject,
+                                                                            self.current_trials,
                                                                             self.perievent_options_dict,
                                                                             analyzed_perievent_dict,
                                                                             self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
@@ -3661,6 +3663,7 @@ class PreviewEventBasedWidget(QWidget):
                                                     if self.perievent_options_dict["plot_zscore"] == True:
                                                         z_score_df = fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                                                 subject,
+                                                                                self.current_trials,
                                                                                 self.perievent_options_dict,
                                                                                 analyzed_perievent_dict,
                                                                                 self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
@@ -3673,6 +3676,7 @@ class PreviewEventBasedWidget(QWidget):
         #                                            if self.perievent_options_dict["plot_zscore_trials"] == True:
                                                         z_score_df = fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                                                 subject,
+                                                                                self.current_trials,
                                                                                 self.perievent_options_dict,
                                                                                 analyzed_perievent_dict,
                                                                                 self.parent_window.batch_export_settings_dict["export_for_single_subjects"],
@@ -4091,6 +4095,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == False and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
@@ -4103,6 +4108,7 @@ class PreviewEventBasedWidget(QWidget):
                             and self.perievent_options_dict["plot_zscore_trials"] == True and self.perievent_options_dict["plot_auc"] == False):
                         fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
@@ -4212,6 +4218,7 @@ class PreviewEventBasedWidget(QWidget):
                     if self.perievent_options_dict["plot_zscore"] == True:
                         fpExplorer_functions.plot_perievent_zscore_alone(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],
@@ -4222,6 +4229,7 @@ class PreviewEventBasedWidget(QWidget):
                     if self.perievent_options_dict["plot_zscore_trials"] == True:
                         fpExplorer_functions.plot_perievent_zscore_with_trials_alone(self.canvas,
                                                       self.options["subject"],
+                                                      self.current_trials,
                                                       self.perievent_options_dict,
                                                       analyzed_perievent_dict,
                                                       self.perievent_options_dict["export"],

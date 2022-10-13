@@ -424,11 +424,14 @@ def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signa
         of each segment could vary by one sample. Let's find the minimum length 
         so we can trim the excess off before calculating the median.
         '''
-    # try:
-    min1 = np.min([np.size(x) for x in modified_data.streams[signal_name].filtered])
-    min2 = np.min([np.size(x) for x in modified_data.streams[control_name].filtered])
-    modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
-    modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
+    if len(all_signal_filtered) > 0: # sometimes the first and only event gave empty list after filtering
+        min1 = np.min([np.size(x) for x in modified_data.streams[signal_name].filtered])
+        min2 = np.min([np.size(x) for x in modified_data.streams[control_name].filtered])
+        modified_data.streams[signal_name].filtered = [x[1:min1] for x in modified_data.streams[signal_name].filtered]
+        modified_data.streams[control_name].filtered = [x[1:min2] for x in modified_data.streams[control_name].filtered]
+    else:
+        print("Not enough data that satisfy your request. Try changing event or times around event.")
+        return modified_data
     # downsample data as well
     N = settings_dict[0]["downsample"] 
     
@@ -2097,8 +2100,10 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
         norm_type = " (z-score)"
     else:
         norm_type = " (%df/F)"
-    for i in range(total_plots):
-        header_signal = "Trial"+str(i+1)+norm_type
+    # for i in range(total_plots):
+    for i in range(len(current_trials)):
+        # header_signal = "Trial"+str(i+1)+norm_type
+        header_signal = "Trial"+str(current_trials[i])+norm_type
         signal_data = y_dff_all[i]
         df = pd.DataFrame({header_signal:signal_data})
         dfs.append(df)
@@ -2213,7 +2218,7 @@ def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options
         canvas.draw()
     
     
-def plot_perievent_zscore_alone(canvas,subject, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
+def plot_perievent_zscore_alone(canvas,subject, current_trials, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -2286,8 +2291,8 @@ def plot_perievent_zscore_alone(canvas,subject, perievent_options_dict,analyzed_
     # add time
     time_df = pd.DataFrame({"Time (sec)":ts})
     dfs.append(time_df)
-    for i in range(len(zscore_all)):
-        header = "Trial"+str(i+1)+"_zscore"
+    for i in range(len(current_trials)):
+        header = "Trial"+str(current_trials[i])+"_zscore"
         data = zscore_all[i]
         df = pd.DataFrame({header:data})
         dfs.append(df)
@@ -2325,7 +2330,7 @@ def plot_perievent_zscore_alone(canvas,subject, perievent_options_dict,analyzed_
         canvas.draw()
     return raw_df
 
-def plot_perievent_zscore_with_trials_alone(canvas,subject, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
+def plot_perievent_zscore_with_trials_alone(canvas,subject, current_trials, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -2402,8 +2407,8 @@ def plot_perievent_zscore_with_trials_alone(canvas,subject, perievent_options_di
     # add time
     time_df = pd.DataFrame({"Time (sec)":ts})
     dfs.append(time_df)
-    for i in range(len(zscore_all)):
-        header = "Trial"+str(i+1)+"_zscore"
+    for i in range(len(current_trials)):
+        header = "Trial"+str(current_trials[i])+"_zscore"
         data = zscore_all[i]
         df = pd.DataFrame({header:data})
         dfs.append(df)
