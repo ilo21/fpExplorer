@@ -567,7 +567,8 @@ class RunOnBatchWindow(QMainWindow):
                 self.trim_beginning_sec.setEnabled(False)           
         self.trim_beginning_sec.setValidator(QtGui.QIntValidator())
         self.trim_beginning_event = QComboBox()
-        if self.events_present == True: # show event option only for eventspreview
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # show event option only for eventspreview
             self.trim_beginning_event.addItems(self.preview_window.events_from_current_subject)
             if self.trim_beginning_select.currentText() == "Trim first seconds":
                 self.trim_beginning_event.setEnabled(False)
@@ -591,7 +592,8 @@ class RunOnBatchWindow(QMainWindow):
                 self.trim_ending_sec.setEnabled(False)
         self.trim_ending_sec.setValidator(QtGui.QIntValidator())
         self.trim_end_event = QComboBox()
-        if self.events_present == True: # show event option only for eventspreview
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # show event option only for eventspreview
             self.trim_end_event.addItems(self.preview_window.events_from_current_subject)
             if self.trim_ending_select.currentText() == "Trim last seconds":
                 self.trim_end_event.setEnabled(False)
@@ -605,14 +607,17 @@ class RunOnBatchWindow(QMainWindow):
         self.trim_begin_label.setStyleSheet(self.bold_stylesheet)
         self.trim_end_label = QLabel("Trim ending")
         self.trim_end_label.setStyleSheet(self.bold_stylesheet)
-        if self.events_present == True: # show event option only for eventspreview
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # show event option only for eventspreview
             self.trimming_layout.addRow(self.trim_begin_label,self.trim_beginning_select)
         self.trimming_layout.addRow("Seconds from beginning",self.trim_beginning_sec)
-        if self.events_present == True: # show event option only for eventspreview
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # show event option only for eventspreview
             self.trimming_layout.addRow("Event to trim",self.trim_beginning_event)
             self.trimming_layout.addRow(self.trim_end_label,self.trim_ending_select)
         self.trimming_layout.addRow("Seconds from ending",self.trim_ending_sec)
-        if self.events_present == True: # show event option only for eventspreview
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # show event option only for eventspreview
             self.trimming_layout.addRow("Event to trim",self.trim_end_event)
         
 ##########################
@@ -666,7 +671,8 @@ class RunOnBatchWindow(QMainWindow):
         if "spikes" in self.batch_params_dict:
             self.spike_cb.setChecked(self.batch_params_dict["spikes"])
         self.options_layout.addWidget(self.normalized_cb)
-        if self.events_present == True: # show event option only for eventspreview
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # show event option only for eventspreview
             self.options_layout.addWidget(self.perievent_cb)
         self.options_layout.addWidget(self.spike_cb)
         self.options_layout.addWidget(QLabel(""))
@@ -679,7 +685,8 @@ class RunOnBatchWindow(QMainWindow):
         self.export_for_single_subjects_cb.setStyleSheet(self.bold_stylesheet)
         self.export_group_data_cb.setStyleSheet(self.bold_stylesheet)
         self.options_layout.addWidget(self.export_for_single_subjects_cb)
-        if self.events_present == True: # group analysis only for events
+        if self.parent_window.select_data_window_content[0]["event_based"] == True: # show event option only for eventspreview
+        # if self.events_present == True: # group analysis only for events
             self.options_layout.addWidget(self.export_group_data_cb)
         self.options_layout.addWidget(QLabel(""))
         self.run_btn = QPushButton("Run and Export")
