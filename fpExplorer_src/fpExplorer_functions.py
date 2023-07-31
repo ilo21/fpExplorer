@@ -27,6 +27,8 @@ https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometr
 """
 
 import tdt
+from tdt.TDTfilter import combine_time
+from tdt.TDTfilter import get_valid_ind
 # https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/
 import numpy as np
 from numpy.polynomial import Polynomial
@@ -47,6 +49,7 @@ from scipy.signal import find_peaks, filtfilt
 from scipy.interpolate import interp1d
 import os
 import copy
+import warnings
 
 
 ''' get all data from the recording (reads from multiple files)
@@ -121,14 +124,22 @@ def get_events(raw_data):
     # iterate over all events that start with Ptr
     for evt in all_epocs_list:
         # exclude cam or tickfrom events
-        if evt.lower().startswith("cam") == False and evt.lower().startswith("tick") == False:
-        # if evt.startswith("Prt") or evt.startswith("Note"):
-            # create set of unique events
-            unique_events = set(raw_data.epocs[evt].data)
-            for el in unique_events:
-                evt_name = evt + " " + str(int(el))
-                my_event_list.append(evt_name)
-
+        if (evt.lower().startswith("cam") == False and evt.lower().startswith("tick") == False) or evt.lower().startswith("cam1") == True:
+            if evt.lower().startswith("cam1") == False:
+                # create set of unique events
+                unique_events = set(raw_data.epocs[evt].data)
+                for el in unique_events:
+                    evt_name = evt + " " + str(int(el))
+                    my_event_list.append(evt_name)
+            else:
+                # check if include special case for cam1 (only if it has notes)
+                data = raw_data.epocs[evt]
+                match = False
+                for k in data.keys():
+                    if k == 'notes':
+                        match = True
+                if match == True:
+                    my_event_list.append(evt)
     return my_event_list
 
 # returns true if there are any events in the data
@@ -146,21 +157,31 @@ def get_event_on_off(raw_data, event):
     '''
     event_name_split = event.split(" ")
     on_off = [[],[]]
-    # find tone onsets and offsets
-    try:    # some data was not readable by tdt.epoc_filter
-        evt_on_off= tdt.epoc_filter(raw_data, event_name_split[0], values=[int(event_name_split[1])])
-        on_off = evt_on_off.time_ranges
-    except: 
-        print("Problem getting on off event data by tdt.epoc_filter")
-        print(event_name_split[0]) # some names end with _ and that gets replaced in data tank
-        if event_name_split[0][-1] == "_":
-            adjusted_name = event_name_split[0][:-1]+"/"
-            print(adjusted_name)
-            evt_on_off= tdt.epoc_filter(raw_data, adjusted_name, values=[int(event_name_split[1])])
+    if event.lower().startswith("cam1") == False:
+        # find tone onsets and offsets
+        try:    # some data was not readable by tdt.epoc_filter
+            evt_on_off= tdt.epoc_filter(raw_data, event_name_split[0], values=[int(event_name_split[1])])
             on_off = evt_on_off.time_ranges
+        except: 
+            print("Problem getting on off event data by tdt.epoc_filter")
+            print(event_name_split[0]) # some names end with _ and that gets replaced in data tank
+            if event_name_split[0][-1] == "_":
+                adjusted_name = event_name_split[0][:-1]+"/"
+                print(adjusted_name)
+                evt_on_off= tdt.epoc_filter(raw_data, adjusted_name, values=[int(event_name_split[1])])
+                on_off = evt_on_off.time_ranges
+    else: # special case for Cam1
+        data = raw_data.epocs[event]
+        onsets = []
+        try:
+            onsets = data.notes.ts
+        except:
+            onsets = []
+        on_off[0] = onsets
     if len(on_off[0]) == 0:
         print("Could not get onsets any of known ways")
     return on_off
+
 
 def get_single_channel(raw_data,chnl_name):
 #    print('channel 1:', len(raw_data.streams[chnl_name].data))
@@ -217,6 +238,7 @@ def trim_raw_data(raw_data,signal_name,control_name,beginning_sec,ending_sec):
     # create a dictionary
     trimmed_dict = {"ts":ts,"signal":signal_trimmed,"control":control_trimmed}
     return trimmed_dict
+
 
 # create path to single data tank (data folder+subject name+experiment name)
 # return a dictionary subject name: path
@@ -351,6 +373,79 @@ def normalize_dff(signal_dict,show_as,smooth,smooth_window):
 
     return {"ts":ts_arr,"normalized_signal":dFF}
 
+# Mulholland dff that uses custom baseline
+def normalize_dff_baseline(signal_dict,baseline_dict,show_as,smooth,smooth_window):
+    #####################
+    # change lists to numpy array for calculations
+    # create new timestamps for the data (from zero)
+    ts_arr = np.asarray(signal_dict["ts"])
+    signal_arr =np.asarray(signal_dict["signal"])
+    control_arr = np.asarray(signal_dict["control"])
+    print(f"All trace: first: {ts_arr[0]}, last: {ts_arr[-1]}")
+    # change baseline lists to numpy array for calculations
+    ts_baseline_arr = np.asarray(baseline_dict["ts"])
+    signal_baseline_arr =np.asarray(baseline_dict["signal"])
+    control_baseline_arr = np.asarray(baseline_dict["control"])
+    print(f"Baseline: first: {ts_baseline_arr[0]}, last: {ts_baseline_arr[-1]}")
+    if smooth == True:
+        print("Start smoothing",smooth_window)
+        a = 1
+        b = np.divide(np.ones((smooth_window,)), smooth_window)
+        control_arr = filtfilt(b, a, control_arr)
+        signal_arr = filtfilt(b, a, signal_arr)
+        control_baseline_arr = filtfilt(b, a, control_baseline_arr)
+        signal_baseline_arr = filtfilt(b, a, signal_baseline_arr)
+        print("Done smoothing")
+        
+    # Before:
+#    # fit time axis to the 465nm stream
+#    # https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html#numpy.polynomial.polynomial.Polynomial.fit
+#    bls_Ca = np.polyfit(ts_arr,signal_arr,1)
+#    F0Ca = np.multiply(bls_Ca[0], ts_arr) + bls_Ca[1]
+#    # dF/F for the 465 channel
+#    dFFCa = (signal_arr - F0Ca)/F0Ca *100
+##    print(dFFCa)
+#    # fit time axis the 405nm stream
+#    bls_ref = np.polyfit(ts_arr,control_arr,1)
+#    F0Ref = np.multiply(bls_ref[0], ts_arr) + bls_ref[1]
+#    # dF/F for the 405 channel
+#    dFFRef = (control_arr - F0Ref)/F0Ref *100
+##    print(dFFRef)
+#    dFFnorm = dFFCa - dFFRef
+#    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+#    # to make 0 the mean value for DF/F
+#    negative = dFFnorm[dFFnorm<0]
+#    dFF=dFFnorm-np.mean(negative)
+    
+    # fit time axis to the 465nm stream  
+#    bls_Ca = np.polyfit(ts_arr,signal_arr,1) # deprecieted
+    bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_baseline_arr,signal_baseline_arr,1)
+#    print("bls_Ca",bls_Ca.convert().coef[::-1])
+#    F0Ca = np.polyval(bls_Ca,ts_arr) # deprecieted
+    F0Ca = polyval(ts_arr,bls_Ca.convert().coef)
+    # dF/F for the 465 channel
+    dFFCa = (signal_arr - F0Ca)/F0Ca *100
+    # fit time axis the 405nm stream
+#    bls_ref = np.polyfit(ts_arr,control_arr,1) # depreciated
+    bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_baseline_arr,control_baseline_arr,1)
+#    F0Ref = np.polyval(bls_ref,ts_arr) # deprecieted
+    F0Ref = polyval(ts_arr,bls_ref.convert().coef)
+    # dF/F for the 405 channel
+    dFFRef = (control_arr - F0Ref)/F0Ref *100
+#    print(dFFRef)
+    dFFnorm = dFFCa - dFFRef
+    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+    # to make 0 the mean value for DF/F
+    negative = dFFnorm[dFFnorm<0]
+    dFF=dFFnorm-np.mean(negative)
+
+    if show_as == "Z-Score":
+        median_all = np.median(dFF)
+        mad = stats.median_absolute_deviation(dFF)
+        dFF = (dFF - median_all)/mad
+
+    return {"ts":ts_arr,"normalized_signal":dFF}
+
 
 # https://github.com/djamesbarker/pMAT
 def normalize_pMat(signal_dict,show_as,smooth,smooth_window):
@@ -358,7 +453,6 @@ def normalize_pMat(signal_dict,show_as,smooth,smooth_window):
     ts_arr = np.asarray(signal_dict["ts"])
     signal_arr =np.asarray(signal_dict["signal"])
     control_arr = np.asarray(signal_dict["control"])
-    
     if smooth == True:
         print("Start smoothing",smooth_window)
         a = 1
@@ -399,6 +493,328 @@ def normalize_pMat(signal_dict,show_as,smooth,smooth_window):
 
     return {"ts":ts_arr,"normalized_signal":dff}
 
+# function uses a custom baseline range to fit all of the data later
+def normalize_pMat_custom_baseline(signal_dict,baseline_dict,show_as,smooth,smooth_window):
+    # change lists to numpy array for calculations
+    ts_arr = np.asarray(signal_dict["ts"])
+    signal_arr =np.asarray(signal_dict["signal"])
+    control_arr = np.asarray(signal_dict["control"])
+    print(f"All trace: first: {ts_arr[0]}, last: {ts_arr[-1]}")
+    # change baseline lists to numpy array for calculations
+    ts_baseline_arr = np.asarray(baseline_dict["ts"])
+    signal_baseline_arr =np.asarray(baseline_dict["signal"])
+    control_baseline_arr = np.asarray(baseline_dict["control"])
+    print(f"Baseline: first: {ts_baseline_arr[0]}, last: {ts_baseline_arr[-1]}")
+    if smooth == True:
+        print("Start smoothing",smooth_window)
+        a = 1
+        b = np.divide(np.ones((smooth_window,)), smooth_window)
+        control_arr = filtfilt(b, a, control_arr)
+        signal_arr = filtfilt(b, a, signal_arr)
+        control_baseline_arr = filtfilt(b, a, control_baseline_arr)
+        signal_baseline_arr = filtfilt(b, a, signal_baseline_arr)
+        print("Done smoothing")
+        
+        
+    # Before
+#    bls = np.polyfit(control_arr, signal_arr, 1)
+#    fit_line = np.multiply(bls[0], control_arr) + bls[1]
+#    dff = (signal_arr - fit_line)/fit_line * 100
+        
+    # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+    mu = np.mean(control_baseline_arr)
+    std = np.std(control_baseline_arr, ddof=0)
+    # Call np.polyfit(), using the shifted and scaled version of control_arr
+#    cscaled = np.polyfit((control_arr - mu)/std, signal_arr, 1) # depreciated
+    cscaled = np.polynomial.polynomial.Polynomial.fit((control_baseline_arr - mu)/std, signal_baseline_arr, 1)
+    # Create a poly1d object that can be called
+#    pscaled = np.poly1d(cscaled) # old obsolete function
+    # https://numpy.org/doc/stable/reference/routines.polynomials.html
+    pscaled = Polynomial(cscaled.convert().coef)
+    # Inputs to pscaled must be shifted and scaled using mu and std
+    F0 = pscaled((control_arr - mu)/std)
+#    print("F0?",F0[:20])
+    dffnorm = (signal_arr - F0)/F0 * 100
+    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+    # to make 0 the mean value for DF/F
+    negative = dffnorm[dffnorm<0]
+    dff=dffnorm-np.mean(negative)
+
+    if show_as == "Z-Score":
+        median_all = np.median(dff)
+        mad = stats.median_absolute_deviation(dff)
+        dff = (dff - median_all)/mad
+
+    return {"ts":ts_arr,"normalized_signal":dff}
+
+# modified tdt function to handle special Cam1 case with notes
+def my_epoc_filter(data, epoc, *, values=None, t=None, tref=False, keepdata=True):
+    """TDT tank data filter. Extract data around epoc events.
+    data = epoc_filter(data, epoc) where data is the output of read_block,
+    epoc is the name of the epoc to filter on, and parameter value pairs
+    define the filtering conditions.
+    
+    If no parameters are specified, then the time range of the epoc event
+    is used as a time filter.
+    
+    Also creates data.filter, a string that describes the filter applied.
+    Optional keyword arguments:
+        values      specify array of allowed values
+                      ex: tempdata = epoc_filter(data, 'Freq', values=[9000, 10000])
+                        > retrieves data when Freq = 9000 or Freq = 10000
+        t           specify onset/offset pairs relative to epoc onsets. If the
+                      offset is not provided, the epoc offset is used.
+                      ex: tempdata = epoc_filter(data, 'Freq', t=[-0.1, 0.5])
+                        > retrieves data from 0.1 seconds before Freq onset to 0.4
+                          seconds after Freq onset. Negative time ranges are discarded.
+        tref        use the epoc event onset as a time reference. All timestamps for
+                      epoc, snippet, and scalar events are then relative to epoc onsets.
+                      ex: tempdata = epoc_filter(data, 'Freq', tref=True)
+                        > sets snippet timestamps relative to Freq onset
+        keepdata    keep the original stream data array and add a field called
+                      'filtered' that holds the data from each valid time range. 
+                      Defaults to True.
+    
+    IMPORTANT! Use a time filter (t argument) only after all value filters have been set.
+    """
+    
+    data = copy.deepcopy(data)
+    
+    filter_string = ''
+
+    if not hasattr(data, 'epocs'):
+        raise Exception('no epocs found')
+    elif len(data.epocs.keys()) == 0:
+        raise Exception('no epocs found')
+
+    fff = data.epocs.keys()
+    match = ''
+    all_names = []
+    for k in data.epocs.keys():
+        all_names.append(data.epocs[k].name)
+        if data.epocs[k].name == epoc:
+            match = k
+
+    if not hasattr(data.epocs, match):
+        raise Exception('epoc {0} is not a valid epoc event, valid events are: {1}'.format(epoc, all_names))
+
+    if t:
+        try:
+            if len(t) > 2:
+                raise Exception('{0} t vector must have 1 or 2 elements only'.format(repr(t)))
+        except:
+            raise Exception('{0} t vector must have 1 or 2 elements only'.format(repr(t)))
+    
+    ddd = data.epocs[match]
+
+    time_ranges = None
+    
+    # VALUE FILTER, only use time ranges where epoc value is in filter array
+    valid = [False for el in ddd.data]
+    if values:
+        # find valid time ranges
+        # use this for numbers
+        for i in range(len(values)):
+            for j in range(len(ddd.data)):
+                if ddd.data[j] == values[i]:
+                    valid[j] = True
+                    break
+        
+        time_ranges = np.vstack((ddd.onset[valid], ddd.offset[valid]))
+        # print(ddd.onset[valid],ddd.offset[valid])
+        # print(f"time ranges: {time_ranges}")
+        # create filter string
+        filter_string = '{0}:VALUE in [{1}];'.format(epoc, ','.join([str(v) for v in values]))
+
+        # AND time_range with existing time ranges
+        if hasattr(data, 'time_ranges'):
+            time_ranges = combine_time(time_ranges, data.time_ranges, 'AND')
+            data.time_ranges = time_ranges
+    
+    #TIME FILTER
+    t1 = 0
+    t2 = np.nan
+    if t:
+        t1 = t[0]
+        if len(t) == 2:
+            t2 = t[1]
+        
+        if not isinstance(time_ranges, np.ndarray):
+            # preallocate
+            time_ranges = np.zeros((2, len(ddd.onset)))
+            for j in range(len(ddd.onset)):
+                time_ranges[:, j] = [ddd.onset[j], ddd.offset[j]]
+        else:
+            time_ranges = data.time_ranges
+        
+        # find valid time ranges
+        for j in range(time_ranges.shape[1]): #= 1:size(time_ranges,2)
+            if np.isnan(t2):
+                time_ranges[:, j] = [time_ranges[0,j]+t1, time_ranges[1,j]]
+            else:
+                time_ranges[:, j] = [time_ranges[0,j]+t1, time_ranges[0,j]+t1+t2]
+        
+        # throw away negative time ranges
+        if np.all(~np.isnan(time_ranges)):
+            time_ranges = time_ranges[:,time_ranges[0,:]>0]
+        
+        # create filter string
+        if np.isnan(t2):
+            filter_string = 'TIME:{0} [{1}];'.format(epoc, np.round(t1,2))
+        else:
+            filter_string = 'TIME:{0} [{1}:{2}];'.format(epoc, np.round(t1,2), np.round(t2,2))
+        data.time_ranges = time_ranges
+        data.time_ref = [t1, t2]
+    
+    # TREF FILTER
+    if tref:
+        filter_string += 'REF:{0}'.format(epoc)
+        if hasattr(tref, "__len__"):
+            if len(tref) > 1:
+                t1 = tref[0]
+    
+    if values or t or tref:
+        pass
+    else:
+        # no filter specified, use EPOC time ranges
+        time_ranges = np.vstack((ddd.onset, ddd.offset))
+        # AND time_range with existing time ranges
+        if hasattr(data, 'time_ranges'):
+            time_ranges = combine_time(time_ranges, data.time_ranges, 'AND')
+            data.time_ranges = time_ranges
+        filter_string = 'EPOC:{0};'.format(epoc)
+        
+    # set filter string
+    if hasattr(data, 'filter'):
+        data.filter += filter_string
+    else:
+        data.filter = filter_string
+               
+    time_ranges = data.time_ranges
+    # print(f"data.time_ranges: {time_ranges}")
+    # FILTER ALL EXISTING DATA ON THESE TIME RANGES
+    # filter streams
+    if data.streams:
+        for k in data.streams.keys():
+            fs = data.streams[k].fs
+            sf = 1/(2.56e-6*fs)
+            td_sample = np.uint64(data.streams[k].start_time/2.56e-6)
+            filtered = []
+            max_ind = max(data.streams[k].data.shape)
+            for j in range(time_ranges.shape[1]):
+                tlo_sample = np.uint64(time_ranges[0,j]/2.56e-6)
+                thi_sample = np.uint64(time_ranges[1,j]/2.56e-6)
+                
+                onset = np.uint64(np.maximum(np.round((tlo_sample - td_sample)/sf),0))
+                # throw it away if onset or offset extends beyond recording window
+                if np.isinf(time_ranges[1,j]):
+                    if onset <= max_ind and onset > -1:
+                        if data.streams[k].data.ndim == 1:
+                            filtered.append(data.streams[k].data[onset:])
+                        else:
+                            filtered.append(data.streams[k].data[:,onset:])
+                        break
+                else:
+                    offset = np.uint64(np.maximum(np.round((thi_sample-td_sample)/sf),0))
+                    if offset <= max_ind and offset > -1 and onset <= max_ind and onset > -1:
+                        if data.streams[k].data.ndim == 1:
+                            filtered.append(data.streams[k].data[onset:offset])
+                        else:
+                            filtered.append(data.streams[k].data[:,onset:offset])
+            if keepdata:
+                data.streams[k].filtered = filtered
+            else:
+                data.streams[k].data = filtered
+    
+    # filter snips
+    if data.snips:
+        warning_value = -1
+        for k in data.snips.keys():
+            ts = data.snips[k].ts
+            
+            # preallocate
+            keep = np.zeros(len(ts), dtype=np.uint64)
+            diffs = np.zeros(len(ts)) # for relative timestamps
+            keep_ind = 0
+            
+            for j in range(len(ts)):
+                ind1 = ts[j] > time_ranges[0,:]
+                ind2 = ts[j] < time_ranges[1,:]
+                ts_ind = np.where(ind1 & ind2)[0]
+                if len(ts_ind) > 0:
+                    if len(ts_ind) > 1:
+                        min_diff = np.min(np.abs(time_ranges[1, ts_ind[0]]-time_ranges[1, ts_ind[1]]), np.abs(time_ranges[1, ts_ind[0]]-time_ranges[1, ts_ind[1]]))
+                        warning_value = min_diff
+                        continue
+                    keep[keep_ind] = np.uint64(j)
+                    diffs[keep_ind] = ts[j] - time_ranges[0, ts_ind] + t1; # relative ts
+                    keep_ind += 1
+            
+            if warning_value > 0:
+                warnings.warn('time range overlap, consider a maximum time range of %.2fs'.format(warning_value), Warning)
+            
+            # truncate
+            keep = keep[:keep_ind]
+            diffs = diffs[:keep_ind]
+            if hasattr(data.snips[k], 'data'):
+                if len(data.snips[k].data) > 0:
+                    data.snips[k].data = data.snips[k].data[keep]
+            
+            if tref:
+                data.snips[k].ts = diffs
+            else:
+                data.snips[k].ts = data.snips[k].ts[keep]
+            
+            # if there are any extra fields, keep those
+            for kk in data.snips[k].keys():
+                if kk in ['ts', 'name', 'data', 'sortname', 'fs', 'code', 'size', 'type', 'dform']:
+                    continue
+                if len(data.snips[k][kk]) >= np.max(keep):
+                    data.snips[k][kk] = data.snips[k][kk][keep]
+    
+    # filter scalars, include if timestamp falls in valid time range
+    if data.scalars:
+        for k in data.scalars.keys():
+            ts = data.scalars[k].ts
+            keep = get_valid_ind(ts, time_ranges)
+            if len(keep) > 0:
+                # scalars can have multiple rows
+                if data.scalars[k].data.ndim > 1:
+                    data.scalars[k].data = data.scalars[k].data[:,keep]
+                else:
+                    data.scalars[k].data = data.scalars[k].data[keep]
+                data.scalars[k].ts = data.scalars[k].ts[keep]
+            else:
+                data.scalars[k].data = []
+                data.scalars[k].ts = []
+
+    # filter epocs, include if onset falls in valid time range
+    if data.epocs:
+        for k in data.epocs.keys():
+            ts = data.epocs[k].onset
+            keep = get_valid_ind(ts, time_ranges)
+            if len(keep) > 0:
+                data.epocs[k].data = data.epocs[k].data[keep]
+                data.epocs[k].onset = data.epocs[k].onset[keep]
+                if hasattr(data.epocs[k], 'notes'):
+                    if hasattr(data.epocs[k].notes, 'ts'):
+                        keep2 = get_valid_ind(data.epocs[k].notes.ts, time_ranges)
+                        data.epocs[k].notes.ts = data.epocs[k].notes.ts[keep2]
+                        data.epocs[k].notes.index = data.epocs[k].notes.index[keep2]
+                        data.epocs[k].notes.notes = data.epocs[k].notes.notes[keep2]
+                    else:
+                        data.epocs[k].notes = data.epocs[k].notes[keep]
+                if hasattr(data.epocs[k], 'offset'):
+                    data.epocs[k].offset = data.epocs[k].offset[keep]
+            else:
+                data.epocs[k].data = []
+                data.epocs[k].onset = []
+                if hasattr(data.epocs[k], 'offset'):
+                    data.epocs[k].offset = []
+                if hasattr(data.epocs[k], 'notes'):
+                    data.epocs[k].notes = []
+    
+    return data
 
 #https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
 def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signal_name,control_name):
@@ -406,7 +822,30 @@ def filter_data_around_event(raw_data,perievent_options_dict,settings_dict,signa
     before = -perievent_options_dict["sec_before"]
     till = perievent_options_dict["sec_before"]+perievent_options_dict["sec_after"]+0.1
     trange = [before,till]
-    # modified_data = tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
+    if event_name_split[0] == 'Cam1': # special case
+        # find values = indexes of timestamps
+        my_values = []
+        data = raw_data.epocs[event_name_split[0]]
+        my_onsets = []
+        try:
+            my_onsets = data.notes.ts
+        except:
+            my_onsets = []
+        if len(my_onsets) > 0:
+            all_values = data.data
+            all_ts = data.onset
+            indexes = []
+            for el in my_onsets:
+                try:
+                    idx = np.where(all_ts == el)
+                    indexes.append(int(idx[0][0]))
+                except:
+                    print("Onset not found")
+            if len(indexes) > 0:
+                for el in indexes:
+                    my_values.append(all_values[el])
+                print(f"my_values {my_values}")
+                modified_data= my_epoc_filter(raw_data, event_name_split[0], values = my_values, t=trange, tref=True)
     try:    # some data was not readable by tdt.epoc_filter
         modified_data= tdt.epoc_filter(raw_data, event_name_split[0], t=trange, values=[int(event_name_split[1])], tref=True)
     except: 
@@ -2690,7 +3129,7 @@ def plot_perievent_auc_alone(canvas,subject,perievent_options_dict,analyzed_peri
     ax.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax.set_xticks(np.arange(-1, len(AUC)+1))
     ax.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax.set_yticks([min(AUC),max(AUC)])
+    ax.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
     
     # create subfolder in current subject folder
     if export == True:
@@ -2810,7 +3249,7 @@ def plot_perievent_avg_auc(canvas,subject,current_trials,perievent_options_dict,
     ax2.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax2.set_xticks(np.arange(-1, len(AUC)+1))
     ax2.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax2.set_yticks([min(AUC),max(AUC)])
+    ax2.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
     
     canvas.draw()
     
@@ -2883,7 +3322,7 @@ def plot_perievent_zscore_auc(canvas,subject, perievent_options_dict,analyzed_pe
     ax3.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
     ax3.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax3.set_yticks([min(AUC),max(AUC)])
+    ax3.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
 
     # bounds returns (x0,y0,width,height)
     # print("heatmap:")
@@ -2976,7 +3415,7 @@ def plot_perievent_zscore_trials_auc(canvas,subject, perievent_options_dict,anal
     ax3.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax3.set_xticks(np.arange(-1, len(AUC)+1))
     ax3.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax3.set_yticks([min(AUC),max(AUC)])
+    ax3.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
 
     # bounds returns (x0,y0,width,height)
     # print("heatmap:")
@@ -3097,7 +3536,7 @@ def plot_all_perievent(canvas,subject,current_trials, perievent_options_dict,ana
     ax4.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
     ax4.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax4.set_yticks([min(AUC),max(AUC)])
+    ax4.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
 
     # bounds returns (x0,y0,width,height)
     # print("heatmap:")
@@ -3225,7 +3664,7 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials, perievent_op
     ax4.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax4.set_xticks(np.arange(-1, len(AUC)+1))
     ax4.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax4.set_yticks([min(AUC),max(AUC)])
+    ax4.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
 
     # bounds returns (x0,y0,width,height)
     # print("heatmap:")
@@ -3250,11 +3689,27 @@ def plot_all_perievent_zscore_trials(canvas,subject,current_trials, perievent_op
     #                 hspace=MY_HSPACE) 
     canvas.draw()
     
-def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings_dict,export_loc_data):
+def plot_peaks(canvas,subject,data,options,blocks_windows_values,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data 
+    # a list of three tuples. Each tuple is seconds from, seconds till
+    time_windows_values = blocks_windows_values
+    block1_from = time_windows_values[0][0]
+    block1_till = time_windows_values[0][1]
+    block2_from = time_windows_values[1][0]
+    block2_till = time_windows_values[1][1]
+    block3_from = time_windows_values[2][0]
+    block3_till = time_windows_values[2][1]
+    # check if there were any blocks
+    blocks = False
+    block1_spike_ts = []
+    block1_spike_val = []
+    block2_spike_ts = []
+    block2_spike_val = []
+    block3_spike_ts = []
+    block3_spike_val = []
     # get peak params from gui
      # get peak params from gui
     height = None
@@ -3354,12 +3809,63 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings
              color=SIGNAL_COLOR_RGB,
              linewidth=1,
              label = "signal")
+
 #    ax.plot(peaks, normalized_signal[peaks], "xr")
     ax.plot(translated_peaks, normalized_signal[peaks], "xr")
     
-    total_label = str(total_peaks)+ " Spikes Found"
+    total_label = str(total_peaks)+ " Total Spikes"
     ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color='red',label = total_label)
     
+    # get y limits of the top plot to place the block text under it
+    bottom, top = ax.get_ylim()
+    block_text_y_pos = bottom-0.6
+    # bbox_props = dict(boxstyle='round', facecolor='k', alpha=0.1, hatch='X')
+    bbox_props = dict(boxstyle='round', facecolor='k', alpha=0.1)
+    # Plot windows if there are any
+    if block1_from != "None" and block1_till != "None":
+        print(f"From: {block1_from}, till: {block1_till}")
+        blocks = True
+        ax.axvline(x=block1_from,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        ax.axvline(x=block1_till,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        # ax.axvspan(block1_from,block1_till, alpha=0.1,color='k',hatch='X')
+        ax.axvspan(block1_from,block1_till, alpha=0.1,color='k')
+        # count spikes for that block
+        for i in range(len(translated_peaks)):
+            if translated_peaks[i] >= block1_from and translated_peaks[i] <= block1_till:
+                block1_spike_ts.append(translated_peaks[i])
+                block1_spike_val.append(normalized_signal[peaks][i])
+        block1_text = str(len(block1_spike_ts))+" Spikes"
+        canvas.fig.text(block1_from+1, block_text_y_pos, block1_text, ha='left', va='top', fontsize=AXIS_LABEL_FONTSIZE-2, bbox=bbox_props, transform=ax.transData)
+    if block2_from != "None" and block2_till != "None":
+        print(f"From: {block2_from}, till: {block2_till}")
+        blocks = True
+        ax.axvline(x=block2_from,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        ax.axvline(x=block2_till,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        # ax.axvspan(block2_from,block2_till, alpha=0.1,color='k',hatch='X')
+        ax.axvspan(block2_from,block2_till, alpha=0.1,color='k')
+        # count spikes for that block
+        for i in range(len(translated_peaks)):
+            if translated_peaks[i] >= block2_from and translated_peaks[i] <= block2_till:
+                block2_spike_ts.append(translated_peaks[i])
+                block2_spike_val.append(normalized_signal[peaks][i])
+        block2_text = str(len(block2_spike_ts))+" Spikes"
+        canvas.fig.text(block2_from+1, block_text_y_pos, block2_text, ha='left', va='top', fontsize=AXIS_LABEL_FONTSIZE-2, bbox=bbox_props, transform=ax.transData)
+    if block3_from != "None" and block3_till != "None":
+        print(f"From: {block3_from}, till: {block3_till}")
+        blocks = True
+        ax.axvline(x=block3_from,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        ax.axvline(x=block3_till,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        # ax.axvspan(block3_from,block3_till, alpha=0.1,color='k',hatch='X')
+        ax.axvspan(block3_from,block3_till, alpha=0.1,color='k')
+        # count spikes for that block
+        for i in range(len(translated_peaks)):
+            if translated_peaks[i] >= block3_from and translated_peaks[i] <= block3_till:
+                block3_spike_ts.append(translated_peaks[i])
+                block3_spike_val.append(normalized_signal[peaks][i])
+        block3_text = str(len(block3_spike_ts))+" Spikes"
+        canvas.fig.text(block3_from+1, block_text_y_pos, block3_text, ha='left', va='top', fontsize=AXIS_LABEL_FONTSIZE-2, bbox=bbox_props, transform=ax.transData)
+
+
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
     ax.set_ylabel('dF/F (%)', fontsize=AXIS_LABEL_FONTSIZE)
@@ -3384,16 +3890,55 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings
                     top=MY_TOP,  
                     wspace=0,  
                     hspace=0) 
-    
-    
+       
     # export
     if export == True:
         file_name = file_beginning + "_Spikes.csv"
         if file_beginning != subject:
             file_name = file_beginning +"_"+subject+ "_Spikes.csv"
         dump_file_path = os.path.join(dump_path,file_name)
-        raw_df= pd.DataFrame({"Time (sec)":translated_peaks,
-                                 "Value" : normalized_signal[peaks]})
+        val = "dF/F (%)"
+        if show_norm_as == "Z-Score":
+            val = "Z-Score"
+        if blocks == False:
+            raw_df = pd.DataFrame({"(sec)":translated_peaks,
+                                    val: normalized_signal[peaks]})
+        else: # create dataframe with joined blocks that might have different number of rows each
+            dfs = [pd.DataFrame({"(sec) Total Spikes":translated_peaks,
+                                    val +" Total Spikes" : normalized_signal[peaks]})]
+            if block1_from != "None" and block1_till != "None":
+                # add nans as missing values to the blocks, so that they all have the same number of rows as total spikes
+                while len(block1_spike_ts) < total_peaks:
+                    block1_spike_ts.append(np.nan)
+                    block1_spike_val.append(np.nan)
+                block1_ts_col_name = "(sec) Spikes from "+str(block1_from)+" till "+str(block1_till)
+                block1_val_col_name = val + "Spikes from "+str(block1_from)+" till "+str(block1_till)
+                df =  pd.DataFrame({
+                                    block1_ts_col_name:block1_spike_ts,
+                                    block1_val_col_name:block1_spike_val})
+                dfs.append(df)
+            if block2_from != "None" and block2_till != "None":
+                while len(block2_spike_ts) < total_peaks:
+                    block2_spike_ts.append(np.nan)
+                    block2_spike_val.append(np.nan)
+                block2_ts_col_name = "(sec) Spikes from "+str(block2_from)+" till "+str(block2_till)
+                block2_val_col_name = val + "Spikes from "+str(block2_from)+" till "+str(block2_till)
+                df =  pd.DataFrame({
+                                    block2_ts_col_name:block2_spike_ts,
+                                    block2_val_col_name:block2_spike_val})
+                dfs.append(df)
+            if block3_from != "None" and block3_till != "None":
+                while len(block3_spike_ts) < total_peaks:
+                    block3_spike_ts.append(np.nan)
+                    block3_spike_val.append(np.nan)
+                block3_ts_col_name = "(sec) Spikes from "+str(block3_from)+" till "+str(block3_till)
+                block3_val_col_name = val + "Spikes from "+str(block3_from)+" till "+str(block3_till)
+                df =  pd.DataFrame({
+                                    block3_ts_col_name:block3_spike_ts,
+                                    block3_val_col_name:block3_spike_val})
+                dfs.append(df)
+            raw_df = pd.concat(dfs,axis=1)
+            
         settings_df = get_settings_df(settings_dict)
         settings_df.to_csv(dump_file_path,header=False)            
         with open(dump_file_path,'a') as f:
@@ -3414,11 +3959,27 @@ def plot_peaks(canvas,subject,data,options,export,save_plots,group_name,settings
     else:
         canvas.draw()
     
-def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,event_data,export,save_plots,group_name,settings_dict,export_loc_data):
+def plot_peaks_with_event(canvas,subject,data,options,blocks_windows_values,event_name,event2_name,event_data,export,save_plots,group_name,settings_dict,export_loc_data):
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     show_norm_as = settings_dict[0]["show_norm_as"]
     dump_path,file_beginning = export_loc_data 
+    # a list of three tuples. Each tuple is seconds from, seconds till
+    time_windows_values = blocks_windows_values
+    block1_from = time_windows_values[0][0]
+    block1_till = time_windows_values[0][1]
+    block2_from = time_windows_values[1][0]
+    block2_till = time_windows_values[1][1]
+    block3_from = time_windows_values[2][0]
+    block3_till = time_windows_values[2][1]
+    # check if there were any blocks
+    blocks = False
+    block1_spike_ts = []
+    block1_spike_val = []
+    block2_spike_ts = []
+    block2_spike_val = []
+    block3_spike_ts = []
+    block3_spike_val = []
     # get peak params from gui
     height = None
     threshold = None
@@ -3515,8 +4076,57 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
 #    ax.plot(peaks, normalized_signal[peaks], "xr")
     ax.plot(translated_peaks, normalized_signal[peaks], "xr")
     
-    total_label = str(total_peaks)+ " Spikes Found"
+    total_label = str(total_peaks)+ " Total Spikes"
     ax2.eventplot(translated_peaks, orientation='horizontal', linelengths=0.5, color=CONTROL_COLOR_RGB,label=total_label)
+
+    # get y limits of the top plot to place the block text under it
+    bottom, top = ax.get_ylim()
+    block_text_y_pos = bottom-0.6
+    # bbox_props = dict(boxstyle='round', facecolor='k', alpha=0.1, hatch='X')
+    bbox_props = dict(boxstyle='round', facecolor='k', alpha=0.1)
+    # Plot windows if there are any
+    if block1_from != "None" and block1_till != "None":
+        print(f"From: {block1_from}, till: {block1_till}")
+        blocks = True
+        ax.axvline(x=block1_from,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        ax.axvline(x=block1_till,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        # ax.axvspan(block1_from,block1_till, alpha=0.1,color='k',hatch='X')
+        ax.axvspan(block1_from,block1_till, alpha=0.1,color='k')
+        # count spikes for that block
+        for i in range(len(translated_peaks)):
+            if translated_peaks[i] >= block1_from and translated_peaks[i] <= block1_till:
+                block1_spike_ts.append(translated_peaks[i])
+                block1_spike_val.append(normalized_signal[peaks][i])
+        block1_text = str(len(block1_spike_ts))+" Spikes"
+        canvas.fig.text(block1_from+1, block_text_y_pos, block1_text, ha='left', va='top', fontsize=AXIS_LABEL_FONTSIZE-2, bbox=bbox_props, transform=ax.transData)
+    if block2_from != "None" and block2_till != "None":
+        print(f"From: {block2_from}, till: {block2_till}")
+        blocks = True
+        ax.axvline(x=block2_from,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        ax.axvline(x=block2_till,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        # ax.axvspan(block2_from,block2_till, alpha=0.1,color='k',hatch='X')
+        ax.axvspan(block2_from,block2_till, alpha=0.1,color='k')
+        # count spikes for that block
+        for i in range(len(translated_peaks)):
+            if translated_peaks[i] >= block2_from and translated_peaks[i] <= block2_till:
+                block2_spike_ts.append(translated_peaks[i])
+                block2_spike_val.append(normalized_signal[peaks][i])
+        block2_text = str(len(block2_spike_ts))+" Spikes"
+        canvas.fig.text(block2_from+1, block_text_y_pos, block2_text, ha='left', va='top', fontsize=AXIS_LABEL_FONTSIZE-2, bbox=bbox_props, transform=ax.transData)
+    if block3_from != "None" and block3_till != "None":
+        print(f"From: {block3_from}, till: {block3_till}")
+        blocks = True
+        ax.axvline(x=block3_from,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        ax.axvline(x=block3_till,linestyle='dashed',color='k',alpha=0.5,linewidth=1)
+        # ax.axvspan(block3_from,block3_till, alpha=0.1,color='k',hatch='X')
+        ax.axvspan(block3_from,block3_till, alpha=0.1,color='k')
+        # count spikes for that block
+        for i in range(len(translated_peaks)):
+            if translated_peaks[i] >= block3_from and translated_peaks[i] <= block3_till:
+                block3_spike_ts.append(translated_peaks[i])
+                block3_spike_val.append(normalized_signal[peaks][i])
+        block3_text = str(len(block3_spike_ts))+" Spikes"
+        canvas.fig.text(block3_from+1, block_text_y_pos, block3_text, ha='left', va='top', fontsize=AXIS_LABEL_FONTSIZE-2, bbox=bbox_props, transform=ax.transData)
     
     if len(event_data[0][0]) > 0:
         # first event
@@ -3536,8 +4146,8 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
                 else:
                     ax.axvline(x=first_evt_onset_translated[i],color='k',alpha=0.5,linewidth=1)
                 ctr+=1
-        # if there is more than one event, plot the second one as well
-        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        # if there is more than one event, and blocks were not selected, plot the second one as well
+        if (len(event_data) > 1 and len(event_data[1][0]) > 0) and blocks == False:
             ctr = 0
             second_evt_onset = event_data[1][0]
             second_evt_onset_translated = [el-ts[0] for el in second_evt_onset]
@@ -3552,6 +4162,7 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
                     else:
                         ax.axvline(x=second_evt_onset_translated[i],linestyle='dashed',color='k',alpha=0.5,linewidth=1)
                     ctr+=1
+
     
     my_title = 'Subject: ' + subject
     canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
@@ -3585,11 +4196,52 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
             file_name = file_beginning + "_" + subject + "_" + event_name+"_Spikes.csv"
         else: 
             file_name = subject + "_" + event_name+"_Spikes.csv"
-        if event2_name != "---":
+        if event2_name != "---" and blocks == False:
             file_name = file_beginning + "_" + event_name+"_"+event2_name+"_Spikes.csv"  
         dump_file_path = os.path.join(dump_path,file_name)
-        raw_df= pd.DataFrame({"Time (sec)":translated_peaks,
-                                 "Value" : normalized_signal[peaks]})
+
+        val = "dF/F (%)"
+        if show_norm_as == "Z-Score":
+            val = "Z-Score"
+        if blocks == False:
+            raw_df = pd.DataFrame({"(sec)":translated_peaks,
+                                    val: normalized_signal[peaks]})
+        else: # create dataframe with joined blocks that might have different number of rows each
+            dfs = [pd.DataFrame({"(sec) Total Spikes":translated_peaks,
+                                    val +" Total Spikes" : normalized_signal[peaks]})]
+            if block1_from != "None" and block1_till != "None":
+                # add nans as missing values to the blocks, so that they all have the same number of rows as total spikes
+                while len(block1_spike_ts) < total_peaks:
+                    block1_spike_ts.append(np.nan)
+                    block1_spike_val.append(np.nan)
+                block1_ts_col_name = "(sec) Spikes from "+str(block1_from)+" till "+str(block1_till)
+                block1_val_col_name = val + "Spikes from "+str(block1_from)+" till "+str(block1_till)
+                df =  pd.DataFrame({
+                                    block1_ts_col_name:block1_spike_ts,
+                                    block1_val_col_name:block1_spike_val})
+                dfs.append(df)
+            if block2_from != "None" and block2_till != "None":
+                while len(block2_spike_ts) < total_peaks:
+                    block2_spike_ts.append(np.nan)
+                    block2_spike_val.append(np.nan)
+                block2_ts_col_name = "(sec) Spikes from "+str(block2_from)+" till "+str(block2_till)
+                block2_val_col_name = val + "Spikes from "+str(block2_from)+" till "+str(block2_till)
+                df =  pd.DataFrame({
+                                    block2_ts_col_name:block2_spike_ts,
+                                    block2_val_col_name:block2_spike_val})
+                dfs.append(df)
+            if block3_from != "None" and block3_till != "None":
+                while len(block3_spike_ts) < total_peaks:
+                    block3_spike_ts.append(np.nan)
+                    block3_spike_val.append(np.nan)
+                block3_ts_col_name = "(sec) Spikes from "+str(block3_from)+" till "+str(block3_till)
+                block3_val_col_name = val + "Spikes from "+str(block3_from)+" till "+str(block3_till)
+                df =  pd.DataFrame({
+                                    block3_ts_col_name:block3_spike_ts,
+                                    block3_val_col_name:block3_spike_val})
+                dfs.append(df)
+            raw_df = pd.concat(dfs,axis=1)
+
         settings_df = get_settings_df(settings_dict)
         settings_df.to_csv(dump_file_path,header=False)            
         with open(dump_file_path,'a') as f:
@@ -3601,7 +4253,7 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
         evt1_df = pd.DataFrame({"onset (s)":first_evt_onset_translated,
                                     "offset (s)" : first_evt_offset_translated})
         evt1_df.to_csv(dump_file_path, index=False)
-        if len(event_data) > 1 and len(event_data[1][0]) > 0:
+        if (len(event_data) > 1 and len(event_data[1][0]) > 0) and blocks == False:
             event2_file = file_beginning + "_" + event2_name+".csv"
             dump_file_path = os.path.join(dump_path,event2_file)
             evt2_df = pd.DataFrame({"onset (s)":second_evt_onset_translated,
@@ -3614,7 +4266,7 @@ def plot_peaks_with_event(canvas,subject,data,options,event_name,event2_name,eve
         if file_beginning == subject:
             plot_file_name = file_beginning + "_" + event_name+"_Spikes.png"
             plot_file_name2 = file_beginning + "_" + event_name+"_Spikes.svg"
-        if event2_name != "---":
+        if event2_name != "---" and blocks == False:
             plot_file_name = file_beginning + "_" + subject + "_" + event_name+"_"+event2_name+"_Spikes.png" 
             plot_file_name2 = file_beginning + "_" + subject + "_" + event_name+"_"+event2_name+"_Spikes.svg" 
             if file_beginning == subject:
@@ -4870,7 +5522,7 @@ def get_batch_perievent_auc(canvas,my_all_dfs,group_names,perievent_options_dict
     ax.set_title('Pre vs Post',fontsize=TITLE_FONT_SIZE)
     ax.set_xticks(np.arange(-1, len(AUC)+1))
     ax.set_xticklabels(['', 'PRE', 'POST', ''])
-    ax.set_yticks([min(AUC),max(AUC)])
+    ax.set_yticks([round(min(AUC), 2),round(max(AUC), 2)])
     
     # save csv with data
     file_name = file_beginning+"_perievent_auc.csv"
@@ -4952,6 +5604,134 @@ def show_polynomial_fitting(canvas, settings_dict,downsampled,signal_name,contro
         std = np.std(control_arr, ddof=0)
         # Call np.polyfit(), using the shifted and scaled version of control_arr
         cscaled = np.polynomial.polynomial.Polynomial.fit((control_arr - mu)/std, signal_arr, 1)
+        # Create a poly1d object that can be called
+        # https://numpy.org/doc/stable/reference/routines.polynomials.html
+        pscaled = Polynomial(cscaled.convert().coef)
+        # Inputs to pscaled must be shifted and scaled using mu and std
+        F0 = pscaled((control_arr - mu)/std)    
+        # plot
+        # clear previous figure
+        canvas.fig.clf()
+        ax = canvas.fig.add_subplot(111)
+        
+        ax.plot(ts_reset, signal_arr, linewidth=1, color=SIGNAL_COLOR_RGB, label='F'+signal_name)
+        ax.plot(ts_reset, F0, linewidth=1, color='k', label='F0')
+        
+        my_title = "Check polynomial fitting: " + normalization
+        ax.set_title(my_title,fontsize=FIGURE_TITLE_FONT_SIZE)
+#        canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+        ax.set_ylabel('mV',fontsize=AXIS_LABEL_FONTSIZE)
+        ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+        # show only intiger yticks
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # hide top and right border
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+    
+        canvas.draw()
+    
+    if normalization == 'Modified Polynomial Fitting':           
+        F0Ca = polyval(ts_reset,bls_Ca.convert().coef)
+        F0Ref = polyval(ts_reset,bls_ref.convert().coef)
+        # plot
+        # clear previous figure
+        canvas.fig.clf()
+        ax = canvas.fig.add_subplot(211)
+        ax2 = canvas.fig.add_subplot(212)
+        
+        ax.plot(ts_reset, signal_arr, linewidth=1, color=SIGNAL_COLOR_RGB, label='F'+signal_name)
+        ax.plot(ts_reset, F0Ca, linewidth=1, color='k', label='F0')
+        
+        ax2.plot(ts_reset, control_arr, linewidth=1, color=CONTROL_COLOR_RGB, label='F'+control_name)
+        ax2.plot(ts_reset, F0Ref, linewidth=1, color='k', label='F0')
+        
+        my_title = "Check polynomial fitting: " + normalization
+#        ax.set_title(my_title,fontsize=14)
+        canvas.fig.suptitle(my_title, fontsize=FIGURE_TITLE_FONT_SIZE)
+        ax.set_ylabel('mV',fontsize=AXIS_LABEL_FONTSIZE)
+        ax.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+        # show only intiger yticks
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # hide top and right border
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+        ax2.set_ylabel('mV',fontsize=AXIS_LABEL_FONTSIZE)
+        ax2.set_xlabel('Time (sec)', fontsize=AXIS_LABEL_FONTSIZE)
+        # show only intiger yticks
+        ax2.yaxis.set_major_locator(MaxNLocator(integer=True))
+        # hide top and right border
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.legend(loc=MY_LEGEND_LOC, bbox_to_anchor=MY_LEGENG_POS)
+
+    if save_plot == True:
+        my_path = dump_path
+        file_name = subject_name+"_poly_fitting.png"
+        save_path = os.path.join(my_path,file_name)
+        canvas.fig.savefig(save_path)
+        # also as svg
+        file_name = subject_name+"_poly_fitting.svg"
+        dump_plot_file_path = os.path.join(dump_path,file_name)
+        canvas.fig.savefig(dump_plot_file_path, format='svg', dpi=DPI4SVG)
+    else:
+        canvas.draw()
+    return slope_intercept_dict
+
+def show_polynomial_fitting_custom_baseline(canvas, settings_dict,downsampled,baseline_dict,signal_name,control_name,subject_name,save_plot,dump_path):
+    normalization = settings_dict["normalization"]
+    smooth = settings_dict["filter"]
+    smooth_window = settings_dict["filter_window"]
+    
+    # change lists to numpy array for calculations
+    ts_arr = np.asarray(downsampled["ts"])
+    signal_arr =np.asarray(downsampled["signal"])
+    control_arr = np.asarray(downsampled["control"])
+    print(f"All trace: first: {ts_arr[0]}, last: {ts_arr[-1]}")
+    # change baseline lists to numpy array for calculations
+    ts_baseline_arr = np.asarray(baseline_dict["ts"])
+    signal_baseline_arr =np.asarray(baseline_dict["signal"])
+    control_baseline_arr = np.asarray(baseline_dict["control"])
+    print(f"Baseline: first: {ts_baseline_arr[0]}, last: {ts_baseline_arr[-1]}")
+    # reset time to start from zero
+    total_seconds = ts_arr[-1]-ts_arr[0]
+    total_seconds_baseline = ts_baseline_arr[-1]-ts_baseline_arr[0]
+    # start time from zero
+    ts_reset = [i*total_seconds/len(ts_arr) for i in range(len(ts_arr))]
+    ts_baseline_reset = [i*total_seconds_baseline/len(ts_arr) for i in range(len(ts_baseline_arr))]
+
+    if smooth == True:
+        print("Start smoothing",smooth_window)
+        a = 1
+        b = np.divide(np.ones((smooth_window,)), smooth_window)
+        control_arr = filtfilt(b, a, control_arr)
+        signal_arr = filtfilt(b, a, signal_arr)
+        control_baseline_arr = filtfilt(b, a, control_baseline_arr)
+        signal_baseline_arr = filtfilt(b, a, signal_baseline_arr)
+        print("Done smoothing")
+
+    # in order to suggest if user should normalize using modified method
+    # check if signals in both channels do not decrease equally
+    # fit time axis to the 465nm stream 
+    bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_baseline_reset,signal_baseline_arr,1)
+    # fit time axis the 405nm stream
+    bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_baseline_reset,control_baseline_arr,1)
+    # the below returns first: slope, second: intercept
+    print("bls_Ca",bls_Ca.convert().coef[::-1])
+    # the below returns first: slope, second: intercept
+    print("bls_ref",bls_ref.convert().coef[::-1])
+    # put those values in a dictionary
+    slope_intercept_dict = {"signal_slope_intercept":bls_Ca.convert().coef[::-1],
+                            "control_slope_intercept":bls_ref.convert().coef[::-1]
+    }
+
+    if normalization == 'Standard Polynomial Fitting':                   
+        # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+        mu = np.mean(control_baseline_arr)
+        std = np.std(control_baseline_arr, ddof=0)
+        # Call np.polyfit(), using the shifted and scaled version of control_arr
+        cscaled = np.polynomial.polynomial.Polynomial.fit((control_baseline_arr - mu)/std, signal_baseline_arr, 1)
         # Create a poly1d object that can be called
         # https://numpy.org/doc/stable/reference/routines.polynomials.html
         pscaled = Polynomial(cscaled.convert().coef)

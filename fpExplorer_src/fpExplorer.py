@@ -31,7 +31,7 @@ import math
 from PyQt5 import QtGui 
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer,QLocale
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
@@ -73,7 +73,7 @@ MIN_DOWNSAMPLE_PCT = 0.5
 DEFAULT_DOWNSAMPLE_PCT = 10
 # change to hardcoded default of 100 Hz
 DEFAULT_HZ = 100
-MAX_SMOOTH_WINDOW = 100
+MAX_SMOOTH_WINDOW = 10000
 DEFAULT_SMOOTH_WINDOW = 10
 DEFAULT_EXPORT_FOLDER = "_fpExplorerAnalysis"
 ###############################
@@ -1225,6 +1225,7 @@ class PreviewContinuousWidget(QWidget):
         # options read from options section
         self.options = {"subject":self.preview_init_params[0][0]["subject_names"][0],
                         "subject_group_name":"",
+                        "custom_baseline":False,
                         "plot_raw":True,
                         "plot_downsampled":False,
                         "plot_normalized":False}
@@ -1252,8 +1253,12 @@ class PreviewContinuousWidget(QWidget):
         # first element of that list is beginning and end seconds to trim
         # second element is trimmed data dict ts:timestamps, signal:data,control:data
         self.trimmed_raw_data_dict = {}
+        # store separately but in a simillar way data for baseline
+        self.trimmed_baseline_data_dict = {}
         # store downsampled data key (subject): dict("ts","signal","control")
         self.downsampled_dict = {}
+        # store downsampled baseline data key (subject): dict("ts","signal","control")
+        self.downsampled_baseline_dict = {}
         # store normalized data key (subject): dict("ts","normalized signal")
         self.normalized_dict = {}
         self.export_window = None
@@ -1273,6 +1278,8 @@ class PreviewContinuousWidget(QWidget):
         self.recent_peak_values = []
         # if user wanted to run spikes on batch
         self.batch_peaks = False
+        # block windows for spikes
+        self.previous_spikes_blocks = [("",""),("",""),("","")]
         
         self.disable_buttons_signal.connect(self.disable_buttons)
         self.enable_buttons_signal.connect(self.enable_buttons)
@@ -1320,11 +1327,32 @@ class PreviewContinuousWidget(QWidget):
         self.last_raw_ts_text.setReadOnly(True)
         self.options_layout.addRow("Total seconds", self.last_raw_ts_text)
         self.trim_beginning_sec = QLineEdit("0")
+        self.trim_beginning_sec.setToolTip("How many seconds to exclude from the beginning")
         self.trim_beginning_sec.setValidator(QtGui.QIntValidator())
         self.trim_ending_sec = QLineEdit("0")
+        self.trim_ending_sec.setToolTip("How many seconds to exclude from the ending")
         self.trim_ending_sec.setValidator(QtGui.QIntValidator())
-        self.options_layout.addRow("Trim beginning (seconds)",self.trim_beginning_sec)
-        self.options_layout.addRow("Trim ending (seconds)",self.trim_ending_sec)
+        self.options_layout.addRow("Trim beginning (sec)",self.trim_beginning_sec)
+        self.options_layout.addRow("Trim ending (sec)",self.trim_ending_sec)
+        ############################################################################
+        # decide about the baseline for normalizing
+        self.baseline_select = QComboBox()
+        self.baseline_select.addItems(["Use the whole/trimmed trace", "Use custom time range"])
+        self.baseline_selection_label = QLabel("Baseline for normalization")
+        self.baseline_selection_label.setStyleSheet(self.bold_label_stylesheet)
+        self.options_layout.addRow(self.baseline_selection_label,self.baseline_select)
+        self.baseline_select.currentIndexChanged.connect(self.baseline_select_changed)
+        self.range_beginning_sec = QLineEdit("0")
+        self.range_beginning_sec.setValidator(QtGui.QIntValidator())
+        self.range_beginning_sec.setToolTip("From which second to start the baseline")
+        self.range_beginning_sec.setReadOnly(True)
+        self.range_ending_sec = QLineEdit(str(int(self.last_raw_ts)))
+        self.range_ending_sec.setValidator(QtGui.QIntValidator())
+        self.range_ending_sec.setToolTip("Until which second the baseline ends")
+        self.range_ending_sec.setReadOnly(True)
+        self.options_layout.addRow("Start baseline (sec)",self.range_beginning_sec)
+        self.options_layout.addRow("End baseline (sec)",self.range_ending_sec)
+        ##########################################################
         self.downsample_cb = QCheckBox("Downsample")
         self.perform_label = QLabel("Perform:")
         self.perform_label.setStyleSheet(self.bold_label_stylesheet)
@@ -1455,6 +1483,21 @@ class PreviewContinuousWidget(QWidget):
         self.previous_btn.setEnabled(True)
         self.parent_window.enable_all_buttons()
         QApplication.processEvents() 
+
+    def baseline_select_changed(self):
+        if self.baseline_select.currentText() == "Use the whole/trimmed trace":
+            self.range_beginning_sec.setReadOnly(True)
+            self.range_ending_sec.setReadOnly(True)
+            # # if possible, change to trimmed times
+            # if self.options["subject"] in self.downsampled_dict:
+            #     ts = self.downsampled_dict[self.options["subject"]]["ts"]
+            #     begin = int(ts[0]) # round down
+            #     end = int(self.last_raw_ts) 
+            #     self.range_beginning_sec.setText(str(begin))
+            #     self.range_ending_sec.setText(str(end))
+        if self.baseline_select.currentText() == "Use custom time range":
+            self.range_beginning_sec.setReadOnly(False)
+            self.range_ending_sec.setReadOnly(False)
         
     # function to read options for plotting on the left side of the plot    
     def read_options(self):
@@ -1469,16 +1512,54 @@ class PreviewContinuousWidget(QWidget):
         self.options["subject_group_name"] = self.subject_group_name.text()
         # update value
         self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
-        # get trimming settings
+        # check trimming settings
         try:
             trim_beginning = int(self.trim_beginning_sec.text())
             trim_end = int(self.trim_ending_sec.text())
         except:
             trim_beginning = 0
-            trim_end = 0
+            trim_end = self.last_raw_ts
             self.show_info_dialog("Wrong trimming values.\nMake sure you entered valid integers")
             self.trim_beginning_sec.setText("0")
             self.trim_ending_sec.setText("0")
+        # check trimming for baseline settings
+        if self.baseline_select.currentText() == "Use the whole/trimmed trace": # proceed as normal (trimmed trace will be used for normalizing)
+            self.options["custom_baseline"] = False
+        else:
+            self.options["custom_baseline"] = True
+            try:
+                trim_range_beginning = int(self.range_beginning_sec.text())
+                trim_range_end = int(self.range_ending_sec.text())
+                if trim_range_beginning > trim_range_end:
+                    trim_range_beginning = trim_beginning
+                    trim_range_end = int(self.last_raw_ts)
+                    self.range_beginning_sec.setText(str(trim_range_beginning))
+                    self.range_ending_sec.setText(str(trim_range_end))
+                    self.options["custom_baseline"] = False
+                    self.baseline_select.setCurrentText("Use the whole/trimmed trace")
+                    self.show_info_dialog("Wrong custom baseline values.\nMake sure the beginning is before the ending.")
+                ###############################################
+                # check if it is within trimmed data
+                last_sec_of_trimmed_data = int(self.last_raw_ts-trim_end)
+                last_second_of_baseline_range = int(self.last_raw_ts-(self.last_raw_ts-trim_range_end))
+                if trim_range_beginning < trim_beginning or last_sec_of_trimmed_data < last_second_of_baseline_range:
+                    trim_range_beginning = trim_beginning
+                    trim_range_end = last_sec_of_trimmed_data
+                    self.range_beginning_sec.setText(str(trim_range_beginning))
+                    self.range_ending_sec.setText(str(trim_range_end))
+                    self.options["custom_baseline"] = False
+                    self.baseline_select.setCurrentText("Use the whole/trimmed trace")
+                    self.show_info_dialog("Wrong custom baseline range values.\nMake sure the range is within the trimmed data.")
+                #######################################################
+            except:
+                trim_range_beginning = trim_beginning
+                trim_range_end = trim_end
+                self.options["custom_baseline"] = False
+                self.baseline_select.setCurrentText("Use the whole/trimmed trace")
+                self.range_beginning_sec.setText(str(trim_range_beginning))
+                self.range_ending_sec.setText(str(trim_range_end))
+                self.show_info_dialog("Wrong baseline values.\nMake sure you entered valid integers.")
+        #############################################################################
         # if it was not trimmed yet, add to dictionary
         if self.options["subject"] not in self.trimmed_raw_data_dict:
             # key is the subject name, value is a list
@@ -1501,6 +1582,33 @@ class PreviewContinuousWidget(QWidget):
                                                                                                                       trim_beginning,
                                                                                                                       trim_end
                                                                                                                       )]
+        #############################################################################
+        # if baseline was not trimmed yet, add to dictionary
+        if self.options["custom_baseline"] == True:
+            if self.options["subject"] not in self.trimmed_baseline_data_dict:
+                # key is the subject name, value is a list
+                # first element of that list is beginning and end seconds of the range
+                # second element is trimmed data dict ts:timestamps, signal:data,control:data
+                self.trimmed_baseline_data_dict[self.options["subject"]] = [(trim_range_beginning,trim_range_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                                                                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                                                                        self.preview_init_params[0][0]["control_name"],
+                                                                                                                        trim_range_beginning,
+                                                                                                                        self.last_raw_ts-trim_range_end
+                                                                                                                        )]
+            else:   # if already in trimmed_baseline_data_dict, check previous trimming settings
+                trimmed = self.trimmed_baseline_data_dict[self.options["subject"]]
+                begin,end = trimmed[0]
+                if trim_range_beginning != begin or trim_range_end != end:
+                    # if new trimming params, replace the lists in dict
+                    self.trimmed_baseline_data_dict[self.options["subject"]] = [(trim_range_beginning,trim_range_end),fpExplorer_functions.trim_raw_data(self.raw_data_dict[self.options["subject"]],
+                                                                                                                        self.preview_init_params[0][0]["signal_name"],
+                                                                                                                        self.preview_init_params[0][0]["control_name"],
+                                                                                                                        trim_range_beginning,
+                                                                                                                        self.last_raw_ts-trim_range_end
+                                                                                                                        )]
+        else: # if user did not chose custom baseline time range, use trimmed trace
+            self.trimmed_baseline_data_dict[self.options["subject"]] = self.trimmed_raw_data_dict[self.options["subject"]]
+        ############################################################################################################################################################################
         if len(self.trimmed_raw_data_dict[self.options["subject"]][1]["ts"]) == 0:
             self.show_info_dialog("No data left after trimming.\nTry to trim with different values.")
             return False
@@ -1518,10 +1626,15 @@ class PreviewContinuousWidget(QWidget):
             self.last_raw_ts_text.setText(str(last_ts))
             
             # if downsample was selected
-            if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True:
-                # add to downdampled dict
+            if self.downsample_cb.isChecked() or self.downsampled_export == True or self.save_plots == True or self.options["custom_baseline"] == True:
+                # add to downsampled dict
                 self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                             self.settings_dict[0]["downsample"])
+            ##################################################
+                if self.options["custom_baseline"] == True:
+                    self.downsampled_baseline_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_baseline_data_dict[self.options["subject"]][1],
+                                            self.settings_dict[0]["downsample"])
+            ##################################################
             # if normalize was selected
             if self.normalize_cb.isChecked() or self.normalized_export == True:
                 # always downsample first before normalizing
@@ -1529,20 +1642,36 @@ class PreviewContinuousWidget(QWidget):
                 self.downsampled_dict[self.options["subject"]] = fpExplorer_functions.downsample(self.trimmed_raw_data_dict[self.options["subject"]][1],
                                                                                         self.settings_dict[0]["downsample"])
                 # check settings for method to normalize
-                if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                   
-                    # normalize from downsampled
-                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(
-                                                                                        self.downsampled_dict[self.options["subject"]],
-                                                                                        self.settings_dict[0]["show_norm_as"],
-                                                                                        self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_window"])
-                if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":                
-                    # normalize from downsampled
-                    self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(
-                                                                                        self.downsampled_dict[self.options["subject"]],
-                                                                                        self.settings_dict[0]["show_norm_as"],
-                                                                                        self.settings_dict[0]["filter"],
-                                                                                        self.settings_dict[0]["filter_window"])
+                if self.settings_dict[0]["normalization"] == "Modified Polynomial Fitting":                  
+                    if self.options["custom_baseline"] == True:
+                        self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff_baseline(
+                                                                                            self.downsampled_dict[self.options["subject"]],
+                                                                                            self.downsampled_baseline_dict[self.options["subject"]],
+                                                                                            self.settings_dict[0]["show_norm_as"],
+                                                                                            self.settings_dict[0]["filter"],
+                                                                                            self.settings_dict[0]["filter_window"])
+                    else: # whole trace used as baseline
+                        # normalize from downsampled
+                        self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_dff(
+                                                                                            self.downsampled_dict[self.options["subject"]],
+                                                                                            self.settings_dict[0]["show_norm_as"],
+                                                                                            self.settings_dict[0]["filter"],
+                                                                                            self.settings_dict[0]["filter_window"])
+                if self.settings_dict[0]["normalization"] == "Standard Polynomial Fitting":   
+                    if self.options["custom_baseline"] == True:
+                        self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat_custom_baseline(
+                                                                                            self.downsampled_dict[self.options["subject"]],
+                                                                                            self.downsampled_baseline_dict[self.options["subject"]],
+                                                                                            self.settings_dict[0]["show_norm_as"],
+                                                                                            self.settings_dict[0]["filter"],
+                                                                                            self.settings_dict[0]["filter_window"])  
+                    else:   # whole trace used as baseline     
+                        # normalize from downsampled
+                        self.normalized_dict[self.options["subject"]] = fpExplorer_functions.normalize_pMat(
+                                                                                            self.downsampled_dict[self.options["subject"]],
+                                                                                            self.settings_dict[0]["show_norm_as"],
+                                                                                            self.settings_dict[0]["filter"],
+                                                                                            self.settings_dict[0]["filter_window"])
             # check what to show on the plot
             self.options["plot_separate"] = True if self.separate_signal_contol_cb.isChecked() else False 
             self.options["plot_downsampled"] = True if self.downsampled_plot_cb.isChecked() else False
@@ -1694,14 +1823,25 @@ class PreviewContinuousWidget(QWidget):
         self.disable_buttons_signal.emit()
         if self.normalize_cb.isChecked():
             if self.read_options() == True:
-                slope_intercept_dict = fpExplorer_functions.show_polynomial_fitting(self.canvas,
-                                                self.settings_dict[0], 
-                                                self.downsampled_dict[self.options["subject"]],
-                                                self.preview_init_params[0][0]["signal_name"],
-                                                self.preview_init_params[0][0]["control_name"],
-                                                self.options["subject"],
-                                                False,
-                                                "")
+                if self.options["custom_baseline"] == True:
+                    slope_intercept_dict = fpExplorer_functions.show_polynomial_fitting_custom_baseline(self.canvas,
+                                                    self.settings_dict[0], 
+                                                    self.downsampled_dict[self.options["subject"]],
+                                                    self.downsampled_baseline_dict[self.options["subject"]],
+                                                    self.preview_init_params[0][0]["signal_name"],
+                                                    self.preview_init_params[0][0]["control_name"],
+                                                    self.options["subject"],
+                                                    False,
+                                                    "")
+                else: # whole/trimmed trace as a baseline
+                    slope_intercept_dict = fpExplorer_functions.show_polynomial_fitting(self.canvas,
+                                                    self.settings_dict[0], 
+                                                    self.downsampled_dict[self.options["subject"]],
+                                                    self.preview_init_params[0][0]["signal_name"],
+                                                    self.preview_init_params[0][0]["control_name"],
+                                                    self.options["subject"],
+                                                    False,
+                                                    "")
                 # show the equation of fitted lines
                 signal_slope_intercept = slope_intercept_dict["signal_slope_intercept"]
                 control_slope_intercept = slope_intercept_dict["control_slope_intercept"]
@@ -1720,7 +1860,8 @@ class PreviewContinuousWidget(QWidget):
                                                       self.options["subject"],
                                                       self.recent_peak_values, 
                                                       (self.export_path,self.export_begining),
-                                                      self.batch_peaks)
+                                                      self.batch_peaks,
+                                                      self.previous_spikes_blocks)
         self.peak_options_window.got_peak_options_sig.connect(self.peak_options_received)
         self.peak_options_window.show()
       
@@ -1728,50 +1869,81 @@ class PreviewContinuousWidget(QWidget):
     def peak_options_received(self,peak_options):
         # save peak parameters 
         self.recent_peak_values = peak_options[0]
-        export_path,file_begin = peak_options[1]
+        self.blocks_windows_values = peak_options[1] # values of time windows to separately count+show spike count
+        self.previous_spikes_blocks = self.blocks_windows_values
+        export_path,file_begin = peak_options[2]
         if self.batch_peaks == True:
-            if "spikes" in self.parent_window.batch_export_settings_dict:
-                if self.parent_window.batch_export_settings_dict["spikes"] == True:
-                    if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
-                        for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
-                            if self.raw_data_dict[subject] != None:
-                                # create subfolder with subject name
-                                subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                                if not os.path.exists(subject_subfolder):
-                                    try:
-                                        os.mkdir(subject_subfolder)
+            # verify if spikes windows are within trimmed data
+            # unpack window values
+            [(block1_from,block1_till),(block2_from,block2_till),(block3_from,block3_till)] = self.blocks_windows_values
+            all_blocks = [block1_from,block1_till,block2_from,block2_till,block3_from,block3_till]
+            # check if all values are within the trimmed range
+            self.blocks_in_range = True
+            # get times from trimmed, normalized data
+            for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+                ts = self.normalized_dict[subject]["ts"]
+                total_seconds = ts[-1]-ts[0]
+                ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+                for el in all_blocks:
+                    if len(str(el)) > 0 and el != "None":
+                        if el > ts_reset[-1] or el < 0:
+                            self.blocks_in_range = False
+            if self.blocks_in_range == True:
+                if "spikes" in self.parent_window.batch_export_settings_dict:
+                    if self.parent_window.batch_export_settings_dict["spikes"] == True:
+                        if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
+                            for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+                                if self.raw_data_dict[subject] != None:
+                                    # create subfolder with subject name
+                                    subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                                    if not os.path.exists(subject_subfolder):
+                                        try:
+                                            os.mkdir(subject_subfolder)
+                                            try:
+                                                fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                                                    self.recent_peak_values,
+                                                                    self.blocks_windows_values,
+                                                                    self.spikes_export,
+                                                                    self.save_plots,
+                                                                    self.group_names_dict[subject],
+                                                                    self.settings_dict,
+                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                            except:
+                                                self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                                        except:
+                                            self.show_info_dialog("Problem creating subfolder")
+                                    else: # if subfolder already exists
                                         try:
                                             fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
-                                                                self.recent_peak_values,
-                                                                self.spikes_export,
-                                                                self.save_plots,
-                                                                self.group_names_dict[subject],
-                                                                self.settings_dict,
-                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                                                    self.recent_peak_values,
+                                                                    self.blocks_windows_values,
+                                                                    self.spikes_export,
+                                                                    self.save_plots,
+                                                                    self.group_names_dict[subject],
+                                                                    self.settings_dict,
+                                                                    (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
                                         except:
                                             self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                                    except:
-                                        self.show_info_dialog("Problem creating subfolder")
-                                else: # if subfolder already exists
-                                    try:
-                                        fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
-                                                                self.recent_peak_values,
-                                                                self.spikes_export,
-                                                                self.save_plots,
-                                                                self.group_names_dict[subject],
-                                                                self.settings_dict,
-                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                    except:
-                                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                    if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
-                        pass # single subjects only
+                        if self.parent_window.batch_export_settings_dict["export_group_data"] == True:
+                            pass # single subjects only
+                    # close popup window
+                    self.peak_options_window.close()
+                    self.reset_export_settings()
+                    # reset batch peaks when done
+                    self.batch_peaks = False
+                    if self.parent_window.run_on_batch_window != None:
+                        self.parent_window.run_on_batch_window.close()
+            else: # if spikes windows not within the range
+                self.show_info_dialog("One or more time windows for spikes might be out of data range.")
                 # close popup window
                 self.peak_options_window.close()
-                self.reset_export_settings()
                 # reset batch peaks when done
                 self.batch_peaks = False
-                if self.parent_window.run_on_batch_window != None:
-                    self.parent_window.run_on_batch_window.close()
+                self.reset_export_settings()
+                self.enable_buttons_signal.emit()
+                if self.export_window != None:
+                    self.close_export_window_signal.emit()
+                
         else: # if it is not for batch analysis
             # if user entered path or if path was already there, update
             if len(export_path) > 0:
@@ -1837,26 +2009,47 @@ class PreviewContinuousWidget(QWidget):
                                                                                         self.settings_dict[0]["show_norm_as"],
                                                                                         self.settings_dict[0]["filter"],
                                                                                         self.settings_dict[0]["filter_window"])
-    
-                
-            # close popup window
-            self.peak_options_window.close()
-            try:
-                fpExplorer_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
-                                     self.recent_peak_values,
-                                     self.spikes_export,
-                                     self.save_plots,
-                                     self.group_names_dict[self.options["subject"]],
-                                     self.settings_dict,
-                                     (self.export_path,self.export_begining))
-            except:
-                self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-            self.reset_export_settings()
-            self.enable_buttons_signal.emit()
-            if self.export_window != None:
-                self.close_export_window_signal.emit()
-          
-        
+            # verify if spikes windows are within trimmed data
+            # unpack window values
+            [(block1_from,block1_till),(block2_from,block2_till),(block3_from,block3_till)] = self.blocks_windows_values
+            # get times from trimmed, normalized data
+            ts = self.normalized_dict[self.options["subject"]]["ts"]
+            total_seconds = ts[-1]-ts[0]
+            ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+            # check if all values are within the trimmed range
+            self.blocks_in_range = True
+            all_blocks = [block1_from,block1_till,block2_from,block2_till,block3_from,block3_till]
+            for el in all_blocks:
+                if len(str(el)) > 0 and el != "None":
+                    if el > ts_reset[-1] or el < 0:
+                        self.blocks_in_range = False
+            if self.blocks_in_range:               
+                try:
+                    fpExplorer_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
+                                        self.recent_peak_values,
+                                        self.blocks_windows_values,
+                                        self.spikes_export,
+                                        self.save_plots,
+                                        self.group_names_dict[self.options["subject"]],
+                                        self.settings_dict,
+                                        (self.export_path,self.export_begining))
+                except:
+                    self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                # close popup window
+                self.peak_options_window.close()
+                self.reset_export_settings()
+                self.enable_buttons_signal.emit()
+                if self.export_window != None:
+                    self.close_export_window_signal.emit()
+            else:
+                self.show_info_dialog("One or more time windows for spikes might be out of data range.")
+                # close popup window
+                self.peak_options_window.close()
+                self.reset_export_settings()
+                self.enable_buttons_signal.emit()
+                if self.export_window != None:
+                    self.close_export_window_signal.emit()
+                self.peaks_btn_clicked()
 
         
     def export_data_btn_clicked(self):
@@ -2283,6 +2476,7 @@ class PreviewEventBasedWidget(QWidget):
         self.export_window = None
         self.peak_options_window = None
         self.recent_peak_values = []
+        self.previous_spikes_blocks = [("",""),("",""),("","")]
         # # dictionary of complete (all trials) data around event
         # # key is subject name and value is a dictionary of key: event value: trials
         # self.filtered_data = {}
@@ -4414,7 +4608,8 @@ class PreviewEventBasedWidget(QWidget):
                                                       self.options["subject"],
                                                       self.recent_peak_values,
                                                       (self.export_path,self.export_begining),
-                                                      self.batch_peaks)
+                                                      self.batch_peaks,
+                                                      self.previous_spikes_blocks)
         self.peak_options_window.got_peak_options_sig.connect(self.peak_options_received)
         self.peak_options_window.peak_window_closed_sig.connect(self.reset_open_later)
         self.peak_options_window.show()
@@ -4431,49 +4626,83 @@ class PreviewEventBasedWidget(QWidget):
         # update value
         self.group_names_dict[self.options["subject"]] = self.options["subject_group_name"]
         self.recent_peak_values = peak_options[0]
-        export_path,file_begin = peak_options[1]
+        self.blocks_windows_values = peak_options[1] # values of time windows to separately count+show spike count
+        self.previous_spikes_blocks = self.blocks_windows_values
+        export_path,file_begin = peak_options[2]
         if self.batch_peaks == True:
-            if "spikes" in self.parent_window.batch_export_settings_dict:
-                if self.parent_window.batch_export_settings_dict["spikes"] == True:
-                    if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
-                        for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
-                            if self.raw_data_dict[subject] != None:
-                                # create subfolder with subject name
-                                subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
-                                if not os.path.exists(subject_subfolder):
-                                    try:
-                                        os.mkdir(subject_subfolder)
-                                    except:
-                                        self.show_info_dialog("Problem creating subfolders")
-                                        # save under main folder
-                                        subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
-                                if self.options["event"] == "---":
-                                    try:
-                                        fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
-                                                            self.recent_peak_values,
-                                                            self.spikes_export,
-                                                            self.save_plots,
-                                                            self.group_names_dict[subject],
-                                                            self.settings_dict,
-                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                    except:
-                                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-                                else:
-                                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                                    try:
-                                        fpExplorer_functions.plot_peaks_with_event(self.canvas,subject,self.normalized_dict[subject],
-                                                                        self.recent_peak_values,
-                                                                        custom_event_name,
-                                                                        custom_event_name2,
-                                                                        self.event_data,
-                                                                        self.spikes_export,
-                                                                        self.save_plots,
-                                                                        self.group_names_dict[subject],
-                                                                        self.settings_dict,
-                                                                        (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
-                                    except:
-                                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+            # verify if spikes windows are within trimmed data
+            # unpack window values
+            [(block1_from,block1_till),(block2_from,block2_till),(block3_from,block3_till)] = self.blocks_windows_values
+            all_blocks = [block1_from,block1_till,block2_from,block2_till,block3_from,block3_till]
+            # check if all values are within the trimmed range
+            self.blocks_in_range = True
+            # get times from trimmed, normalized data
+            for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+                ts = self.normalized_dict[subject]["ts"]
+                total_seconds = ts[-1]-ts[0]
+                ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+                for el in all_blocks:
+                    if len(str(el)) > 0 and el != "None":
+                        if el > ts_reset[-1] or el < 0:
+                            self.blocks_in_range = False
+            if self.blocks_in_range == True:
+                if "spikes" in self.parent_window.batch_export_settings_dict:
+                    if self.parent_window.batch_export_settings_dict["spikes"] == True:
+                        if self.parent_window.batch_export_settings_dict["export_for_single_subjects"] == True:
+                            for subject in self.parent_window.batch_export_settings_dict["batch_subjects"]:
+                                if self.raw_data_dict[subject] != None:
+                                    # create subfolder with subject name
+                                    subject_subfolder = os.path.join(self.parent_window.batch_export_settings_dict["dump_path"],subject)
+                                    if not os.path.exists(subject_subfolder):
+                                        try:
+                                            os.mkdir(subject_subfolder)
+                                        except:
+                                            self.show_info_dialog("Problem creating subfolders")
+                                            # save under main folder
+                                            subject_subfolder = self.parent_window.batch_export_settings_dict["dump_path"]
+
+                                    if self.options["event"] == "---":
+                                        try:
+                                            fpExplorer_functions.plot_peaks(self.canvas,subject,self.normalized_dict[subject],
+                                                                self.recent_peak_values,
+                                                                self.blocks_windows_values,
+                                                                self.spikes_export,
+                                                                self.save_plots,
+                                                                self.group_names_dict[subject],
+                                                                self.settings_dict,
+                                                                (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                        except:
+                                            self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                                    else:
+                                        custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                                        custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                                        try:
+                                            fpExplorer_functions.plot_peaks_with_event(self.canvas,subject,self.normalized_dict[subject],
+                                                                            self.recent_peak_values,
+                                                                            self.blocks_windows_values,
+                                                                            custom_event_name,
+                                                                            custom_event_name2,
+                                                                            self.event_data,
+                                                                            self.spikes_export,
+                                                                            self.save_plots,
+                                                                            self.group_names_dict[subject],
+                                                                            self.settings_dict,
+                                                                            (subject_subfolder,self.parent_window.batch_export_settings_dict["file_begin"]))
+                                        except:
+                                            self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                    # close popup window
+                    self.peak_options_window.close()
+                    self.reset_export_settings()
+                    # reset batch peaks when done
+                    self.batch_peaks = False
+                    # reset open spikes later
+                    if self.open_spikes_later == True:
+                        self.open_spikes_later = False
+                    # close run on batch window if still open
+                    if self.parent_window.run_on_batch_window != None:
+                        self.parent_window.run_on_batch_window.close()
+            else: # if spikes blocks not in range
+                self.show_info_dialog("One or more time windows for spikes might be out of data range.")
                 # close popup window
                 self.peak_options_window.close()
                 self.reset_export_settings()
@@ -4575,39 +4804,65 @@ class PreviewEventBasedWidget(QWidget):
             # before you proceed with ploting check correct order of events  if only one event is selected
             if self.options["event"] == "---" and self.options["event2"] != "---":
                 self.show_info_dialog(wrong_event_order_info)
-              
-            if self.options["event"] == "---":
-                try:
-                    fpExplorer_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
-                                         self.recent_peak_values,
-                                         self.spikes_export,
-                                         self.save_plots,
-                                         self.group_names_dict[self.options["subject"]],
-                                         self.settings_dict,
-                                         (self.export_path,self.export_begining))
-                except:
-                    self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+
+            # verify if spikes windows are within trimmed data
+            # unpack window values
+            [(block1_from,block1_till),(block2_from,block2_till),(block3_from,block3_till)] = self.blocks_windows_values
+            # get times from trimmed, normalized data
+            ts = self.normalized_dict[self.options["subject"]]["ts"]
+            total_seconds = ts[-1]-ts[0]
+            ts_reset = [i*total_seconds/len(ts) for i in range(len(ts))]
+            # check if all values are within the trimmed range
+            self.blocks_in_range = True
+            all_blocks = [block1_from,block1_till,block2_from,block2_till,block3_from,block3_till]
+            for el in all_blocks:
+                if len(str(el)) > 0 and el != "None":
+                    if el > ts_reset[-1] or el < 0:
+                        self.blocks_in_range = False
+            if self.blocks_in_range:
+                if self.options["event"] == "---":
+                    try:
+                        fpExplorer_functions.plot_peaks(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
+                                            self.recent_peak_values,
+                                            self.blocks_windows_values,
+                                            self.spikes_export,
+                                            self.save_plots,
+                                            self.group_names_dict[self.options["subject"]],
+                                            self.settings_dict,
+                                            (self.export_path,self.export_begining))
+                    except:
+                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                else:
+                    custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
+                    custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
+                    try:
+                        fpExplorer_functions.plot_peaks_with_event(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
+                                                        self.recent_peak_values,
+                                                        self.blocks_windows_values,
+                                                        custom_event_name,
+                                                        custom_event_name2,
+                                                        self.event_data,
+                                                        self.spikes_export,
+                                                        self.save_plots,
+                                                        self.group_names_dict[self.options["subject"]],
+                                                        self.settings_dict,
+                                                        (self.export_path,self.export_begining))
+                    except:
+                        self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
+                # close popup window
+                self.peak_options_window.close()
+                self.reset_export_settings()
+                if self.export_window != None:
+                    self.export_window.close()
             else:
-                custom_event_name = self.options["event"] if len(self.options["event_name"])==0 else self.options["event_name"]
-                custom_event_name2 = self.options["event2"] if len(self.options["event2_name"])==0 else self.options["event2_name"]
-                try:
-                    fpExplorer_functions.plot_peaks_with_event(self.canvas,self.options["subject"],self.normalized_dict[self.options["subject"]],
-                                                    self.recent_peak_values,
-                                                    custom_event_name,
-                                                    custom_event_name2,
-                                                    self.event_data,
-                                                    self.spikes_export,
-                                                    self.save_plots,
-                                                    self.group_names_dict[self.options["subject"]],
-                                                    self.settings_dict,
-                                                    (self.export_path,self.export_begining))
-                except:
-                    self.show_info_dialog("Could not calculate spikes.\nTry with different parameters.")
-            # close popup window
-            self.peak_options_window.close()
-            self.reset_export_settings()
-            if self.export_window != None:
-                self.export_window.close()
+                self.show_info_dialog("One or more time windows for spikes might be out of data range.")
+                # close popup window
+                self.peak_options_window.close()
+                self.reset_export_settings()
+                self.enable_buttons_signal.emit()
+                if self.export_window != None:
+                    self.close_export_window_signal.emit()
+                self.peaks_btn_clicked()
                 
     @pyqtSlot()     
     def start_batch_analysis(self):
@@ -4820,15 +5075,16 @@ class AdvancedPeakSettingsWindow(QMainWindow):
     got_advanced_options_sig = pyqtSignal(list)
     got_advanced_options4export_sig = pyqtSignal(list)
     disable_btn_sig = pyqtSignal()
-    def __init__(self,parent_window,recent_peak_values,export_loc,batch):
+    def __init__(self,parent_window,recent_peak_values,blocks,export_loc,batch):
         super(AdvancedPeakSettingsWindow, self).__init__()
-        self.setWindowTitle("Advanced Peak Settings")
+        self.setWindowTitle("Advanced Spike Settings")
         self.setWindowIcon(QtGui.QIcon(ICO))
         self.resize(300,300)
         self.parent_window = parent_window
         # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
         # self.relheight,self.plateau]
         self.recent_vals = recent_peak_values
+        self.blocks = blocks
         self.export_path,self.export_file_begin = export_loc
         self.batch = batch
         
@@ -4919,7 +5175,7 @@ class AdvancedPeakSettingsWindow(QMainWindow):
 #                                        self.relheight,self.plateau])
         # last element for export
         self.got_advanced_options_sig.emit([[self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
-                                        self.relheight,self.plateau, False], (self.export_path,self.export_file_begin)])
+                                        self.relheight,self.plateau, False], self.blocks,(self.export_path,self.export_file_begin)])
             
     def validate_and_export(self):
         self.disable_btn_sig.emit()
@@ -4937,7 +5193,7 @@ class AdvancedPeakSettingsWindow(QMainWindow):
 
         # last element for export
         self.got_advanced_options4export_sig.emit([[self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
-                                            self.relheight,self.plateau, True], (self.export_path,self.export_file_begin)])
+                                            self.relheight,self.plateau, True], self.blocks,(self.export_path,self.export_file_begin)])
             
     def validate_and_export_batch(self):
         self.disable_btn_sig.emit()
@@ -4954,7 +5210,7 @@ class AdvancedPeakSettingsWindow(QMainWindow):
         # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
         # self.relheight,self.plateau,export]
         self.options2send = [[self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
-                                            self.relheight,self.plateau, True], (self.export_path,self.export_file_begin)]
+                                            self.relheight,self.plateau, True], self.blocks, (self.export_path,self.export_file_begin)]
         self.got_advanced_options_sig.emit(self.options2send)
 
         
@@ -4985,9 +5241,9 @@ class PeakSettingsWindow(QMainWindow):
     got_peak_options_sig = pyqtSignal(list)
     disable_btns_sig = pyqtSignal()
     peak_window_closed_sig = pyqtSignal()
-    def __init__(self,parent_window,subject_name,recent_peak_values,export_loc,batch_peaks):
+    def __init__(self,parent_window,subject_name,recent_peak_values,export_loc,batch_peaks,previous_blocks):
         super(PeakSettingsWindow, self).__init__()
-        self.setWindowTitle("Find Peak Settings")
+        self.setWindowTitle("Find Spike Settings")
         self.setWindowIcon(QtGui.QIcon(ICO))
         self.resize(400,300)
         self.parent_window = parent_window
@@ -5000,6 +5256,14 @@ class PeakSettingsWindow(QMainWindow):
         self.export_path,self.export_file_begin = export_loc
         self.subject_name = subject_name
         self.batch = batch_peaks
+        [(self.block1_from,self.block1_till),(self.block2_from,self.block2_till),(self.block3_from,self.block3_till)] = previous_blocks
+        self.blocks_valid = False
+
+        self.validator = QtGui.QDoubleValidator()
+        self.validator.setLocale(QLocale(QLocale.English))  # Set the locale to English (or your desired locale)
+        self.validator.setNotation(QtGui.QDoubleValidator.StandardNotation)  # Allow standard decimal notation
+        self.validator.setDecimals(1)  # Set the number of decimal places to 1
+        
         
         # use docks from pyqtgraph
         self.area = DockArea()
@@ -5028,10 +5292,63 @@ class PeakSettingsWindow(QMainWindow):
         if len(self.recent_vals) > 0:
             self.distance_text.setText(str(self.recent_vals[2]))
         self.settings_layout.addRow("Distance (sec):",self.distance_text)
+        self.blocks_settings_layout = QVBoxLayout()
+        self.blocks1_settings_layout = QHBoxLayout()
+        self.blocks2_settings_layout = QHBoxLayout()
+        self.blocks3_settings_layout = QHBoxLayout()
+        self.blocks_label = QLabel("\nEnter up to three time windows to show separate spike count.\nOr leave empty if you want to count all:\n")
+        self.blocks_settings_layout.addWidget(self.blocks_label)
+        self.block1_from_label = QLabel("Window 1 from (sec):")
+        self.block1_from_text = QLineEdit("")
+        if len(str(self.block1_from)) > 0 and self.block1_from != "None":
+            self.block1_from_text.setText(str(self.block1_from))
+        self.block1_from_text.setValidator(self.validator)
+        self.block1_till_label = QLabel("Window 1 till (sec):")
+        self.block1_till_text = QLineEdit("")
+        if len(str(self.block1_till)) > 0 and self.block1_till != "None":
+            self.block1_till_text.setText(str(self.block1_till))
+        self.block1_till_text.setValidator(self.validator)
+        self.blocks1_settings_layout.addWidget(self.block1_from_label)
+        self.blocks1_settings_layout.addWidget(self.block1_from_text)
+        self.blocks1_settings_layout.addWidget(self.block1_till_label)
+        self.blocks1_settings_layout.addWidget(self.block1_till_text)
+        self.blocks_settings_layout.addLayout(self.blocks1_settings_layout)
+        self.block2_from_label = QLabel("Window 2 from (sec):")
+        self.block2_from_text = QLineEdit("")
+        if len(str(self.block2_from)) > 0 and self.block2_from != "None":
+            self.block2_from_text.setText(str(self.block2_from))
+        self.block2_from_text.setValidator(self.validator)
+        self.block2_till_label = QLabel("Window 2 till (sec):")
+        self.block2_till_text = QLineEdit("")
+        if len(str(self.block2_till)) > 0 and self.block2_till != "None":
+            self.block2_till_text.setText(str(self.block2_till))
+        self.block2_till_text.setValidator(self.validator)
+        self.blocks2_settings_layout.addWidget(self.block2_from_label)
+        self.blocks2_settings_layout.addWidget(self.block2_from_text)
+        self.blocks2_settings_layout.addWidget(self.block2_till_label)
+        self.blocks2_settings_layout.addWidget(self.block2_till_text)
+        self.blocks_settings_layout.addLayout(self.blocks2_settings_layout)
+        self.block3_from_label = QLabel("Window 3 from (sec):")
+        self.block3_from_text = QLineEdit("")
+        if len(str(self.block3_from)) > 0 and self.block3_from != "None":
+            self.block3_from_text.setText(str(self.block3_from))
+        self.block3_from_text.setValidator(self.validator)
+        self.block3_till_label = QLabel("Window 3 till (sec):")
+        self.block3_till_text = QLineEdit("")
+        if len(str(self.block3_till)) > 0 and self.block3_till != "None":
+            self.block3_till_text.setText(str(self.block3_till))
+        self.block3_till_text.setValidator(self.validator)
+        self.blocks3_settings_layout.addWidget(self.block3_from_label)
+        self.blocks3_settings_layout.addWidget(self.block3_from_text)
+        self.blocks3_settings_layout.addWidget(self.block3_till_label)
+        self.blocks3_settings_layout.addWidget(self.block3_till_text)
+        self.blocks_settings_layout.addLayout(self.blocks3_settings_layout)
         
         self.settings_main_layout.addLayout(self.settings_layout)
+        self.settings_main_layout.addLayout(self.blocks_settings_layout)
+
         self.save_settings_layout = QVBoxLayout()
-        self.save_settings_layout.setAlignment(Qt.AlignRight)
+        # self.save_settings_layout.setAlignment(Qt.AlignRight)
         self.save_settings_btn = QPushButton("Find")
         self.advance_settings_btn = QPushButton("Advanced Settings")
         self.save_settings_layout.addWidget(self.save_settings_btn)
@@ -5100,6 +5417,42 @@ class PeakSettingsWindow(QMainWindow):
         # read parent window first
         self.distance = self.distance_text.text()
         self.prominence = self.prominence_text.text()
+        self.block1_from = "None"
+        if len(self.block1_from_text.text()) > 0:
+            try:
+                self.block1_from = round(float(self.block1_from_text.text()),1)
+            except:
+                pass
+        self.block1_till = "None"
+        if len(self.block1_till_text.text()) > 0:
+            try:
+                self.block1_till = round(float(self.block1_till_text.text()),1)
+            except:
+                pass
+        self.block2_from = "None"
+        if len(self.block2_from_text.text()) > 0:
+            try:
+                self.block2_from = round(float(self.block2_from_text.text()),1)
+            except:
+                pass
+        self.block2_till = "None"
+        if len(self.block2_till_text.text()) > 0:
+            try:
+                self.block2_till = round(float(self.block2_till_text.text()),1)
+            except:
+                pass
+        self.block3_from = "None"
+        if len(self.block3_from_text.text()) > 0:
+            try:
+                self.block3_from = round(float(self.block3_from_text.text()),1)
+            except:
+                pass
+        self.block3_till = "None"
+        if len(self.block3_till_text.text()) > 0:
+            try:
+                self.block3_till = round(float(self.block3_till_text.text()),1)
+            except:
+                pass
         try:
             self.export_path = self.selected_folder_text.text()
             self.export_file_begin = self.suggested_file_beginning_text.text()
@@ -5111,54 +5464,132 @@ class PeakSettingsWindow(QMainWindow):
         else:
             self.recent_vals = ["None","None",self.distance,self.prominence,"None","None",
                                         "None","None", False]
-        self.advanced_window  = AdvancedPeakSettingsWindow(self,self.recent_vals,(self.export_path,self.export_file_begin),self.batch)
+        self.advanced_window  = AdvancedPeakSettingsWindow(self,self.recent_vals,[(self.block1_from,self.block1_till),(self.block2_from,self.block2_till),(self.block3_from,self.block3_till)],(self.export_path,self.export_file_begin),self.batch)
         self.advanced_window.got_advanced_options_sig.connect(self.advanced_options_received)
         self.advanced_window.got_advanced_options4export_sig.connect(self.advanced_options_received2export)
         self.advanced_window.show()
+
+    def check_spikes_windows(self):
+        self.block1_from = "None"
+        if len(self.block1_from_text.text()) > 0:
+            self.block1_from = round(float(self.block1_from_text.text()),1)
+        self.block1_till = "None"
+        if len(self.block1_till_text.text()) > 0:
+            self.block1_till = round(float(self.block1_till_text.text()),1)
+        self.block2_from = "None"
+        if len(self.block2_from_text.text()) > 0:
+            self.block2_from = round(float(self.block2_from_text.text()),1)
+        self.block2_till = "None"
+        if len(self.block2_till_text.text()) > 0:
+            self.block2_till = round(float(self.block2_till_text.text()),1)
+        self.block3_from = "None"
+        if len(self.block3_from_text.text()) > 0:
+            self.block3_from = round(float(self.block3_from_text.text()),1)
+        self.block3_till = "None"
+        if len(self.block3_till_text.text()) > 0:
+            self.block3_till = round(float(self.block3_till_text.text()),1)
+        # check if from is always before till
+        if self.block1_from != "None" and self.block1_till != "None":
+            if self.block1_from >= self.block1_till:
+                self.blocks_valid = False
+                return
+            else:
+                self.blocks_valid = True
+        if self.block2_from != "None" and self.block2_till != "None":
+            if self.block2_from >= self.block2_till:
+                self.blocks_valid = False
+                return
+            else:
+                self.blocks_valid = True
+        if self.block3_from != "None" and self.block3_till != "None":
+            if self.block3_from >= self.block3_till:
+                self.blocks_valid = False
+                return
+            else:
+                self.blocks_valid = True
+        # now check if ranges don't overlap
+        self.blocks_valid = self.check_time_windows_overlap([(self.block1_from,self.block1_till),(self.block2_from,self.block2_till),(self.block3_from,self.block3_till)])
+
+    def check_time_windows_overlap(self,windows):
+        # Helper function to check if two windows overlap
+        def are_windows_overlapping(window1, window2):
+            return (window1[0] < window2[1]) and (window1[1] > window2[0])
+
+        # Iterate over each pair of windows and check for overlaps
+        for i in range(len(windows)):
+            for j in range(i + 1, len(windows)):
+                window1 = windows[i]
+                window2 = windows[j]
+                # If any window is "None", it doesn't need to be checked
+                if "None" in window1 or "None" in window2:
+                    continue
+                # Check if the two windows overlap
+                if are_windows_overlapping(window1, window2):
+                    return False  # Overlap detected, return False
+
+        return True  # No overlaps found, return True
         
     def validate(self):
         self.disable_btns_sig.emit()
         QApplication.processEvents() 
         self.distance = self.distance_text.text()
         self.prominence = self.prominence_text.text()
+        self.check_spikes_windows()
 #        self.export_path = self.selected_folder_text.text()
 #        self.export_file_begin = self.suggested_file_beginning_text.text()
-        # send ordered list of parameters for scipy.find_peaks, and last element for export
-        # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
-        # self.relheight,self.plateau]
-        self.options2send = [["None","None",self.distance,self.prominence,"None","None",
-                                        "None","None", False], (self.export_path,self.export_file_begin)]
-        self.got_peak_options_sig.emit(self.options2send)
+        if self.blocks_valid:
+            # send ordered list of parameters for scipy.find_peaks, and last element for export
+            # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
+            # self.relheight,self.plateau]
+            self.options2send = [["None","None",self.distance,self.prominence,"None","None",
+                                            "None","None", False], [(self.block1_from,self.block1_till),(self.block2_from,self.block2_till),(self.block3_from,self.block3_till)], 
+                                            (self.export_path,self.export_file_begin)]
+            self.got_peak_options_sig.emit(self.options2send)
+        else:
+            self.show_info_dialog("Please double check your time windows and make sure they don't overlap.")
+            self.enable_buttons()
         
     def validate_and_export(self):
         self.disable_btns_sig.emit()
         QApplication.processEvents() 
         self.distance = self.distance_text.text()
         self.prominence = self.prominence_text.text()
-
-        self.export_path = self.selected_folder_text.text()
-        self.export_file_begin = self.suggested_file_beginning_text.text()
-        if len(self.export_path) > 0:
-            # send ordered list of parameters for scipy.find_peaks, and last element for export
-            # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
-            # self.relheight,self.plateau]
-            self.options2send = [["None","None",self.distance,self.prominence,"None","None",
-                                            "None","None", True], (self.export_path,self.export_file_begin)]
-            self.got_peak_options_sig.emit(self.options2send)
+        self.check_spikes_windows()
+        if self.blocks_valid:
+            self.export_path = self.selected_folder_text.text()
+            self.export_file_begin = self.suggested_file_beginning_text.text()
+            if len(self.export_path) > 0:
+                # send ordered list of parameters for scipy.find_peaks, and last element for export
+                # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
+                # self.relheight,self.plateau]
+                self.options2send = [["None","None",self.distance,self.prominence,"None","None",
+                                                "None","None", True], 
+                                                [(self.block1_from,self.block1_till),(self.block2_from,self.block2_till),(self.block3_from,self.block3_till)],
+                                                (self.export_path,self.export_file_begin)]
+                self.got_peak_options_sig.emit(self.options2send)
+            else:
+                self.show_info_dialog("Please enter valid export path")
         else:
-            self.show_info_dialog("Please enter valid export path")
+            self.show_info_dialog("Please double check your time windows and make sure they don't overlap.")
+            self.enable_buttons()
             
     def validate_and_export_batch(self):
         self.disable_btns_sig.emit()
         QApplication.processEvents() 
         self.distance = self.distance_text.text()
         self.prominence = self.prominence_text.text()
-        # send ordered list of parameters for scipy.find_peaks, and last element for export
-        # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
-        # self.relheight,self.plateau]
-        self.options2send = [["None","None",self.distance,self.prominence,"None","None",
-                                        "None","None", True], (self.export_path,self.export_file_begin)]
-        self.got_peak_options_sig.emit(self.options2send)
+        self.check_spikes_windows()
+        if self.blocks_valid:
+            # send ordered list of parameters for scipy.find_peaks, and last element for export
+            # [self.height,self.threshold,self.distance,self.prominence,self.width,self.wlen,
+            # self.relheight,self.plateau]
+            self.options2send = [["None","None",self.distance,self.prominence,"None","None",
+                                            "None","None", True], [(self.block1_from,self.block1_till),(self.block2_from,self.block2_till),(self.block3_from,self.block3_till)],
+                                            (self.export_path,self.export_file_begin)]
+            self.got_peak_options_sig.emit(self.options2send)
+        else:
+            self.show_info_dialog("Please double check your time windows and make sure they don't overlap.")
+            self.enable_buttons()
         
     def select_folder_btn_clicked(self):
         # set text field to the value of selected path
