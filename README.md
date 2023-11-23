@@ -57,7 +57,7 @@ You can find more information about managing conda environments [here](https://c
 
 ## Limitations
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
-- The application was developed and extensively tested on Windows 10 platform. We have only minimally tested running it on MacOS and Linux systems.
+- The application was developed and extensively tested on Windows 10 platform. It also works on Windows 11. We have only minimally tested running it on MacOS and Linux systems.
 - Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software (Subject-> Experiment or Experiment->Structure)
 - Currently supported events are only the ones that don't start with Cam or Tick (e.g., "PrtA 253", "Note 1")
 ## Contributors
