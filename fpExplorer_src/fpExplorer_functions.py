@@ -163,13 +163,16 @@ def get_event_on_off(raw_data, event):
             evt_on_off= tdt.epoc_filter(raw_data, event_name_split[0], values=[int(event_name_split[1])])
             on_off = evt_on_off.time_ranges
         except: 
-            print("Problem getting on off event data by tdt.epoc_filter")
-            print(event_name_split[0]) # some names end with _ and that gets replaced in data tank
-            if event_name_split[0][-1] == "_":
-                adjusted_name = event_name_split[0][:-1]+"/"
-                print(adjusted_name)
-                evt_on_off= tdt.epoc_filter(raw_data, adjusted_name, values=[int(event_name_split[1])])
-                on_off = evt_on_off.time_ranges
+            try:
+                print("Problem getting on off event data by tdt.epoc_filter")
+                print(event_name_split[0]) # some names end with _ and that gets replaced in data tank
+                if event_name_split[0][-1] == "_":
+                    adjusted_name = event_name_split[0][:-1]+"/"
+                    print(adjusted_name)
+                    evt_on_off= tdt.epoc_filter(raw_data, adjusted_name, values=[int(event_name_split[1])])
+                    on_off = evt_on_off.time_ranges
+            except:
+                print("After readjusting event name still problem getting on off event data by tdt.epoc_filter")
     else: # special case for Cam1
         data = raw_data.epocs[event]
         onsets = []
@@ -1155,6 +1158,7 @@ def plot_raw(canvas,subject,raw_data,signal_name,control_name,export,save_plots,
     ts = create_timestamps(raw_data,signal_name,GCaMP_data)
     
     # plot
+    canvas.fig.clf()
     ax = canvas.fig.add_subplot(111)
     ax.cla()  # Clear the canvas
     # plot the lines
@@ -2480,7 +2484,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
                 dff = (dff - median_all)/mad
 
             y_dff_all.append(dff)
-    
+    # print(f"How many trials in preview plot perievent: {len(y_dff_all)}")
     # plot
     # clear previous figure
     canvas.fig.clf()
@@ -2540,7 +2544,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
     else:
         norm_type = " (%df/F)"
     # for i in range(total_plots):
-    for i in range(len(current_trials)):
+    for i in range(len(y_dff_all)):
         # header_signal = "Trial"+str(i+1)+norm_type
         header_signal = "Trial"+str(current_trials[i])+norm_type
         signal_data = y_dff_all[i]
@@ -2658,6 +2662,7 @@ def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options
     
     
 def plot_perievent_zscore_alone(canvas,subject, current_trials, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
+    print(f"Trials for auc from z-score: {current_trials}")
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -2770,6 +2775,7 @@ def plot_perievent_zscore_alone(canvas,subject, current_trials, perievent_option
     return raw_df
 
 def plot_perievent_zscore_with_trials_alone(canvas,subject, current_trials, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
+    print(f"Trials for auc from z-score: {current_trials}")
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
