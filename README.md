@@ -2,8 +2,7 @@
   <br></div>
 ## What is it?
 fpExplorer is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems. This is our attempt to standardize and simplify analysis approaches.<br>
-<br>![example_github](https://user-images.githubusercontent.com/87764674/174671613-e8300626-7b84-4b78-83f8-14845f46a8f3.PNG)
-<br>
+<br>![example_github](https://github.com/ilo21/fpExplorer/assets/87764674/db595b39-110a-413f-9d57-6032ef10e104)<br>
 <br>
 ![batch-z-score-options](https://user-images.githubusercontent.com/87764674/174671712-4d37e8d0-cb68-4bf7-9c70-287b622ddc98.PNG)
 <br>
