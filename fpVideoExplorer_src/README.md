@@ -3,7 +3,7 @@
 ## What is it?
 fpVideoExplorer is an open-source application that allows users to preview peri event time windows of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems.<br>
 The application can:<br>
-- extract peri event time window and save the signal as the animation (*.mp4)
+- extract peri event time window and save the signal as an animation (*.mp4)
 - extract matched peri event time window of the recorded video and save it as a separate video file (*.avi)
 - synchronize both: peri event video and the animated signal and save it as a separate video file (*.avi)<br>
 ## Usage
