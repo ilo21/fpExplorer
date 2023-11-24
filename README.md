@@ -54,7 +54,8 @@ The installation file for the desktop application is available [here](https://gi
   python fpExplorer.py
 ```
 You can find more information about managing conda environments [here](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
-
+## Optional Peri Event Video Extraction
+In order to be able to preview recorded signal around our events synchronized together with the recorded videos, we developed a small additional application: [fpVideoExplorer](https://github.com/ilo21/fpExplorer/tree/main/fpVideoExplorer_src). 
 ## Limitations
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
 - The application was developed and extensively tested on Windows 10 platform. It also works on Windows 11. We have only minimally tested running it on MacOS and Linux systems.
