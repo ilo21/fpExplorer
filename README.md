@@ -1,10 +1,10 @@
 # <div align="center">fpExplorer<br><br>![icon64x64](https://user-images.githubusercontent.com/87764674/174671214-01d6a9e9-39bc-4bd4-8a02-e519a0bd834f.png)<br> [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Created my free logo at LogoMakr.com](https://img.shields.io/badge/Created%20my%20free%20logo%20at-LogoMakr.com-blue)](https://logomakr.com/)
   <br></div>
 ## What is it?
-fpExplorer is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems. This is our attempt to standardize and simplify analysis approaches.<br>
+fpExplorer is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems. To make the application useful to the researchers who do not use TDT system, we added support for generic csv files. <br>This is our attempt to standardize and simplify analysis approaches.<br>
 <br>![example_github](https://github.com/ilo21/fpExplorer/assets/87764674/db595b39-110a-413f-9d57-6032ef10e104)<br>
 <br>
-![batch-z-score-options](https://user-images.githubusercontent.com/87764674/174671712-4d37e8d0-cb68-4bf7-9c70-287b622ddc98.PNG)
+![batch-z-score-options](https://github.com/ilo21/fpExplorer/assets/87764674/6570e972-dc5a-4d3e-8117-e6c91f756199)
 <br>
 ## Usage
 We provide users with a Python source code as well as an independent windows application that does not require any programming background. (See the detailed [Application Guide](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf) and [Installation](#installation) instructions.)<br>
