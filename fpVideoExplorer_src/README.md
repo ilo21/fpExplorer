@@ -7,7 +7,7 @@ The application can:<br>
 - extract matched peri event time window of the recorded video and save it as a separate video file (*.avi)
 - synchronize both: peri event video and the animated signal and save it as a separate video file (*.avi)<br>
 ## Usage
-See the detailed [Application Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoExplorer_src/Documentation/fpVideoExplorerQuickGuide.pdf)<br>
+See the detailed [User Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoExplorer_src/Documentation/fpVideoExplorerQuickGuide.pdf)<br>
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
 - [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
