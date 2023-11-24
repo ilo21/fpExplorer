@@ -5,7 +5,7 @@ fpVideoExplorer is an open-source application that allows users to preview peri 
 The application can:<br>
 - extract peri event time window and save the signal as an animation (*.mp4)
 - extract matched peri event time window of the recorded video and save it as a separate video file (*.avi)
-- synchronize both: peri event video and the animated signal and save it as a separate video file (*.avi)<br>
+- synchronize both: peri event video and animated signal and save it as a separate video file (*.avi)<br>
 ## Usage
 See the detailed [User Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoExplorer_src/Documentation/fpVideoExplorerQuickGuide.pdf)<br>
 ## Contributors
