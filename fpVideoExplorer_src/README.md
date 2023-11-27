@@ -8,6 +8,8 @@ The application can:<br>
 - synchronize both: peri event video and animated signal and save it as a separate video file (*.avi)<br>
 ## Usage
 See the detailed [User Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoExplorer_src/Documentation/fpVideoExplorerQuickGuide.pdf)<br>
+## Limitations
+At the moment it works only for datafiles that were created with TDT's Synapse software 
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
 - [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
