@@ -26,10 +26,6 @@ The installation file for the desktop application is available [here](https://gi
     ```
       conda env create -f fpExplorer_env.yml
     ```
-  - From [specification](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) file:<br>Download the repository. Open cmd within environment_info folder where [spec-file](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) is located and type:
-  ```
-    conda create --name FP2 --file win10FPspec-file.txt
-  ```
   - From scratch:
       - Open Terminal and type:
       ```
