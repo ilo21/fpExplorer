@@ -46,6 +46,8 @@ The installation file for the desktop application is available [here](https://gi
       pip install matplotlib
       pip install PyQt5
       pip install pyqtgraph
+      pip install opencv-python
+      pip install tqdm
       ```
 - Change your working environment to the new environment (if you haven't already):
 ```
