@@ -20,22 +20,22 @@ The installation file for the desktop application is available [here](https://gi
 - Install [Anaconda](https://www.anaconda.com/products/individual) Python Distribution.
 - Create a separate environment for the development.
   - From [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/fpExplorer_env.yml) file:
-    - Download or clone the repository. Open Anaconda navigator and start CMD.exe Prompt. Change directory to the folder where yml file is located and type (replace "Path_to_cloned_repo" with your own path):
+    - Download or clone the repository. Open Anaconda navigator and start CMD.exe Prompt (on MacOS: open Terminal). Change directory to the folder where yml file is located and type (replace "Path_to_cloned_repo" with your own path):
     ```
-      cd C:\Path_to_cloned_repo\fpExplorer\environment_info
+    cd C:\Path_to_cloned_repo\fpExplorer\environment_info
     ```
     - Next, type:
     ```
-      conda env create -f fpExplorer_env.yml
+    conda env create -f fpExplorer_env.yml
     ```
   - From scratch:
-      - Open Terminal and type:
+      - Open Anaconda navigator and start CMD.exe Prompt (Windows) or open Terminal (on MacOS) and type:
       ```
       conda create --name fpExplorer python=3.7
       ```
       - Change change your working environment to the new environment:
       ```
-        conda activate fpExplorer
+      conda activate fpExplorer
       ```
       - Install required packeges one by one:
       ```
@@ -49,16 +49,22 @@ The installation file for the desktop application is available [here](https://gi
       ```
 - Change your working environment to the new environment (if you haven't already):
 ```
-  conda activate fpExplorer
+conda activate fpExplorer
 ```
 - Navigate to fpExplorer_src folder and run:
 ```
-  python fpExplorer.py
+python fpExplorer.py
 ```
 You can find more information about managing conda environments [here](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
+## Troubleshooting installation of python packages
+Here are some of the packeges with which we had problems installing on MacOS and the solutions that worked for us:
+```
+pip3 install --no-build-isolation scikit-learn
+conda install -c conda-forge pyqt
+```
 ## Limitations
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/) or were exported to standard csv files and formatted according to our [guidelines](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
-- The application was developed and extensively tested on Windows 10 platform. It also works on Windows 11. We have only minimally tested running it on MacOS and Linux systems.
+- The application was developed and extensively tested on Windows 10 and Windows 11 platform. We have only minimally tested running it on MacOS (Big Sur 11.7) and Linux systems.
 - Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software (Subject-> Experiment or Experiment->Structure)
 - Currently supported events are only the ones that don't start with Cam or Tick (e.g., "PrtA 253", "Note 1")
 ## Contributors
