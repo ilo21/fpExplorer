@@ -13,6 +13,7 @@ At the moment it works only for datafiles that were created with TDT's Synapse s
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
 - [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
+- [Johan Skold](https://liu.se/medarbetare/johsk39) (extensive testing and invaluable feedback)
 
 
 
