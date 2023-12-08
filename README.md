@@ -56,6 +56,21 @@ conda activate fpExplorer
 python fpExplorer.py
 ```
 You can find more information about managing conda environments [here](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
+
+- If you wish to additionally develop the <b>fpVideoExplorer</b> app, you will need to install ffmpeg on your computer
+  - Windows:
+      - You can find the downloads on the official [ffmpeg website](https://ffmpeg.org/download.html). We used the latest [ffmpeg.zip folder](https://github.com/BtbN/FFmpeg-Builds/releases)
+      - Unpack it and rename to: ffmpeg
+      - Move the ffmpeg folder to C: drive
+      - Open cmd as administrator and set the environment path variable for ffmpeg by running the following command:
+        ```
+        setx /m PATH "C:\ffmpeg\bin;%PATH%"
+        ```
+      - Restart the computer and open cmd to verify the installation by typing:
+        ```
+        ffmpeg -version
+        ```
+    
 ## Troubleshooting installation of python packages
 Here are some of the packeges with which we had problems installing on MacOS and the solutions that worked for us:
 ```
@@ -65,7 +80,7 @@ conda install -c conda-forge pyqt
 ## Limitations
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/) or were exported to standard csv files and formatted according to our [guidelines](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
 - The application was developed and extensively tested on Windows 10 and Windows 11 platform. We have only minimally tested running it on MacOS (Big Sur 11.7) and Linux systems.
-- Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software (Subject-> Experiment or Experiment->Structure)
+- Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software<br>(Subject-> Experiment or Experiment->Structure)
 - Currently supported events are only the ones that don't start with Cam or Tick (e.g., "PrtA 253", "Note 1")
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
