@@ -17,10 +17,15 @@ The installation file for the desktop application is available [here](https://gi
 ## Development
 - Install [Anaconda](https://www.anaconda.com/products/individual) Python Distribution.
 - Create a separate environment for the development.
-  - From [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/FPenv.yml) file:<br>Download the repository. Open cmd within environment_info folder where [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/FPenv.yml) file is located and type:
-  ```
-    conda env create -f FPenv.yml
-  ```
+  - From [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/fpExplorer_env.yml) file:
+    - Download or clone the repository. Open Anaconda navigator and start CMD.exe Prompt. Change directory to the folder where yml file is located and type (replace "Path_to_cloned_repo" with your own path):
+    ```
+      cd C:\Path_to_cloned_repo\fpExplorer\environment_info
+    ```
+    - Next, type:
+    ```
+      conda env create -f fpExplorer_env.yml
+    ```
   - From [specification](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) file:<br>Download the repository. Open cmd within environment_info folder where [spec-file](https://github.com/ilo21/fpExplorer/blob/main/environment_info/win10FPspec-file.txt) is located and type:
   ```
     conda create --name FP2 --file win10FPspec-file.txt
@@ -28,11 +33,11 @@ The installation file for the desktop application is available [here](https://gi
   - From scratch:
       - Open Terminal and type:
       ```
-      conda create --name FP2 python=3.7
+      conda create --name fpExplorer python=3.7
       ```
       - Change change your working environment to the new environment:
       ```
-        conda activate FP2
+        conda activate fpExplorer
       ```
       - Install required packeges one by one:
       ```
@@ -46,7 +51,7 @@ The installation file for the desktop application is available [here](https://gi
       ```
 - Change your working environment to the new environment (if you haven't already):
 ```
-  conda activate FP2
+  conda activate fpExplorer
 ```
 - Navigate to fpExplorer_src folder and run:
 ```
