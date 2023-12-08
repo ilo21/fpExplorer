@@ -11,6 +11,8 @@ We provide users with a Python source code as well as an independent windows app
 <br><br>
 ![Flow](https://user-images.githubusercontent.com/87764674/174672419-8a7a6296-88f5-40da-a291-fd0218cd0c15.png)
 <br>
+## Optional Peri Event Video Extraction
+In order to be able to preview the recorded signal around our events together with the recorded videos, we developed a small additional application: [fpVideoExplorer](https://github.com/ilo21/fpExplorer/tree/main/fpVideoExplorer_src). 
 ## Installation
 - Windows application: <br>
 The installation file for the desktop application is available [here](https://github.com/ilo21/fpExplorer/releases). Download the fpExplorer.Installer.exe file and run it.
@@ -54,8 +56,6 @@ The installation file for the desktop application is available [here](https://gi
   python fpExplorer.py
 ```
 You can find more information about managing conda environments [here](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html).
-## Optional Peri Event Video Extraction
-In order to be able to preview recorded signal around our events synchronized together with the recorded videos, we developed a small additional application: [fpVideoExplorer](https://github.com/ilo21/fpExplorer/tree/main/fpVideoExplorer_src). 
 ## Limitations
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/) or were exported to standard csv files and formatted according to our [guidelines](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
 - The application was developed and extensively tested on Windows 10 platform. It also works on Windows 11. We have only minimally tested running it on MacOS and Linux systems.
