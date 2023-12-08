@@ -72,7 +72,7 @@ You can find more information about managing conda environments [here](https://c
         ```
     
 ## Troubleshooting installation of python packages
-Here are some of the packeges with which we had problems installing on MacOS and the solutions that worked for us:
+Here are some of the packeges with which we had problems on MacOS and the solutions that worked for us:
 ```
 pip3 install --no-build-isolation scikit-learn
 conda install -c conda-forge pyqt
