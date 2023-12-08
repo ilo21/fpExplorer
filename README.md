@@ -64,6 +64,7 @@ This application was developed to meet the needs of researchers at Linköping Un
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
 - [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
+- [Johan Skold](https://liu.se/medarbetare/johsk39) (extensive testing and invaluable feedback)
 - [David Barker](https://www.thebarkerlab.com/) (we were inspired by his group's [pMAT](https://github.com/djamesbarker/pMAT) (Photometry Modular Analysis Tool))
 - [Patrick Mulholland](https://education.musc.edu/MUSCApps/facultydirectory/Mulholland-Patrick) (provided a modified polynomial fitting method)
 
