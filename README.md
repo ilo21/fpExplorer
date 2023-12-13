@@ -72,9 +72,28 @@ You can find more information about managing conda environments [here](https://c
         ```
         ffmpeg -version
         ```
+  - MacOS:
+      - We recommend using [Homebrew](https://formulae.brew.sh/) to install ffmpeg on MacOS
+      - Open terminal and type:
+        ```
+        brew install ffmpeg
+        ```
+      - To verify the installation type:
+        ```
+        ffmpeg -version
+        ```
+  - Linux:
+      - Open terminal and type:
+        ```
+        sudo apt-get install ffmpeg
+        ```
+      - To verify the installation type:
+        ```
+        ffmpeg -version
+        ```
     
 ## Troubleshooting installation of python packages
-Here are some of the packeges with which we had problems on MacOS and the solutions that worked for us:
+Here are some of the packeges with which we had problems on MacOS/Linux and the solutions that worked for us:
 ```
 pip3 install --no-build-isolation scikit-learn
 conda install -c conda-forge pyqt
