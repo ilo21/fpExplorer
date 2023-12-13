@@ -258,9 +258,13 @@ class MyMainWidget(QMainWindow):
         # get path for doc file
         doc_folder = os.path.join(os.path.abspath(os.getcwd()),"Documentation")
         doc_path = os.path.join(doc_folder,"docs.pdf")
+        print(f"OS name: {os.name}")
         import subprocess
-        # open pdf doc file
-        subprocess.Popen([doc_path],shell=True)
+        if os.name == 'nt': # if it is windows
+            # open pdf doc file
+            subprocess.Popen([doc_path],shell=True)
+        elif os.name == "posix": # if it is mac os or ubuntu
+            subprocess.call(["xdg-open",doc_path])
         self.enable_all_buttons()
         if self.preview_widget != None:
             self.preview_widget.enable_buttons()
