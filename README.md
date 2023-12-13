@@ -20,7 +20,7 @@ The installation file for the desktop application is available [here](https://gi
 - Install [Anaconda](https://www.anaconda.com/products/individual) Python Distribution.
 - Create a separate environment for the development.
   - From [yml](https://github.com/ilo21/fpExplorer/blob/main/environment_info/fpExplorer_env.yml) file:
-    - Download or clone the repository. Open Anaconda navigator and start CMD.exe Prompt (on MacOS: open Terminal). Change directory to the folder where yml file is located and type (replace "Path_to_cloned_repo" with your own path):
+    - Download or clone the repository. Open Anaconda navigator and start CMD.exe Prompt (on MacOS/Linux: open Terminal). Change directory to the folder where yml file is located and type (replace "Path_to_cloned_repo" with your own path):
     ```
     cd C:\Path_to_cloned_repo\fpExplorer\environment_info
     ```
@@ -29,7 +29,7 @@ The installation file for the desktop application is available [here](https://gi
     conda env create -f fpExplorer_env.yml
     ```
   - From scratch:
-      - Open Anaconda navigator and start CMD.exe Prompt (Windows) or open Terminal (on MacOS) and type:
+      - Open Anaconda navigator and start CMD.exe Prompt (Windows) or open Terminal (on MacOS/Linux) and type:
       ```
       conda create --name fpExplorer python=3.7
       ```
@@ -81,7 +81,7 @@ conda install -c conda-forge pyqt
 ```
 ## Limitations
 This application was developed to meet the needs of researchers at Linköping University (LiU), Sweden. We have tried to make fpExplorer easily accessable (no programming knowledge required) and broadly applicable (as long as datafiles were created with TDT's [Synapse software](https://www.tdt.com/component/synapse-software/) or were exported to standard csv files and formatted according to our [guidelines](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf)). However, we do realize that each research group might have their own, custom fiber photometry setups and unique experimental designs, and our analysis tool will not be able to handle all of the cases.
-- The application was developed and extensively tested on Windows 10 and Windows 11 platform. We have only minimally tested running it on MacOS (Big Sur 11.7) and Linux systems.
+- The application was developed and extensively tested on Windows 10 and Windows 11 platform. We have only minimally tested running it on MacOS (Big Sur 11.7) and Linux (Ubuntu 20.04) systems.
 - Our application requires a very proprietary folder structure that is characteristic to [TDT](https://www.tdt.com/docs/synapse/managing-data-for-your-lab/) software<br>(Subject-> Experiment or Experiment->Structure)
 - Currently supported events are only the ones that don't start with Cam or Tick (e.g., "PrtA 253", "Note 1")
 ## Contributors
