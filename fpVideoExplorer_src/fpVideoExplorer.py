@@ -38,6 +38,11 @@ import types
 import pandas as pd
 import numpy as np
 import cv2
+import sys
+if os.name == "posix": # ubuntu: qt plugin internally used by opencv is not compatible with pyqt5
+    if sys.platform != "darwin": # if not mac
+        # unset environment variable after importing cv2
+        os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 import copy
 import resources
 import warnings
@@ -67,7 +72,6 @@ MAX_SMOOTH_WINDOW = 10000
 DEFAULT_SMOOTH_WINDOW = 10
 DEFAULT_EXPORT_FOLDER = "_fpVideoExplorerAnalysis"
 SHIFT_MAX = 100
-SHIFT_MIN = -100
 VIDEO_DELAY_SEC = 0.2 # the camera starts recording later than fp data collection
 ###############################
 # CLASS FORM MAIN GUI WINDOW  #
@@ -85,7 +89,6 @@ class MyMainWidget(QMainWindow):
         self.app_width = 800
         self.app_height = 200
         self.top_buttons_height = 50
-        self.bottom_buttons_height = 50
         self.setWindowIcon(QtGui.QIcon(ICO))
         self.setWindowTitle(self.name)
         self.resize(self.app_width,self.app_height)
@@ -134,11 +137,9 @@ class MyMainWidget(QMainWindow):
         # create a widget for dock from pyqtgraph
         self.top_widget = QWidget()
         # add that widget to the dock
-        self.top_dock_widget.addWidget(self.top_widget)
         self.top_widget.setLayout(self.box_layout)
+        self.top_dock_widget.addWidget(self.top_widget)
         
-        # Create a layout for preview area
-        self.preview_main_layout = QHBoxLayout()
         
         # connect buttons to fpVideoExplorer_functions
         self.select_data_btn.clicked.connect(self.select_data_btn_clicked)
@@ -259,7 +260,6 @@ class MyMainWidget(QMainWindow):
             # show window with options to plot perievent
             self.preview_widget = PreviewEventBasedWidget(self,self.preview_params)
             # add widget to dock
-            self.preview_widget.setLayout(self.preview_main_layout)
             self.bottom_dock_widget.addWidget(self.preview_widget)
         else:
             self.show_info_dialog("No events found in your data.")
@@ -880,18 +880,14 @@ class PreviewEventBasedWidget(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(5,0,5,0)
         self.setLayout(self.layout)
-        # area on the left with options
-        self.splitter = QSplitter()
-        self.splitter.setOrientation(Qt.Horizontal)
-        self.layout.addWidget(self.splitter)
-###########################################
-# Options; left side for
+
         # create widget with options
         self.options_widget = QWidget()
         # create main layout for widget with options
         self.options_main_layout = QVBoxLayout()
-        self.options_main_layout.setContentsMargins(10,10,0,10)
+        # self.options_main_layout.setContentsMargins(10,10,0,10)
         self.options_layout = QFormLayout()
+        self.options_layout.setFieldGrowthPolicy(self.options_layout.AllNonFixedFieldsGrow)
         self.options_layout.setVerticalSpacing(15)
         self.experiment_name_text = QLineEdit(self.preview_init_params[0][0]["selected_experiment"])
         self.experiment_name_text.setReadOnly(True)
@@ -933,7 +929,7 @@ class PreviewEventBasedWidget(QWidget):
         self.options_layout.addRow(self.after_sec_label,self.after_sec_text)
         self.shift_label = QLabel("Shift n Video Frames:")
         self.shift_text = QLineEdit("0")
-        shift_info = "Between "+str(SHIFT_MIN)+" and " +str(SHIFT_MAX)+" frames"
+        shift_info = "Between 0 and " +str(SHIFT_MAX)+" frames"
         self.shift_text.setToolTip(shift_info)
         self.shift_text.setValidator(QtGui.QIntValidator())
         self.options_layout.addRow(self.shift_label,self.shift_text)
@@ -952,7 +948,7 @@ class PreviewEventBasedWidget(QWidget):
         self.options_main_layout.addWidget(self.perievent_analysis_btn)
                
         self.options_widget.setLayout(self.options_main_layout)
-        self.splitter.addWidget(self.options_widget)
+        self.layout.addWidget(self.options_widget)
 
         self.perievent_analysis_btn.clicked.connect(self.perievent_analysis_btn_clicked)
         self.select_folder_btn.clicked.connect(self.select_folder_btn_clicked)
@@ -985,8 +981,7 @@ class PreviewEventBasedWidget(QWidget):
         # set current subject
         self.options["subject"] = self.subject_comboBox.currentText()
         shift = int(self.shift_text.text())
-        if shift > SHIFT_MAX or shift < SHIFT_MIN:
-        # if shift < 0 or shift > SHIFT_MAX:
+        if shift < 0 or shift > SHIFT_MAX:
             self.show_info_dialog("If you need to shift so much, you might have a problem with your data.") 
             return False
         else:
@@ -1230,10 +1225,7 @@ class PreviewEventBasedWidget(QWidget):
             add_shift = 0
             if fps == 10:
                 add_shift = 2 # add additional shift if the video was slower
-            if self.options["shift"] >= 0:
-                shifted = fpVideoExplorer_functions.shift_indexes_right(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
-            else:
-                shifted = fpVideoExplorer_functions.shift_indexes_left(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
+            shifted = fpVideoExplorer_functions.shift_indexes_right(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
             print(f"shifted trials before and after: {shifted}")
             ################################################################################################################
             # create animated trials first
@@ -1364,36 +1356,6 @@ class SelectTrialsWindow(QMainWindow):
         self.close()
 ################### end SelectTrialsWindow class  
  
-#################################################
-# CLASS FOR MATPLOTLIB CANVAS                  #
-################################################
-        
-class MplCanvas(FigureCanvasQTAgg):
-
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
-        super(MplCanvas, self).__init__(self.fig)  
-        self.fig.canvas.mpl_connect('scroll_event',self.mousewheel_move)
-# scrolling only zooms x axis
-# inspired by: https://stackoverflow.com/questions/11551049/matplotlib-plot-zooming-with-scroll-wheel        
-    def mousewheel_move(self,event):
-        try:
-            ax=event.inaxes
-            ax._pan_start = types.SimpleNamespace(
-                    lim=ax.viewLim.frozen(),
-                    trans=ax.transData.frozen(),
-                    trans_inverse=ax.transData.inverted().frozen(),
-                    bbox=ax.bbox.frozen(),
-                    x=event.x,
-                    y=event.y)
-            if event.button == 'up':
-                ax.drag_pan(3, event.key, event.x+10, event.y)
-            else: #event.button == 'down':
-                ax.drag_pan(3, event.key, event.x-10, event.y)
-            fig=ax.get_figure()
-            fig.canvas.draw_idle()
-        except:
-            pass   
 
 ################################################################
 #                                                              #
