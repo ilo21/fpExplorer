@@ -25,11 +25,12 @@ Many analysis ideas come from TDT
 https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
 
 """
-
+# https://github.com/LABSN/tdtpy
+# https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/
+import tdt
 import tdt
 from tdt.TDTfilter import combine_time
 from tdt.TDTfilter import get_valid_ind
-# https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/
 import numpy as np
 from numpy.polynomial import Polynomial
 from numpy.polynomial.polynomial import polyval

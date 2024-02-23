@@ -22,7 +22,7 @@ Created on Thu Jan  7 12:08:47 2021
 """
 
 from tkinter import E
-import fpVideoExplorer_functions
+import fpVideoCreator_functions
 import os
 import shutil
 import math
@@ -70,7 +70,7 @@ DEFAULT_DOWNSAMPLE_PCT = 10
 DEFAULT_HZ = 100
 MAX_SMOOTH_WINDOW = 10000
 DEFAULT_SMOOTH_WINDOW = 10
-DEFAULT_EXPORT_FOLDER = "_fpVideoExplorerAnalysis"
+DEFAULT_EXPORT_FOLDER = "_fpVideoCreatorAnalysis"
 SHIFT_MAX = 100
 VIDEO_DELAY_SEC = 0.2 # the camera starts recording later than fp data collection
 ###############################
@@ -85,7 +85,7 @@ class MyMainWidget(QMainWindow):
     app_closed = pyqtSignal() 
     def __init__(self):
         super(MyMainWidget, self).__init__()
-        self.name = "fpVideoExplorer"
+        self.name = "fpVideoCreator"
         self.app_width = 800
         self.app_height = 200
         self.top_buttons_height = 50
@@ -141,7 +141,7 @@ class MyMainWidget(QMainWindow):
         self.top_dock_widget.addWidget(self.top_widget)
         
         
-        # connect buttons to fpVideoExplorer_functions
+        # connect buttons to fpVideoCreator_functions
         self.select_data_btn.clicked.connect(self.select_data_btn_clicked)
         self.settings_btn.clicked.connect(self.settings_btn_clicked)
         self.got_channel_names.connect(self.show_preview)
@@ -193,7 +193,7 @@ class MyMainWidget(QMainWindow):
 
         self.select_data_window_content = user_input       
         if self.select_data_window_content[0]["subject_experiment"] == True:
-            self.batch_paths_dict = fpVideoExplorer_functions.create_list_of_paths(self.select_data_window_content[0]["main_path"],
+            self.batch_paths_dict = fpVideoCreator_functions.create_list_of_paths(self.select_data_window_content[0]["main_path"],
                                                                    self.select_data_window_content[0]["subject_names"],
                                                                    self.select_data_window_content[0]["selected_experiment"])
             # if path doesn't exist remove it
@@ -208,7 +208,7 @@ class MyMainWidget(QMainWindow):
                 del self.batch_paths_dict[key]
             self.select_data_window_content[0]["subject_names"] = remaining
         elif self.select_data_window_content[0]["experiment_subject"] == True:
-            valid_subjects,self.batch_paths_dict = fpVideoExplorer_functions.create_list_of_paths_experiment_subjects(self.select_data_window_content[0]["main_path"],
+            valid_subjects,self.batch_paths_dict = fpVideoCreator_functions.create_list_of_paths_experiment_subjects(self.select_data_window_content[0]["main_path"],
                                                                     self.select_data_window_content[0]["subject_names"],
                                                                     self.select_data_window_content[0]["selected_experiment"])
             # update subject list for that experiment
@@ -216,9 +216,9 @@ class MyMainWidget(QMainWindow):
             
        
         # ask user for signal and control channels
-        data = fpVideoExplorer_functions.get_raw_data(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]])
+        data = fpVideoCreator_functions.get_raw_data(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]])
         if data != None:
-            self.signal_control_window = SignalControlWindow(self,fpVideoExplorer_functions.get_channel_names(data))
+            self.signal_control_window = SignalControlWindow(self,fpVideoCreator_functions.get_channel_names(data))
             self.signal_control_window.got_signal_name_sig.connect(self.got_signal_name_sig)
             self.signal_control_window.show()   
         else:
@@ -255,7 +255,7 @@ class MyMainWidget(QMainWindow):
         # if self.select_data_window_content[0]["event_based"] == True:
             # try reading the first data tank on the list 
             # to verify if there are indeed events
-        if fpVideoExplorer_functions.check_events(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]]):
+        if fpVideoCreator_functions.check_events(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]]):
             self.enable_all_buttons()
             # show window with options to plot perievent
             self.preview_widget = PreviewEventBasedWidget(self,self.preview_params)
@@ -266,7 +266,7 @@ class MyMainWidget(QMainWindow):
 
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
-        self.raw_data_dict[subject] = fpVideoExplorer_functions.get_raw_data(my_path)
+        self.raw_data_dict[subject] = fpVideoCreator_functions.get_raw_data(my_path)
         if self.raw_data_dict[subject] == None:
             # remove from combo box
             index = self.subject_comboBox.findText(subject)  # find the index of text
@@ -322,7 +322,7 @@ class SettingsWindow(QMainWindow):
         if self.parent_window.preview_widget != 0:
             self.current_fs = self.parent_window.preview_widget.current_fs
             # current_subject = self.parent_window.preview_widget.options["subject"]
-            # self.current_fs = fpVideoExplorer_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
+            # self.current_fs = fpVideoCreator_functions.get_frequency(self.parent_window.preview_widget.raw_data_dict[current_subject],self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"])
             print("Frequency:",self.current_fs)
 
         # calculate min, max and sugested sample rates
@@ -794,7 +794,7 @@ class PreviewEventBasedWidget(QWidget):
         self.get_raw_data(self.preview_init_params[0][0]["subject_names"][0],
                           self.preview_init_params[1][self.preview_init_params[0][0]["subject_names"][0]])
         # read first subject's frequency and create suggested downsampled rate
-        self.current_fs = fpVideoExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        self.current_fs = fpVideoCreator_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
         self.suggested_downsample_samples = DEFAULT_HZ
         self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
@@ -807,8 +807,8 @@ class PreviewEventBasedWidget(QWidget):
         self.trimmed_raw_data_dict = {}
         
         # create a list of available events for current subject
-        self.events_from_current_subject = fpVideoExplorer_functions.get_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
-        self.cam_events_from_current_subject = fpVideoExplorer_functions.get_cam_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
+        self.events_from_current_subject = fpVideoCreator_functions.get_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
+        self.cam_events_from_current_subject = fpVideoCreator_functions.get_cam_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
         print(f"Cam events: {self.cam_events_from_current_subject}")
         if len(self.cam_events_from_current_subject) > 0:
             self.options["cam_event"] = self.cam_events_from_current_subject[0]
@@ -1000,7 +1000,7 @@ class PreviewEventBasedWidget(QWidget):
             self.get_cam_data(self.options["subject"],
                           self.raw_data_dict[self.options["subject"]],self.options["cam_event"])
             # check if there even is a video there
-            has_video, self.video_path = fpVideoExplorer_functions.is_there_a_video(self.parent_window.preview_params[1][self.options["subject"]],self.options["cam_event"])
+            has_video, self.video_path = fpVideoCreator_functions.is_there_a_video(self.parent_window.preview_params[1][self.options["subject"]],self.options["cam_event"])
             if has_video == False:
                 self.show_info_dialog("There is no video for this subject.\nCheck that the video ends with _"+self.options["cam_event"])
                 return False
@@ -1018,7 +1018,7 @@ class PreviewEventBasedWidget(QWidget):
         # set event
         self.options["event"] = self.event_from_data_comboBox.currentText()
         self.options["event_name"] = self.event_name_text.text()
-        self.event_onsets = fpVideoExplorer_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+        self.event_onsets = fpVideoCreator_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
 
         # # create trials list 
         # self.current_trials = [i+1 for i in range(len(self.event_onsets[0]))]
@@ -1052,7 +1052,7 @@ class PreviewEventBasedWidget(QWidget):
                 return
         # check events for new data
         previous_cam_events = self.cam_events_from_current_subject
-        self.cam_events_from_current_subject = fpVideoExplorer_functions.get_cam_events(self.raw_data_dict[self.options["subject"]])
+        self.cam_events_from_current_subject = fpVideoCreator_functions.get_cam_events(self.raw_data_dict[self.options["subject"]])
         print("\nNew Cam events",self.cam_events_from_current_subject)
         same_cam = True
         if len(previous_cam_events) != self.cam_events_from_current_subject:
@@ -1078,7 +1078,7 @@ class PreviewEventBasedWidget(QWidget):
        
         # first check if there are the same events
         previous_events = self.events_from_current_subject
-        self.events_from_current_subject = fpVideoExplorer_functions.get_events(self.raw_data_dict[self.options["subject"]])  
+        self.events_from_current_subject = fpVideoCreator_functions.get_events(self.raw_data_dict[self.options["subject"]])  
         same = True
         if len(previous_events) != self.events_from_current_subject:
             same = False
@@ -1121,7 +1121,7 @@ class PreviewEventBasedWidget(QWidget):
         if self.raw_data_dict[self.options["subject"]] == None:
             return
         # read new subject's frequency and update suggested downsampled rate (only if it is different)
-        new_fs = fpVideoExplorer_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        new_fs = fpVideoCreator_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
         if new_fs != self.current_fs:
             # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.suggested_downsample_samples = DEFAULT_HZ
@@ -1135,7 +1135,7 @@ class PreviewEventBasedWidget(QWidget):
         self.disable_buttons_signal.emit()
         all_data_read = self.read_options()
         if all_data_read:
-            self.data_by_event = fpVideoExplorer_functions.filter_data_around_event_directly(self.raw_data_dict[self.options["subject"]],
+            self.data_by_event = fpVideoCreator_functions.filter_data_around_event_directly(self.raw_data_dict[self.options["subject"]],
                                                                             self.options["event"],
                                                                             self.options["sec_before"],
                                                                             self.options["sec_after"],
@@ -1165,7 +1165,7 @@ class PreviewEventBasedWidget(QWidget):
         # list of trials
         self.current_trials = trials
         # get normalized trials to preview
-        self.current_trials_df = fpVideoExplorer_functions.get_normalized_trials(
+        self.current_trials_df = fpVideoCreator_functions.get_normalized_trials(
                                                     self.options["subject"],
                                                     self.data_by_event,
                                                     self.current_trials,
@@ -1204,17 +1204,17 @@ class PreviewEventBasedWidget(QWidget):
                 else:
                     if len(before_and_after_frame_idx) > 2:
                         # include only the closest to the event time
-                        updated_before_after = fpVideoExplorer_functions.find_closest_time_pair_indexes(trial_ts,found_index_list=before_and_after_frame_idx,times_to_compare=current_cam_ons)
+                        updated_before_after = fpVideoCreator_functions.find_closest_time_pair_indexes(trial_ts,found_index_list=before_and_after_frame_idx,times_to_compare=current_cam_ons)
                         if len(updated_before_after) == 2 :
                             print(f"Narrowed down successfully")
                             all_trials_before_and_after_frame_idx.append((self.current_trials[i],updated_before_after))
                         else: # if a pair was found, try increasing mean frame interval and repeat the above
-                            updated_before_after = fpVideoExplorer_functions.find_closest_time_pair_indexes(trial_ts,times_to_compare=current_cam_ons,time_margin=mean_frame_interval+0.03)
+                            updated_before_after = fpVideoCreator_functions.find_closest_time_pair_indexes(trial_ts,times_to_compare=current_cam_ons,time_margin=mean_frame_interval+0.03)
                             if len(updated_before_after) == 2:
                                 all_trials_before_and_after_frame_idx.append((self.current_trials[i],updated_before_after))
                             elif len(updated_before_after) > 2:
                                 # include only the closest to the event time
-                                updated_before_after_pair = fpVideoExplorer_functions.find_closest_time_pair_indexes(trial_ts,found_index_list=updated_before_after,times_to_compare=current_cam_ons)
+                                updated_before_after_pair = fpVideoCreator_functions.find_closest_time_pair_indexes(trial_ts,found_index_list=updated_before_after,times_to_compare=current_cam_ons)
                                 if len(updated_before_after_pair) == 2 :
                                     all_trials_before_and_after_frame_idx.append((self.current_trials[i],updated_before_after_pair))
                                 else: # give up
@@ -1225,7 +1225,7 @@ class PreviewEventBasedWidget(QWidget):
             add_shift = 0
             if fps == 10:
                 add_shift = 2 # add additional shift if the video was slower
-            shifted = fpVideoExplorer_functions.shift_indexes_right(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
+            shifted = fpVideoCreator_functions.shift_indexes_right(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
             print(f"shifted trials before and after: {shifted}")
             ################################################################################################################
             # create animated trials first
@@ -1236,12 +1236,12 @@ class PreviewEventBasedWidget(QWidget):
             video_name = tail.split(".")[0]
             path4videos = os.path.join(self.current_saving_path,video_name+"_shift"+str(self.options["shift"])+"_videos")
             # create as many animations as in current trials
-            created_animations = fpVideoExplorer_functions.create_trial_animations(self.current_trials_df,self.current_trials,event,fps,path4videos,self.options["subject"],self.options["cam_event"])
+            created_animations = fpVideoCreator_functions.create_trial_animations(self.current_trials_df,self.current_trials,event,fps,path4videos,self.options["subject"],self.options["cam_event"])
             ####################################################################################################################
             # create as many videos as animations
             if created_animations:
             # if True:
-                created_trial_videos = fpVideoExplorer_functions.create_trial_videos(self.video_path,
+                created_trial_videos = fpVideoCreator_functions.create_trial_videos(self.video_path,
                                                                                 self.options["sec_before"],
                                                                                 self.options["sec_after"],
                                                                                 shifted,
@@ -1262,7 +1262,7 @@ class PreviewEventBasedWidget(QWidget):
 
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
-        self.raw_data_dict[subject] = fpVideoExplorer_functions.get_raw_data(my_path)
+        self.raw_data_dict[subject] = fpVideoCreator_functions.get_raw_data(my_path)
         if self.raw_data_dict[subject] == None:
             # remove from combo box
             index = self.subject_comboBox.findText(subject)  # find the index of text
@@ -1273,7 +1273,7 @@ class PreviewEventBasedWidget(QWidget):
 
     # add cam1 event data and subject to self.raw_data dictionary        
     def get_cam_data(self,subject,data,cam_evt):
-        self.cam_data_dict[subject] = fpVideoExplorer_functions.get_cam_event_on_off(data,cam_evt)
+        self.cam_data_dict[subject] = fpVideoCreator_functions.get_cam_event_on_off(data,cam_evt)
         
     # show info popup
     def show_info_dialog(self, text):

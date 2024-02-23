@@ -51,4 +51,4 @@ dependencies:
     - tqdm==4.65.0
     - typing-extensions==3.10.0.2
     - zipp==3.6.0
-prefix: C:\Users\ilosz01\.conda\envs\FP2_clone
+prefix:
