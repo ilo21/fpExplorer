@@ -2,9 +2,9 @@
   <br></div>
 ## What is it?
 fpExplorer is an open-source application that allows users to preview and perform basic analysis of fiber photometry data recorded using [Tucker Davis Technologies (TDT) systems](https://www.tdt.com/). To make the application useful to the researchers who do not use TDT system, we added support for generic csv files. <br>This is our attempt to standardize and simplify analysis approaches.<br>
-<br>![example_github](https://github.com/ilo21/fpExplorer/assets/87764674/db595b39-110a-413f-9d57-6032ef10e104)<br>
+<br>![example_github](https://github.com/ilo21/fpExplorer/assets/87764674/327cbe6e-bec6-451a-ae63-c25988e52f12)<br>
 <br>
-![batch-z-score-options](https://github.com/ilo21/fpExplorer/assets/87764674/6570e972-dc5a-4d3e-8117-e6c91f756199)
+![batch-z-score-options](https://github.com/ilo21/fpExplorer/assets/87764674/33949224-17ef-4df6-9d26-a502e05281b1)
 <br>
 ## Usage
 We provide users with a Python source code as well as an independent windows application that does not require any programming background. (See the detailed [Application Guide](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf) and [Installation](#installation) instructions.)<br>
