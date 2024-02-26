@@ -24,6 +24,12 @@ Created on Fri Dec 18 11:34:19 2020
 Many analysis ideas come from TDT
 https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
 
+Many of the analysis ideas are inspired on code provided by the following sources:
+Tucker-Davis Technologies ( https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/)
+Dr. David Barker (pMAT; Bruno C.A. et al. 2021, Pharm BioChem Behav 201, https://doi.org/10.1016/j.pbb.2020.173093)
+Dr. Patrik Mulholland (Braunsheidel K.M. et al. 2019, J Neurosci 39(46), https://doi.org/10.1523/JNEUROSCI.1674-19.2019)
+
+
 """
 # https://github.com/LABSN/tdtpy
 # https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/

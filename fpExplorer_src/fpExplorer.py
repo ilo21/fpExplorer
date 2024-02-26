@@ -20,6 +20,14 @@
 Created on Thu Jan  7 12:08:47 2021
 
 @author: ilosz01
+
+Many of the analysis ideas are inspired on code provided by the following sources:
+Tucker-Davis Technologies ( https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/)
+Dr. David Barker (pMAT; Bruno C.A. et al. 2021, Pharm BioChem Behav 201, https://doi.org/10.1016/j.pbb.2020.173093)
+Dr. Patrik Mulholland (Braunsheidel K.M. et al. 2019, J Neurosci 39(46), https://doi.org/10.1523/JNEUROSCI.1674-19.2019)
+
+Many analysis ideas come from TDT
+https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
 """
 
 from tkinter import E
@@ -39,6 +47,7 @@ from matplotlib.figure import Figure
 import types
 import pandas as pd
 import numpy as np
+import sys
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -113,7 +122,7 @@ class MyMainWidget(QMainWindow):
         self.settings_dict = [{"downsample":None,
                               "entered_downsample":None,
                               "normalization": "Standard Polynomial Fitting",
-                              "show_norm_as":"dF/F (in % )",
+                              "show_norm_as":"Z-Score",
                               "filter":False,
                               "filter_window":DEFAULT_SMOOTH_WINDOW,
                               "subject":""}]
@@ -264,7 +273,10 @@ class MyMainWidget(QMainWindow):
             # open pdf doc file
             subprocess.Popen([doc_path],shell=True)
         elif os.name == "posix": # if it is mac os or ubuntu
-            subprocess.call(["xdg-open",doc_path])
+            if sys.platform == "darwin":  # Mac
+                subprocess.call(["open",doc_path])
+            else: # linux
+                subprocess.call(["xdg-open",doc_path])
         self.enable_all_buttons()
         if self.preview_widget != None:
             self.preview_widget.enable_buttons()
@@ -1220,6 +1232,10 @@ class SignalControlWindow(QMainWindow):
         self.parent_window = parent_window
         self.parent_window.app_closed.connect(self.exit_app)
         self.channel_names = channel_names_list
+        # try to find the lowest and highest number, assuming the highest will be signal and the lowest will be the control
+        self.suggested_control = ""
+        self.suggested_signal = ""
+        self.look_for_suggested_signal_and_control()
         self.selected_channel_names = []
             
         self.main_widget = QWidget()
@@ -1229,9 +1245,13 @@ class SignalControlWindow(QMainWindow):
         self.main_layout.setContentsMargins(10,10,10,10)
         self.signal_name_cb = QComboBox()
         self.signal_name_cb.addItems(self.channel_names)
+        if len(self.suggested_signal) > 0:
+            self.signal_name_cb.setCurrentText(self.suggested_signal)
         self.main_layout.addRow("Signal channel name:",self.signal_name_cb)
         self.control_name_cb = QComboBox()
         self.control_name_cb.addItems(self.channel_names)
+        if len(self.suggested_control) > 0:
+            self.control_name_cb.setCurrentText(self.suggested_control)
         self.main_layout.addRow("Control channel name:",self.control_name_cb)
         self.ok_btn = QPushButton("OK")
         self.main_layout.addRow("",self.ok_btn)
@@ -1239,6 +1259,25 @@ class SignalControlWindow(QMainWindow):
         self.main_widget.setLayout(self.main_layout)
         
         self.ok_btn.clicked.connect(self.read_names)
+
+    def look_for_suggested_signal_and_control(self):
+        # highest could be signal and lowest could be control
+        extracted_numbers = []
+        matching_channels = []
+        for el in self.channel_names:
+            # our format "_405A"
+            if el.startswith("_"):
+                try:
+                    number = int(el[1:-1])
+                    extracted_numbers.append(number)
+                    matching_channels.append(el)
+                except:
+                    pass
+        if len(extracted_numbers) > 0:
+            idx_max = extracted_numbers.index(max(extracted_numbers))
+            self.suggested_signal = matching_channels[idx_max]
+            idx_min = extracted_numbers.index(min(extracted_numbers))
+            self.suggested_control = matching_channels[idx_min]
         
     def read_names(self):
         self.ok_btn.setEnabled(False)
@@ -2220,13 +2259,12 @@ class PreviewContinuousWidget(QWidget):
                            )
      
     # check and set trimming for current subject
+    # check and set trimming for current subject
     def check_trimming(self):
         self.options["subject"] = self.subject_comboBox.currentText()
-        # if subject was not previewed, set trimming to 0
-        if self.options["subject"] not in self.trimmed_raw_data_dict:
-            self.trim_beginning_sec.setText("0")
-            self.trim_ending_sec.setText("0")
-        else:
+        # if subject was not previewed, do not change trimming
+        # if it was previewed, set the trimming to the previously saved
+        if self.options["subject"] in self.trimmed_raw_data_dict:
             # set trimming to most recent
             trimmed = self.trimmed_raw_data_dict[self.options["subject"]]
             begin,end = trimmed[0]
@@ -2278,10 +2316,10 @@ class PreviewContinuousWidget(QWidget):
         else:
             self.subject_group_name.setText("")
         # clear long lasting check boxes to start faster
-        self.downsample_cb.setChecked(False)
-        self.normalize_cb.setChecked(False)
-        # plot raw by default
-        self.raw_plot_cb.setChecked(True)
+        # self.downsample_cb.setChecked(False)
+        # self.normalize_cb.setChecked(False)
+        # # plot raw by default
+        # self.raw_plot_cb.setChecked(True)
         # plot raw, trimmed data with or without event
         self.apply_btn_clicked()
             
@@ -2621,6 +2659,8 @@ class PreviewEventBasedWidget(QWidget):
         self.layout.addWidget(self.splitter)
 ###########################################
 # Options; left side for
+        # if it is too long for the screen, show scrolling bar
+        self.options_scroll_area = QScrollArea() 
         # create widget with options
         self.options_widget = QWidget()
         # create main layout for widget with options
@@ -2747,7 +2787,9 @@ class PreviewEventBasedWidget(QWidget):
         self.options_main_layout.addWidget(self.check_poly_btn)
                
         self.options_widget.setLayout(self.options_main_layout)
-        self.splitter.addWidget(self.options_widget)
+        self.options_scroll_area.setWidget(self.options_widget)
+        # self.splitter.addWidget(self.options_widget)
+        self.splitter.addWidget(self.options_scroll_area)
 #####################################################       
 # Plots; biggest part of preview (top right)
         # area on the top right for the plots
@@ -3271,16 +3313,15 @@ class PreviewEventBasedWidget(QWidget):
     # check and set trimming for current subject
     def check_trimming(self):
         self.options["subject"] = self.subject_comboBox.currentText()
-        # if subject was not previewed, set trimming to 0
-        if self.options["subject"] not in self.trimmed_raw_data_dict:
-            self.trim_beginning_sec.setText("0")
-            self.trim_ending_sec.setText("0")
-        else:
+        # if subject was not previewed, do not change trimming
+        # if it was previewed, set the trimming to the previously saved
+        if self.options["subject"] in self.trimmed_raw_data_dict:
             # set trimming to most recent
             trimmed = self.trimmed_raw_data_dict[self.options["subject"]]
             begin,end = trimmed[0]
             self.trim_beginning_sec.setText(str(begin))
             self.trim_ending_sec.setText(str(end))
+        
     # check and set event for current subject      
     def check_events(self):
         self.options["subject"] = self.subject_comboBox.currentText()
@@ -3301,14 +3342,14 @@ class PreviewEventBasedWidget(QWidget):
             for el in self.events_from_current_subject:
                 if el not in previous_events:
                     same = False
-        self.trim_beginning_select.setCurrentText("Trim first seconds")
-        self.trim_ending_select.setCurrentText("Trim last seconds")
+        # self.trim_beginning_select.setCurrentText("Trim first seconds")
+        # self.trim_ending_select.setCurrentText("Trim last seconds")
         # set class variables first:
         # set current trimming
-        self.options["trim_start"] = self.trim_beginning_sec.text()
-        self.options["trim_end"] = self.trim_ending_sec.text()
-        self.options["trim_begin_evt"] = ""
-        self.options["trim_end_evt"] = ""
+        # self.options["trim_start"] = self.trim_beginning_sec.text()
+        # self.options["trim_end"] = self.trim_ending_sec.text()
+        # self.options["trim_begin_evt"] = ""
+        # self.options["trim_end_evt"] = ""
         if same == True:
             self.event_from_data_comboBox.setCurrentText(self.options["event"])
             # set event name also to previous
@@ -3320,26 +3361,29 @@ class PreviewEventBasedWidget(QWidget):
                 self.event2_name_text.setText(self.options["event2_name"])
         else: # if events changed
             # check trimming events
-            if self.options["trim_begin_evt"] in self.events_from_current_subject:
-                # update combo box first
-                self.trim_beginning_event.clear()
-                self.trim_beginning_event.addItems(self.events_from_current_subject)
-                # set to previous value
-                self.trim_beginning_event.setCurrentText(self.options["trim_begin_evt"])
-            else: # update to new events set trimming back to seconds
-                self.trim_beginning_event.clear()
-                self.trim_beginning_event.addItems(self.events_from_current_subject)
-#                self.trim_beginning_select.setCurrentText("Trim first seconds")
-            if self.options["trim_end_evt"] in self.events_from_current_subject:
-                # update combo box first
-                self.trim_end_event.clear()
-                self.trim_end_event.addItems(self.events_from_current_subject)
-                # set to previous value
-                self.trim_end_event.setCurrentText(self.options["trim_end_evt"])
-            else: # update to new events set trimming back to seconds
-                self.trim_end_event.clear()
-                self.trim_end_event.addItems(self.events_from_current_subject)
-#                self.trim_ending_select.setCurrentText("Trim last seconds")
+            # print("\n\nCurrent trim event: ",self.options["trim_begin_evt"])
+            if "trim_begin_evt" in self.options:
+                if self.options["trim_begin_evt"] in self.events_from_current_subject:
+                    # update combo box first
+                    self.trim_beginning_event.clear()
+                    self.trim_beginning_event.addItems(self.events_from_current_subject)
+                    # set to previous value
+                    self.trim_beginning_event.setCurrentText(self.options["trim_begin_evt"])
+                else: # update to new events
+                    self.trim_beginning_event.clear()
+                    self.trim_beginning_event.addItems(self.events_from_current_subject)
+    #                self.trim_beginning_select.setCurrentText("Trim first seconds")
+            if "trim_end_evt" in self.options:
+                if self.options["trim_end_evt"] in self.events_from_current_subject:
+                    # update combo box first
+                    self.trim_end_event.clear()
+                    self.trim_end_event.addItems(self.events_from_current_subject)
+                    # set to previous value
+                    self.trim_end_event.setCurrentText(self.options["trim_end_evt"])
+                else: # update to new events set trimming back to seconds
+                    self.trim_end_event.clear()
+                    self.trim_end_event.addItems(self.events_from_current_subject)
+    #                self.trim_ending_select.setCurrentText("Trim last seconds")
                 
             # if previously selected event is in current events, set that filed the same as previously
             if self.options["event"] in self.events_from_current_subject or self.options["event"] == "---":
@@ -3418,10 +3462,10 @@ class PreviewEventBasedWidget(QWidget):
         else:
             self.subject_group_name.setText("")
         # clear long lasting check boxes to start faster
-        self.downsample_cb.setChecked(False)
-        self.normalize_cb.setChecked(False)
-        # plot raw by default
-        self.raw_plot_cb.setChecked(True)
+        # self.downsample_cb.setChecked(False)
+        # self.normalize_cb.setChecked(False)
+        # # plot raw by default
+        # self.raw_plot_cb.setChecked(True)
         # clear "include trials
         # # create new buttons
         new_trials_widget = QWidget()
@@ -5974,26 +6018,26 @@ class PeriEventOptionsWindow(QMainWindow):
         self.how_many_batch_trials = 0
         
         self.batch = batch
-        if self.batch == True:
-            try:
-                if self.parent_window.select_data_window_content[0]["subject_experiment"] == True:
-                    self.all_paths_dict = fpExplorer_functions.create_list_of_paths(self.parent_window.select_data_window_content[0]["main_path"],
-                                                                        self.parent_window.preview_widget.preview_init_params[0][0]["subject_names"],
-                                                                        self.parent_window.select_data_window_content[0]["selected_experiment"])
-                elif self.parent_window.select_data_window_content[0]["experiment_subject"] == True:
-                    valid_subjects,self.all_paths_dict = fpExplorer_functions.create_list_of_paths_experiment_subjects(self.parent_window.select_data_window_content[0]["main_path"],
-                                                                                self.parent_window.preview_widget.preview_init_params[0][0]["subject_names"],
-                                                                                self.parent_window.select_data_window_content[0]["selected_experiment"])
-            except:
-                self.all_paths_dict = self.parent_window.preview_widget.preview_init_params[0]["subject_paths"]
-            print("All paths in perievent",self.all_paths_dict)
-            print("Batch subjects in perievent",self.parent_window.batch_export_settings_dict["batch_subjects"])
-            current_event = common_events[0]
-            if 'event' in self.options_dict:
-                current_event = self.options_dict['event']
-            print("First common event:",current_event)
-            # find least common number of trials
-            self.how_many_batch_trials = self.find_min_common_trials(current_event)
+        # if self.batch == True:
+        #     try:
+        #         if self.parent_window.select_data_window_content[0]["subject_experiment"] == True:
+        #             self.all_paths_dict = fpExplorer_functions.create_list_of_paths(self.parent_window.select_data_window_content[0]["main_path"],
+        #                                                                 self.parent_window.preview_widget.preview_init_params[0][0]["subject_names"],
+        #                                                                 self.parent_window.select_data_window_content[0]["selected_experiment"])
+        #         elif self.parent_window.select_data_window_content[0]["experiment_subject"] == True:
+        #             valid_subjects,self.all_paths_dict = fpExplorer_functions.create_list_of_paths_experiment_subjects(self.parent_window.select_data_window_content[0]["main_path"],
+        #                                                                         self.parent_window.preview_widget.preview_init_params[0][0]["subject_names"],
+        #                                                                         self.parent_window.select_data_window_content[0]["selected_experiment"])
+        #     except:
+        #         self.all_paths_dict = self.parent_window.preview_widget.preview_init_params[0]["subject_paths"]
+        #     print("All paths in perievent",self.all_paths_dict)
+        #     print("Batch subjects in perievent",self.parent_window.batch_export_settings_dict["batch_subjects"])
+        #     current_event = common_events[0]
+        #     if 'event' in self.options_dict:
+        #         current_event = self.options_dict['event']
+        #     print("First common event:",current_event)
+        #     # find least common number of trials
+        #     self.how_many_batch_trials = self.find_min_common_trials(current_event)
         
         self.export_path = self.options_dict["export_path"]
         self.export_file_begin = self.options_dict["file_beginning"]
@@ -6094,7 +6138,7 @@ class PeriEventOptionsWindow(QMainWindow):
             self.baseline_from_text.setText(str(self.options_dict["baseline_from"]))
         self.baseline_from_text.setValidator(QtGui.QIntValidator())
         self.baseline_to_label = QLabel("Baseline To:")
-        self.baseline_to_text = QLineEdit("-10")
+        self.baseline_to_text = QLineEdit("0")
         if 'baseline_to' in self.options_dict:
             self.baseline_to_text.setText(str(self.options_dict["baseline_to"]))
         self.baseline_to_text.setValidator(QtGui.QIntValidator())
@@ -6195,6 +6239,27 @@ class PeriEventOptionsWindow(QMainWindow):
             self.export_btn.clicked.connect(self.export_btn_clicked)
             self.export_btn.setStyleSheet(STYLESHEET)
         else: # for batch
+            try:
+                if self.parent_window.select_data_window_content[0]["subject_experiment"] == True:
+                    self.all_paths_dict = fpExplorer_functions.create_list_of_paths(self.parent_window.select_data_window_content[0]["main_path"],
+                                                                        self.parent_window.preview_widget.preview_init_params[0][0]["subject_names"],
+                                                                        self.parent_window.select_data_window_content[0]["selected_experiment"])
+                elif self.parent_window.select_data_window_content[0]["experiment_subject"] == True:
+                    valid_subjects,self.all_paths_dict = fpExplorer_functions.create_list_of_paths_experiment_subjects(self.parent_window.select_data_window_content[0]["main_path"],
+                                                                                self.parent_window.preview_widget.preview_init_params[0][0]["subject_names"],
+                                                                                self.parent_window.select_data_window_content[0]["selected_experiment"])
+            except:
+                self.all_paths_dict = self.parent_window.preview_widget.preview_init_params[0]["subject_paths"]
+            print("All paths in perievent",self.all_paths_dict)
+            print("Batch subjects in perievent",self.parent_window.batch_export_settings_dict["batch_subjects"])
+            current_event = common_events[0]
+            if 'event' in self.options_dict:
+                current_event = self.options_dict['event']
+            print("First common event:",current_event)
+            # find least common number of trials
+            self.how_many_batch_trials = self.find_min_common_trials(current_event)
+            ######################################################################
+
             self.current_trials = []
             self.current_trials_widget = QWidget()
             self.trials_layout = QHBoxLayout()
@@ -6252,7 +6317,9 @@ class PeriEventOptionsWindow(QMainWindow):
         self.main_widget.setStyleSheet(STYLESHEET)
         self.bottom_widget.setStyleSheet(STYLESHEET)
         
-        
+        self.before_sec_text.textChanged.connect(self.before_sec_window_changed)
+        self.after_sec_text.textChanged.connect(self.after_sec_window_changed)
+
         self.plot_raw_btn.clicked.connect(self.plot_raw_btn_clicked)
         self.analyze_btn.clicked.connect(self.analyze_btn_clicked)
         self.plot_zscore_cb.stateChanged.connect(self.zscore_toggle)
@@ -6260,6 +6327,28 @@ class PeriEventOptionsWindow(QMainWindow):
         
         
         self.disable_buttons_signal.connect(self.disable_buttons)
+
+    def before_sec_window_changed(self):
+        # set the baseline beginning to the beginning of the window automatically
+        try:
+            begin_baseline = -int(self.before_sec_text.text())
+        except: # there is a moment when used deletes all and empty string would not be int
+            pass
+        self.baseline_from_text.setText(str(begin_baseline))
+        # change AUC from to the beginning of the window as well
+        self.auc_pre_from_text.setText(str(begin_baseline))
+        # check time windows around each event again
+        self.update_trials()
+
+    def after_sec_window_changed(self):
+        # change AUC to to the end of the window automatically
+        try:
+            end_window_sec = int(self.after_sec_text.text())
+        except: # there is a moment when used deletes all and empty string would not be int
+            pass
+        self.auc_post_to_text.setText(str(end_window_sec))
+        # check time windows around each event again
+        self.update_trials()
 
     def find_min_common_trials(self,current_event):
         trilas_no_by_subject = []
@@ -6273,11 +6362,25 @@ class PeriEventOptionsWindow(QMainWindow):
                     self.parent_window.preview_widget.raw_data_dict[subj] = self.read_data_csv(self.all_paths_dict[subj][0])
                     if len(self.all_paths_dict[subj][1])>0:
                         self.parent_window.preview_widget.events_dict[subj] = self.read_data_csv(self.all_paths_dict[subj][0])
-            event_onsets = fpExplorer_functions.get_event_on_off(self.parent_window.preview_widget.raw_data_dict[subj],current_event)
-            if len(event_onsets[0]) == 0:
+            # find last timestamp to check if there is enough data around each event onset  
+            last_ts = fpExplorer_functions.get_last_timestamp(
+                                     self.parent_window.preview_widget.raw_data_dict[subj],
+                                     self.parent_window.preview_widget.preview_init_params[0][0]["signal_name"],
+                                     )
+            event_onsets = fpExplorer_functions.get_event_on_off(self.parent_window.preview_widget.raw_data_dict[subj],current_event)[0]
+            verified_event_onsets = []
+            for i in range(len(event_onsets)):
+                sec_before = int(self.before_sec_text.text())
+                sec_after = int(self.after_sec_text.text())
+                evt_ts = event_onsets[i]
+                if evt_ts - sec_before > 0 and evt_ts + sec_after < last_ts:
+                    verified_event_onsets.append(evt_ts)
+            if len(verified_event_onsets) == 0:
                 # try using a custom method
-                event_onsets = self.parent_window.preview_widget.get_event_on_off(self.parent_window.preview_widget.events_dict[subj], current_event)
-            trilas_no_by_subject.append(len(event_onsets[0]))
+                event_onsets = self.parent_window.preview_widget.get_event_on_off(self.parent_window.preview_widget.events_dict[subj], current_event)[0]
+            # no = len(verified_event_onsets)
+            # print(f"subject: {subj}: {no}, {verified_event_onsets}")
+            trilas_no_by_subject.append(len(verified_event_onsets))
         min_trials = min(trilas_no_by_subject)
         print("Min trials:", min_trials)
         return min_trials
@@ -6513,6 +6616,7 @@ class PeriEventOptionsWindow(QMainWindow):
         # on close, enable back parent's buttons
         if self.parent_window.preview_widget != None:
             self.parent_window.preview_widget.enable_buttons()
+            self.parent_window.preview_widget.batch_perievent = False
             self.parent_window.batch_perievent = False
             print("Reset batch_perivenet")
 

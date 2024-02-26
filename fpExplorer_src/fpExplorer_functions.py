@@ -21,14 +21,22 @@
 Created on Fri Dec 18 11:34:19 2020
 
 @author: ilosz01
+
+Many of the analysis ideas are inspired on code provided by the following sources:
+Tucker-Davis Technologies ( https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/)
+Dr. David Barker (pMAT; Bruno C.A. et al. 2021, Pharm BioChem Behav 201, https://doi.org/10.1016/j.pbb.2020.173093)
+Dr. Patrik Mulholland (Braunsheidel K.M. et al. 2019, J Neurosci 39(46), https://doi.org/10.1523/JNEUROSCI.1674-19.2019)
+
 Many analysis ideas come from TDT
 https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/
 
 """
-
+# https://github.com/LABSN/tdtpy
+# https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/
 import tdt
 from tdt.TDTfilter import combine_time
 from tdt.TDTfilter import get_valid_ind
+# https://github.com/LABSN/tdtpy
 # https://www.tdt.com/support/python-sdk/offline-analysis-examples/introduction-to-python-tdt-package/
 import numpy as np
 from numpy.polynomial import Polynomial
@@ -98,7 +106,6 @@ DPI4SVG = 1200
 def get_raw_data(path):
     '''Returns a raw data extracted by tdt from all recording files
     '''
-#    raw_data = tdt.read_block("C://Users//ilosz01//OneDrive - Linköpings universitet//FPproject//Data//1//fear_test")
     try:
         raw_data = tdt.read_block(path) 
     except:
@@ -311,7 +318,7 @@ def downsample(signal_dict,target_Hz):
     # print(ts_original[0],ts_adjusted[0])
     return {"ts":ts_adjusted,"signal":GCaMP_resampled_data,"control":control_resampled_data}
 
-# Mulholland dff
+# modified polynomial
 def normalize_dff(signal_dict,show_as,smooth,smooth_window):
     #####################
     # change lists to numpy array for calculations
@@ -327,25 +334,6 @@ def normalize_dff(signal_dict,show_as,smooth,smooth_window):
         signal_arr = filtfilt(b, a, signal_arr)
         print("Done smoothing")
         
-    # Before:
-#    # fit time axis to the 465nm stream
-#    # https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html#numpy.polynomial.polynomial.Polynomial.fit
-#    bls_Ca = np.polyfit(ts_arr,signal_arr,1)
-#    F0Ca = np.multiply(bls_Ca[0], ts_arr) + bls_Ca[1]
-#    # dF/F for the 465 channel
-#    dFFCa = (signal_arr - F0Ca)/F0Ca *100
-##    print(dFFCa)
-#    # fit time axis the 405nm stream
-#    bls_ref = np.polyfit(ts_arr,control_arr,1)
-#    F0Ref = np.multiply(bls_ref[0], ts_arr) + bls_ref[1]
-#    # dF/F for the 405 channel
-#    dFFRef = (control_arr - F0Ref)/F0Ref *100
-##    print(dFFRef)
-#    dFFnorm = dFFCa - dFFRef
-#    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-#    # to make 0 the mean value for DF/F
-#    negative = dFFnorm[dFFnorm<0]
-#    dFF=dFFnorm-np.mean(negative)
     
     # fit time axis to the 465nm stream  
 #    bls_Ca = np.polyfit(ts_arr,signal_arr,1) # deprecieted
@@ -371,12 +359,12 @@ def normalize_dff(signal_dict,show_as,smooth,smooth_window):
 
     if show_as == "Z-Score":
         median_all = np.median(dFF)
-        mad = stats.median_absolute_deviation(dFF)
+        mad = stats.median_abs_deviation(dFF)
         dFF = (dFF - median_all)/mad
 
     return {"ts":ts_arr,"normalized_signal":dFF}
 
-# Mulholland dff that uses custom baseline
+# modified polynomial that uses custom baseline
 def normalize_dff_baseline(signal_dict,baseline_dict,show_as,smooth,smooth_window):
     #####################
     # change lists to numpy array for calculations
@@ -399,53 +387,62 @@ def normalize_dff_baseline(signal_dict,baseline_dict,show_as,smooth,smooth_windo
         control_baseline_arr = filtfilt(b, a, control_baseline_arr)
         signal_baseline_arr = filtfilt(b, a, signal_baseline_arr)
         print("Done smoothing")
-        
-    # Before:
-#    # fit time axis to the 465nm stream
-#    # https://numpy.org/doc/stable/reference/generated/numpy.polynomial.polynomial.Polynomial.fit.html#numpy.polynomial.polynomial.Polynomial.fit
-#    bls_Ca = np.polyfit(ts_arr,signal_arr,1)
-#    F0Ca = np.multiply(bls_Ca[0], ts_arr) + bls_Ca[1]
-#    # dF/F for the 465 channel
-#    dFFCa = (signal_arr - F0Ca)/F0Ca *100
-##    print(dFFCa)
-#    # fit time axis the 405nm stream
-#    bls_ref = np.polyfit(ts_arr,control_arr,1)
-#    F0Ref = np.multiply(bls_ref[0], ts_arr) + bls_ref[1]
-#    # dF/F for the 405 channel
-#    dFFRef = (control_arr - F0Ref)/F0Ref *100
-##    print(dFFRef)
-#    dFFnorm = dFFCa - dFFRef
-#    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-#    # to make 0 the mean value for DF/F
-#    negative = dFFnorm[dFFnorm<0]
-#    dFF=dFFnorm-np.mean(negative)
-    
+    ############################################################################################
+    # 23/01 filter out signal values that are below or above 2 standard deviations from the signal mean 
+    mean_baseline_signal = np.mean(signal_baseline_arr)
+    stdev_baseline_signal = np.std(signal_baseline_arr)
+    mean_baseline_control = np.mean(control_baseline_arr)
+    stdev_baseline_control = np.std(control_baseline_arr)
+    indexes_signal = np.where((signal_baseline_arr<mean_baseline_signal+2*stdev_baseline_signal) & (signal_baseline_arr>mean_baseline_signal-2*stdev_baseline_signal))
+    selected_signal = signal_baseline_arr[indexes_signal]
+    selected_ts_baseline_signal_arr = ts_baseline_arr[indexes_signal]
+    indexes_control = np.where((control_baseline_arr<mean_baseline_control+2*stdev_baseline_control) & (control_baseline_arr>mean_baseline_control-2*stdev_baseline_control))
+    selected_control = control_baseline_arr[indexes_control]
+    selected_ts_baseline_control_arr = ts_baseline_arr[indexes_control]
     # fit time axis to the 465nm stream  
-#    bls_Ca = np.polyfit(ts_arr,signal_arr,1) # deprecieted
-    bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_baseline_arr,signal_baseline_arr,1)
-#    print("bls_Ca",bls_Ca.convert().coef[::-1])
-#    F0Ca = np.polyval(bls_Ca,ts_arr) # deprecieted
+    bls_Ca = np.polynomial.polynomial.Polynomial.fit(selected_ts_baseline_signal_arr,selected_signal,1)
+    bls_ref = np.polynomial.polynomial.Polynomial.fit(selected_ts_baseline_control_arr,selected_control,1)
     F0Ca = polyval(ts_arr,bls_Ca.convert().coef)
     # dF/F for the 465 channel
     dFFCa = (signal_arr - F0Ca)/F0Ca *100
-    # fit time axis the 405nm stream
-#    bls_ref = np.polyfit(ts_arr,control_arr,1) # depreciated
-    bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_baseline_arr,control_baseline_arr,1)
-#    F0Ref = np.polyval(bls_ref,ts_arr) # deprecieted
     F0Ref = polyval(ts_arr,bls_ref.convert().coef)
     # dF/F for the 405 channel
     dFFRef = (control_arr - F0Ref)/F0Ref *100
-#    print(dFFRef)
+    #    print(dFFRef)
     dFFnorm = dFFCa - dFFRef
-    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-    # to make 0 the mean value for DF/F
-    negative = dFFnorm[dFFnorm<0]
-    dFF=dFFnorm-np.mean(negative)
+    ######################################################################################################
+#     # fit time axis to the 465nm stream  
+#     bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_baseline_arr,signal_baseline_arr,1)
+# #    print("bls_Ca",bls_Ca.convert().coef[::-1])
+#     F0Ca = polyval(ts_arr,bls_Ca.convert().coef)
+#     # dF/F for the 465 channel
+#     dFFCa = (signal_arr - F0Ca)/F0Ca *100
+#     # fit time axis the 405nm stream
+#     bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_baseline_arr,control_baseline_arr,1)
+#     F0Ref = polyval(ts_arr,bls_ref.convert().coef)
+#     # dF/F for the 405 channel
+#     dFFRef = (control_arr - F0Ref)/F0Ref *100
+# #    print(dFFRef)
+#     dFFnorm = dFFCa - dFFRef
+#     # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+#     # to make 0 the mean value for DF/F
+#     # negative = dFFnorm[dFFnorm<0]
+#     # dFF=dFFnorm-np.mean(negative)
+    ###########################################
+    # fix the shift towards zero
+    # get fragment of length baseline
+    # print(f"Baseline signal mean: {mean_baseline_signal}, Baseline control mean: {mean_baseline_control}")
+    # print(f"Median before shift: {np.median(dFFnorm)}, MAD before shit: {stats.median_abs_deviation(dFFnorm)}")
+    baseline_normalized = dFFnorm[:len(ts_baseline_arr)]
+    negative_baseline = baseline_normalized[baseline_normalized<0]
+    dFF = dFFnorm - np.mean(negative_baseline)
+    ###########################################
 
     if show_as == "Z-Score":
         median_all = np.median(dFF)
-        mad = stats.median_absolute_deviation(dFF)
+        mad = stats.median_abs_deviation(dFF)
         dFF = (dFF - median_all)/mad
+        # print(f"Median: {median_all}, MAD: {mad}")
 
     return {"ts":ts_arr,"normalized_signal":dFF}
 
@@ -491,7 +488,7 @@ def normalize_pMat(signal_dict,show_as,smooth,smooth_window):
 
     if show_as == "Z-Score":
         median_all = np.median(dff)
-        mad = stats.median_absolute_deviation(dff)
+        mad = stats.median_abs_deviation(dff)
         dff = (dff - median_all)/mad
 
     return {"ts":ts_arr,"normalized_signal":dff}
@@ -518,34 +515,48 @@ def normalize_pMat_custom_baseline(signal_dict,baseline_dict,show_as,smooth,smoo
         signal_baseline_arr = filtfilt(b, a, signal_baseline_arr)
         print("Done smoothing")
         
-        
-    # Before
-#    bls = np.polyfit(control_arr, signal_arr, 1)
-#    fit_line = np.multiply(bls[0], control_arr) + bls[1]
-#    dff = (signal_arr - fit_line)/fit_line * 100
-        
-    # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
-    mu = np.mean(control_baseline_arr)
-    std = np.std(control_baseline_arr, ddof=0)
-    # Call np.polyfit(), using the shifted and scaled version of control_arr
-#    cscaled = np.polyfit((control_arr - mu)/std, signal_arr, 1) # depreciated
-    cscaled = np.polynomial.polynomial.Polynomial.fit((control_baseline_arr - mu)/std, signal_baseline_arr, 1)
-    # Create a poly1d object that can be called
-#    pscaled = np.poly1d(cscaled) # old obsolete function
-    # https://numpy.org/doc/stable/reference/routines.polynomials.html
+  
+    #############################################################################################
+    # filter out signal values that are below or above 2 standard deviations from the signal mean  
+    mean_baseline_signal = np.mean(signal_baseline_arr)
+    stdev_baseline_signal = np.std(signal_baseline_arr)
+    indexes = np.where((signal_baseline_arr<mean_baseline_signal+2*stdev_baseline_signal) & (signal_baseline_arr>mean_baseline_signal-2*stdev_baseline_signal))
+    selected_signal = signal_baseline_arr[indexes]
+    selected_control = control_baseline_arr[indexes]
+    mu = np.mean(selected_control)
+    std = np.std(selected_control)
+    cscaled = np.polynomial.polynomial.Polynomial.fit((selected_control - mu)/std, selected_signal, 1)
     pscaled = Polynomial(cscaled.convert().coef)
-    # Inputs to pscaled must be shifted and scaled using mu and std
     F0 = pscaled((control_arr - mu)/std)
-#    print("F0?",F0[:20])
     dffnorm = (signal_arr - F0)/F0 * 100
-    # find all values of the normalized DF/F that are negative so you can next shift up the curve 
-    # to make 0 the mean value for DF/F
-    negative = dffnorm[dffnorm<0]
-    dff=dffnorm-np.mean(negative)
+    ######################################################################################################
+    # # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+    # mu = np.mean(control_baseline_arr)
+    # std = np.std(control_baseline_arr, ddof=0)
+    # # Call np.polyfit(), using the shifted and scaled version of control_arr
+    # cscaled = np.polynomial.polynomial.Polynomial.fit((control_baseline_arr - mu)/std, signal_baseline_arr, 1)
+    # # Create a poly1d object that can be called
+    # # https://numpy.org/doc/stable/reference/routines.polynomials.html
+    # pscaled = Polynomial(cscaled.convert().coef)
+    # # Inputs to pscaled must be shifted and scaled using mu and std
+    # F0 = pscaled((control_arr - mu)/std)
+    # dffnorm = (signal_arr - F0)/F0 * 100
+    # # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+    # # to make 0 the mean value for DF/F
+    # # negative = dffnorm[dffnorm<0]
+    # # dff=dffnorm-np.mean(negative)
+
+    ###########################################
+    # fix the shift towards zero
+    # get fragment of length baseline
+    baseline_normalized = dffnorm[:len(ts_baseline_arr)]
+    negative_baseline = baseline_normalized[baseline_normalized<0]
+    dff = dffnorm - np.mean(negative_baseline)
+    ###########################################
 
     if show_as == "Z-Score":
         median_all = np.median(dff)
-        mad = stats.median_absolute_deviation(dff)
+        mad = stats.median_abs_deviation(dff)
         dff = (dff - median_all)/mad
 
     return {"ts":ts_arr,"normalized_signal":dff}
@@ -1020,7 +1031,7 @@ def analyze_perievent_data(data,current_trials,perievent_options_dict,settings_d
     for dF in y_dff_all:
        ind = np.where((np.array(ts_control4average)<perievent_options_dict["baseline_to"]) & (np.array(ts_control4average)>perievent_options_dict["baseline_from"]))
        zb = np.median(dF[ind])
-       mad = stats.median_absolute_deviation(dF[ind])
+       mad = stats.median_abs_deviation(dF[ind])
        zscore_all.append((dF - zb)/mad)
     zerror = np.std(zscore_all, axis=0)/np.sqrt(np.size(zscore_all, axis=0))
     
@@ -2456,7 +2467,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
 
             if show_norm_as == "Z-Score":
                 median_all = np.median(dff)
-                mad = stats.median_absolute_deviation(dff)
+                mad = stats.median_abs_deviation(dff)
                 dff = (dff - median_all)/mad
 
             y_dff_all.append(dff)
@@ -2480,7 +2491,7 @@ def plot_raw_perievents(canvas,subject,modified_data,current_trials,perievent_op
 
             if show_norm_as == "Z-Score":
                 median_all = np.median(dff)
-                mad = stats.median_absolute_deviation(dff)
+                mad = stats.median_abs_deviation(dff)
                 dff = (dff - median_all)/mad
 
             y_dff_all.append(dff)
@@ -2662,7 +2673,7 @@ def plot_perievent_average_alone(canvas,subject,current_trials,perievent_options
     
     
 def plot_perievent_zscore_alone(canvas,subject, current_trials, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
-    print(f"Trials for auc from z-score: {current_trials}")
+    # print(f"Trials for auc from z-score: {current_trials}")
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -2775,7 +2786,7 @@ def plot_perievent_zscore_alone(canvas,subject, current_trials, perievent_option
     return raw_df
 
 def plot_perievent_zscore_with_trials_alone(canvas,subject, current_trials, perievent_options_dict,analyzed_perievent_dict,export,save_plots,group_name,settings_dict,export_loc_data):
-    print(f"Trials for auc from z-score: {current_trials}")
+    # print(f"Trials for auc from z-score: {current_trials}")
     settings_dict[0]["subject"] = subject
     settings_dict[0]["subject_group_name"] = group_name
     settings_dict[0]["baseline_from_sec"] =perievent_options_dict["baseline_from"]
@@ -5705,7 +5716,6 @@ def show_polynomial_fitting_custom_baseline(canvas, settings_dict,downsampled,ba
     total_seconds_baseline = ts_baseline_arr[-1]-ts_baseline_arr[0]
     # start time from zero
     ts_reset = [i*total_seconds/len(ts_arr) for i in range(len(ts_arr))]
-    ts_baseline_reset = [i*total_seconds_baseline/len(ts_arr) for i in range(len(ts_baseline_arr))]
 
     if smooth == True:
         print("Start smoothing",smooth_window)
@@ -5719,30 +5729,65 @@ def show_polynomial_fitting_custom_baseline(canvas, settings_dict,downsampled,ba
 
     # in order to suggest if user should normalize using modified method
     # check if signals in both channels do not decrease equally
-    # fit time axis to the 465nm stream 
-    bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_baseline_reset,signal_baseline_arr,1)
-    # fit time axis the 405nm stream
-    bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_baseline_reset,control_baseline_arr,1)
-    # the below returns first: slope, second: intercept
-    print("bls_Ca",bls_Ca.convert().coef[::-1])
-    # the below returns first: slope, second: intercept
-    print("bls_ref",bls_ref.convert().coef[::-1])
+    # filter out signal values that are below or above 2 standard deviations from the signal mean  
+    mean_baseline_signal = np.mean(signal_baseline_arr)
+    stdev_baseline_signal = np.std(signal_baseline_arr)
+    mean_baseline_control = np.mean(control_baseline_arr)
+    stdev_baseline_control = np.std(control_baseline_arr)
+    indexes_signal = np.where((signal_baseline_arr<mean_baseline_signal+2*stdev_baseline_signal) & (signal_baseline_arr>mean_baseline_signal-2*stdev_baseline_signal))
+    selected_signal = signal_baseline_arr[indexes_signal]
+    selected_ts_baseline_signal_arr = ts_baseline_arr[indexes_signal]
+    indexes_control = np.where((control_baseline_arr<mean_baseline_control+2*stdev_baseline_control) & (control_baseline_arr>mean_baseline_control-2*stdev_baseline_control))
+    selected_control = control_baseline_arr[indexes_control]
+    selected_ts_baseline_control_arr = ts_baseline_arr[indexes_control]
+    new_signal_mean = np.mean(selected_signal)
+    new_control_mean = np.mean(selected_control)
+    # fit time axis to the 465nm stream  
+    bls_Ca = np.polynomial.polynomial.Polynomial.fit(selected_ts_baseline_signal_arr,selected_signal,1)
+    bls_ref = np.polynomial.polynomial.Polynomial.fit(selected_ts_baseline_control_arr,selected_control,1)
+
     # put those values in a dictionary
     slope_intercept_dict = {"signal_slope_intercept":bls_Ca.convert().coef[::-1],
-                            "control_slope_intercept":bls_ref.convert().coef[::-1]
-    }
-
-    if normalization == 'Standard Polynomial Fitting':                   
-        # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
-        mu = np.mean(control_baseline_arr)
-        std = np.std(control_baseline_arr, ddof=0)
-        # Call np.polyfit(), using the shifted and scaled version of control_arr
-        cscaled = np.polynomial.polynomial.Polynomial.fit((control_baseline_arr - mu)/std, signal_baseline_arr, 1)
-        # Create a poly1d object that can be called
-        # https://numpy.org/doc/stable/reference/routines.polynomials.html
+                                "control_slope_intercept":bls_ref.convert().coef[::-1]
+        }
+    ##########################################################
+    # # debug
+    # df_before = pd.DataFrame({"Time (sec)": ts_baseline_arr,
+    #                             "Signal": signal_baseline_arr,
+    #                             "Control": control_baseline_arr})
+    # df_before.to_csv("custom_baseline_before.csv", index=False)
+    # df_signal_after = pd.DataFrame({"Sample": selected_ts_baseline_signal_arr,
+    #                             "Signal": selected_signal})
+    # df_control_after = pd.DataFrame({"Sample": selected_ts_baseline_control_arr,
+    #                             "Control": selected_control})
+    # df_signal_after.to_csv("custom_baseline_signal_filtered.csv", index=False)
+    # df_control_after.to_csv("custom_baseline_control_filtered.csv", index=False)
+    #################################################################################################
+    if normalization == 'Standard Polynomial Fitting':    
+        # filter out signal values that are below or above 2 standard deviations from the signal mean  
+        mean_baseline_signal = np.mean(signal_baseline_arr)
+        stdev_baseline_signal = np.std(signal_baseline_arr)
+        indexes = np.where((signal_baseline_arr<mean_baseline_signal+2*stdev_baseline_signal) & (signal_baseline_arr>mean_baseline_signal-2*stdev_baseline_signal))
+        selected_signal = signal_baseline_arr[indexes]
+        selected_control = control_baseline_arr[indexes]
+        mu = np.mean(selected_control)
+        std = np.std(selected_control)
+        cscaled = np.polynomial.polynomial.Polynomial.fit((selected_control - mu)/std, selected_signal, 1)
         pscaled = Polynomial(cscaled.convert().coef)
-        # Inputs to pscaled must be shifted and scaled using mu and std
-        F0 = pscaled((control_arr - mu)/std)    
+        F0 = pscaled((control_arr - mu)/std)
+        
+        ##########################################################################################################           
+        # # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+        # mu = np.mean(control_baseline_arr)
+        # std = np.std(control_baseline_arr, ddof=0)
+        # # Call np.polyfit(), using the shifted and scaled version of control_arr
+        # cscaled = np.polynomial.polynomial.Polynomial.fit((control_baseline_arr - mu)/std, signal_baseline_arr, 1)
+        # # Create a poly1d object that can be called
+        # # https://numpy.org/doc/stable/reference/routines.polynomials.html
+        # pscaled = Polynomial(cscaled.convert().coef)
+        # # Inputs to pscaled must be shifted and scaled using mu and std
+        # F0 = pscaled((control_arr - mu)/std)  
+        ###########################################################################################################  
         # plot
         # clear previous figure
         canvas.fig.clf()
@@ -5765,9 +5810,15 @@ def show_polynomial_fitting_custom_baseline(canvas, settings_dict,downsampled,ba
     
         canvas.draw()
     
-    if normalization == 'Modified Polynomial Fitting':           
-        F0Ca = polyval(ts_reset,bls_Ca.convert().coef)
-        F0Ref = polyval(ts_reset,bls_ref.convert().coef)
+    if normalization == 'Modified Polynomial Fitting': 
+        F0Ca = polyval(ts_arr,bls_Ca.convert().coef)
+        F0Ref = polyval(ts_arr,bls_ref.convert().coef)  
+        # print(f"signal mean, stdv, len: {mean_baseline_signal}, {stdev_baseline_signal}, {len(selected_signal)}") 
+        # print(f"control mean, stdv, len: {mean_baseline_control}, {stdev_baseline_control}, {len(selected_control)}") 
+        # print(f"signal poly: {bls_Ca.convert().coef[::-1]}\ncontrol poly: {bls_ref.convert().coef[::-1]}")
+###############################################################################
+        # F0Ca = polyval(ts_reset,bls_Ca.convert().coef)
+        # F0Ref = polyval(ts_reset,bls_ref.convert().coef)
         # plot
         # clear previous figure
         canvas.fig.clf()

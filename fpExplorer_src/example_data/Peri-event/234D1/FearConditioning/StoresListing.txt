@@ -1,0 +1,28 @@
+Experiment: JS_pilot_Jan2021
+Subject: 234D1
+User: User
+Date: 05/24/2021
+Time: 11:24:49am
+
+ObjectID: RZn(1) - RZn Processor
+ StoreID: Note
+ StoreID: PrtA
+ StoreID: PrtB
+
+ObjectID: FibPho1 - Fiber Photometry
+ StoreID: 465A
+ StoreID: 405A
+ StoreID: Fi1i
+ StoreID: Fi1r
+
+
+Flat Listing:
+StoreID  Gizmo/Hal
+405A     FibPho1
+465A     FibPho1
+Fi1i     FibPho1
+Fi1r     FibPho1
+Note     RZn(1)
+PrtA     RZn(1)
+PrtB     RZn(1)
+

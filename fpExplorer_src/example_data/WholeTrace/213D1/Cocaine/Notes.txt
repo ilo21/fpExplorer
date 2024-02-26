@@ -1,0 +1,10 @@
+Experiment: JS_pilot_Jan2021
+Subject: 213D1
+User: User
+Start: 3:00:40pm 01/20/2021
+
+Note-1: 3:00:56pm "Timer start"
+Note-2: 3:06:19pm "Cocaine injection"
+Note-3: 3:27:24pm "Session end"
+
+Stop: 3:27:29pm 01/20/2021

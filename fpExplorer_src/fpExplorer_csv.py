@@ -19,6 +19,11 @@
 Created on Fri 29  4 15:08:47 2022
 
 @author: ilosz01
+
+Many of the analysis ideas are inspired on code provided by the following sources:
+Tucker-Davis Technologies ( https://www.tdt.com/support/python-sdk/offline-analysis-examples/fiber-photometry-epoch-averaging-example/)
+Dr. David Barker (pMAT; Bruno C.A. et al. 2021, Pharm BioChem Behav 201, https://doi.org/10.1016/j.pbb.2020.173093)
+Dr. Patrik Mulholland (Braunsheidel K.M. et al. 2019, J Neurosci 39(46), https://doi.org/10.1523/JNEUROSCI.1674-19.2019)
 """
 
 
@@ -1148,6 +1153,7 @@ class PreviewEventBasedWidget(QWidget):
             begin,end = trimmed[0]
             self.trim_beginning_sec.setText(str(begin))
             self.trim_ending_sec.setText(str(end))
+            
     # check and set event for current subject      
     def check_events(self):
         self.options["subject"] = self.subject_comboBox.currentText()
