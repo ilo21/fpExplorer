@@ -1,4 +1,4 @@
-# <div align="center">fpVideoExplorer<br><br>![rat64x64](https://github.com/ilo21/fpExplorer/assets/87764674/49feae4c-5053-4198-b5ee-5c654db57f61)<br> [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Created my free logo at LogoMakr.com](https://img.shields.io/badge/Created%20my%20free%20logo%20at-LogoMakr.com-blue)](https://logomakr.com/)
+# <div align="center">fpVideoCreator<br><br>![rat64x64](https://github.com/ilo21/fpExplorer/assets/87764674/49feae4c-5053-4198-b5ee-5c654db57f61)<br> [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Created my free logo at LogoMakr.com](https://img.shields.io/badge/Created%20my%20free%20logo%20at-LogoMakr.com-blue)](https://logomakr.com/)
   <br></div>
 ## What is it?
 fpVideoExplorer is an open-source application that allows users to preview peri event time windows of fiber photometry data recorded using Tucker Davis Technologies (TDT) systems.<br>
