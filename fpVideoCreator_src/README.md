@@ -7,7 +7,7 @@ The application can:<br>
 - extract matched peri event time window of the recorded video and save it as a separate video file (*.avi)
 - synchronize both: peri event video and animated signal and save it as a separate video file (*.avi)<br>
 ## Usage
-See the detailed [User Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoExplorer_src/Documentation/fpVideoExplorerQuickGuide.pdf)<br>
+See the detailed [User Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoCreator_src/Documentation/fpVideoCreatorQuickGuide.pdf)<br>
 ## Limitations
 At the moment it works only for datafiles that were created with TDT's Synapse software 
 ## Contributors
