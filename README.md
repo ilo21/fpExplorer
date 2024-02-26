@@ -7,12 +7,12 @@ fpExplorer is an open-source application that allows users to preview and perfor
 ![batch-z-score-options](https://github.com/ilo21/fpExplorer/assets/87764674/33949224-17ef-4df6-9d26-a502e05281b1)
 <br>
 ## Usage
-We provide users with a Python source code as well as an independent windows application that does not require any programming background. (See the detailed [Application Guide](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf) and [Installation](#installation) instructions.)<br>
+We provide users with a Python source code as well as an independent windows application that does not require any programming background. (See the detailed [Application Guide](https://github.com/ilo21/fpExplorer/blob/main/fpExplorer_src/Documentation/docs.pdf) and [Installation](#installation) instructions.)<br>The example data files to test the fpExplorer application are available [here](https://github.com/ilo21/fpExplorer/tree/main/fpExplorer_src/example_data).
 <br><br>
 ![Flow](https://user-images.githubusercontent.com/87764674/174672419-8a7a6296-88f5-40da-a291-fd0218cd0c15.png)
 <br>
 ## Optional Peri Event Video Extraction
-In order to be able to preview the recorded signal around our events together with the recorded videos, we developed a small additional application: [fpVideoExplorer](https://github.com/ilo21/fpExplorer/tree/main/fpVideoExplorer_src). 
+In order to be able to preview the recorded signal around our events together with the recorded videos, we developed a small additional application: [fpVideoCreator](https://github.com/ilo21/fpExplorer/tree/main/fpVideoCreator_src). 
 ## Installation
 - Windows application: <br>
 The installation file for the desktop application is available [here](https://github.com/ilo21/fpExplorer/releases). Download the fpExplorer.Installer.exe file and run it.
