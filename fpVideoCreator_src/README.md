@@ -9,7 +9,7 @@ The application can:<br>
 ## Usage
 See the detailed [User Guide](https://github.com/ilo21/fpExplorer/blob/main/fpVideoCreator_src/Documentation/fpVideoCreatorQuickGuide.pdf)<br>
 ## Limitations
-At the moment it works only for datafiles that were created with TDT's Synapse software 
+At the moment it works only for data files that were created with TDT's Synapse software 
 ## Contributors
 - [Ilona Szczot](https://liu.se/en/employee/ilosz01) (development and analytical expertise)
 - [Joost Wiskerke](https://liu.se/en/employee/joowi80) (development and analytical expertise)
