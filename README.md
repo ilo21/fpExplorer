@@ -15,7 +15,7 @@ We provide users with a Python source code as well as an independent windows app
 In order to be able to preview the recorded signal around our events together with the recorded videos, we developed a small additional application: [fpVideoCreator](https://github.com/ilo21/fpExplorer/tree/main/fpVideoCreator_src). 
 ## Installation
 - Windows application: <br>
-The installation file for the desktop application is available [here](https://github.com/ilo21/fpExplorer/releases). Download the fpExplorer.Installer.exe file and run it.
+The installation files for desktop application are available [here](https://github.com/ilo21/fpExplorer/releases). Download the fpExplorerInstaller.exe for fpExplorer app or fpVideoCreatorInstaller.exe for fpVideoCreator app.
 ## Development
 - Install [Anaconda](https://www.anaconda.com/products/individual) Python Distribution.
 - Create a separate environment for the development.
