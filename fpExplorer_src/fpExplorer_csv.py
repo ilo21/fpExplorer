@@ -3644,10 +3644,30 @@ class PreviewEventBasedWidget(QWidget):
 
         # in order to suggest if user should normalize using modified method
         # check if signals in both channels do not decrease equally
+        # filter out signal values that are below or above 2 standard deviations from the signal mean 
         # fit time axis to the 465nm stream 
-        bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_reset,signal_arr,1)
+        mean_signal = np.mean(signal_arr)
+        stdev_signal = np.std(signal_arr)
+        mean_control = np.mean(control_arr)
+        stdev_control = np.std(control_arr)
+        indexes_signal = np.where((signal_arr<mean_signal+2*stdev_signal) & (signal_arr>mean_signal-2*stdev_signal))
+        selected_signal = signal_arr[indexes_signal]
+        selected_ts_signal_arr = ts_arr[indexes_signal]
+        indexes_control = np.where((control_arr<mean_control+2*stdev_control) & (control_arr>mean_control-2*stdev_control))
+        selected_control = control_arr[indexes_control]
+        selected_ts_control_arr = ts_arr[indexes_control]
+        # fit time axis to the 465nm stream  
+        bls_Ca = np.polynomial.polynomial.Polynomial.fit(selected_ts_signal_arr,selected_signal,1)
         # fit time axis the 405nm stream
-        bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_reset,control_arr,1)
+        bls_ref = np.polynomial.polynomial.Polynomial.fit(selected_ts_control_arr,selected_control,1)
+        #######################
+        # # in order to suggest if user should normalize using modified method
+        # # check if signals in both channels do not decrease equally
+        # # fit time axis to the 465nm stream 
+        # bls_Ca = np.polynomial.polynomial.Polynomial.fit(ts_reset,signal_arr,1)
+        # # fit time axis the 405nm stream
+        # bls_ref = np.polynomial.polynomial.Polynomial.fit(ts_reset,control_arr,1)
+        ####################################################################################
         # the below returns first: slope, second: intercept
         print("bls_Ca",bls_Ca.convert().coef[::-1])
         # the below returns first: slope, second: intercept
@@ -3658,16 +3678,29 @@ class PreviewEventBasedWidget(QWidget):
         }
 
         if normalization == 'Standard Polynomial Fitting':                   
-            # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
-            mu = np.mean(control_arr)
-            std = np.std(control_arr, ddof=0)
-            # Call np.polyfit(), using the shifted and scaled version of control_arr
-            cscaled = np.polynomial.polynomial.Polynomial.fit((control_arr - mu)/std, signal_arr, 1)
-            # Create a poly1d object that can be called
-            # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            # # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+            # mu = np.mean(control_arr)
+            # std = np.std(control_arr, ddof=0)
+            # # Call np.polyfit(), using the shifted and scaled version of control_arr
+            # cscaled = np.polynomial.polynomial.Polynomial.fit((control_arr - mu)/std, signal_arr, 1)
+            # # Create a poly1d object that can be called
+            # # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            # pscaled = Polynomial(cscaled.convert().coef)
+            # # Inputs to pscaled must be shifted and scaled using mu and std
+            # F0 = pscaled((control_arr - mu)/std)   
+            #############################################################################################
+            # filter out signal values that are below or above 2 standard deviations from the signal mean 
+            mean_signal = np.mean(signal_arr)
+            stdev_signal = np.std(signal_arr)
+            indexes = np.where((signal_arr<mean_signal+2*stdev_signal) & (signal_arr>mean_signal-2*stdev_signal))
+            selected_signal = signal_arr[indexes]
+            selected_control = control_arr[indexes]
+            mu = np.mean(selected_control)
+            std = np.std(selected_control)
+            cscaled = np.polynomial.polynomial.Polynomial.fit((selected_control - mu)/std, selected_signal, 1)
             pscaled = Polynomial(cscaled.convert().coef)
-            # Inputs to pscaled must be shifted and scaled using mu and std
-            F0 = pscaled((control_arr - mu)/std)    
+            F0 = pscaled((control_arr - mu)/std)
+            ################################################################################# 
             # plot
             # clear previous figure
             canvas.fig.clf()
@@ -3810,18 +3843,32 @@ class PreviewEventBasedWidget(QWidget):
                 x = np.array(x)
                 y = np.array(y)
                 
-                # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
-                mu = np.mean(x)
-                std = np.std(x, ddof=0)
-                # Call np.polyfit(), using the shifted and scaled version of control_arr
-                cscaled = np.polynomial.polynomial.Polynomial.fit((x - mu)/std, y, 1)
-                # Create a poly1d object that can be called
-                # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            #     # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+            #     mu = np.mean(x)
+            #     std = np.std(x, ddof=0)
+            #     # Call np.polyfit(), using the shifted and scaled version of control_arr
+            #     cscaled = np.polynomial.polynomial.Polynomial.fit((x - mu)/std, y, 1)
+            #     # Create a poly1d object that can be called
+            #     # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            #     pscaled = Polynomial(cscaled.convert().coef)
+            #     # Inputs to pscaled must be shifted and scaled using mu and std
+            #     F0 = pscaled((x - mu)/std)
+            # #    print("F0?",F0[:20])
+            #     dffnorm = (y - F0)/F0 * 100
+                #############################################################################################
+                # filter out signal values that are below or above 2 standard deviations from the signal mean 
+                mean_signal = np.mean(y)
+                stdev_signal = np.std(y)
+                indexes = np.where((y<mean_signal+2*stdev_signal) & (y>mean_signal-2*stdev_signal))
+                selected_signal = y[indexes]
+                selected_control = x[indexes]
+                mu = np.mean(selected_control)
+                std = np.std(selected_control)
+                cscaled = np.polynomial.polynomial.Polynomial.fit((selected_control - mu)/std, selected_signal, 1)
                 pscaled = Polynomial(cscaled.convert().coef)
-                # Inputs to pscaled must be shifted and scaled using mu and std
                 F0 = pscaled((x - mu)/std)
-            #    print("F0?",F0[:20])
                 dffnorm = (y - F0)/F0 * 100
+                ##############################################################################################
                 # find all values of the normalized DF/F that are negative so you can next shift up the curve 
                 # to make 0 the mean value for DF/F
                 negative = dffnorm[dffnorm<0]
@@ -3838,14 +3885,37 @@ class PreviewEventBasedWidget(QWidget):
             for x, y in zip(control_perievent_data, GCaMP_perievent_data):
                 x = np.array(x)
                 y = np.array(y)
-                bls_signal = np.polynomial.polynomial.Polynomial.fit(ts1, y, 1)
-                F0_signal = polyval(ts1,bls_signal.convert().coef)
-                dFF_signal = (y - F0_signal)/F0_signal *100
+                # bls_signal = np.polynomial.polynomial.Polynomial.fit(ts1, y, 1)
+                # F0_signal = polyval(ts1,bls_signal.convert().coef)
+                # dFF_signal = (y - F0_signal)/F0_signal *100
                 
-                bls_control = np.polynomial.polynomial.Polynomial.fit(ts2,x,1)
+                # bls_control = np.polynomial.polynomial.Polynomial.fit(ts2,x,1)
+                # F0_control = polyval(ts2,bls_control.convert().coef)
+                # dFF_control = (x - F0_control)/F0_control *100
+                # dFFnorm = dFF_signal - dFF_control
+                ############################################################################################
+                # 23/01 filter out signal values that are below or above 2 standard deviations from the signal mean 
+                mean_signal = np.mean(y)
+                stdev_signal = np.std(y)
+                mean_control = np.mean(x)
+                stdev_control = np.std(x)
+                indexes_signal = np.where((y<mean_signal+2*stdev_signal) & (y>mean_signal-2*stdev_signal))
+                selected_signal = y[indexes_signal]
+                selected_ts_signal_arr = ts1[indexes_signal]
+                indexes_control = np.where((x<mean_control+2*stdev_control) & (x>mean_control-2*stdev_control))
+                selected_control = x[indexes_control]
+                selected_ts_control_arr = ts2[indexes_control]
+                # fit time axis to the 465nm stream  
+                bls_signal = np.polynomial.polynomial.Polynomial.fit(selected_ts_signal_arr,selected_signal,1)
+                bls_control = np.polynomial.polynomial.Polynomial.fit(selected_ts_control_arr,selected_control,1)
+                F0_signal = polyval(ts1,bls_signal.convert().coef)
                 F0_control = polyval(ts2,bls_control.convert().coef)
+                # dF/F for the 465 channel
+                dFF_signal = (y - F0_signal)/F0_signal *100
+                # dF/F for the 405 channel
                 dFF_control = (x - F0_control)/F0_control *100
                 dFFnorm = dFF_signal - dFF_control
+                ##########################################################################
                 # find all values of the normalized DF/F that are negative so you can next shift up the curve 
                 # to make 0 the mean value for DF/F
                 negative = dFFnorm[dFFnorm<0]

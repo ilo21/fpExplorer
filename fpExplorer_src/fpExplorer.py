@@ -5119,6 +5119,9 @@ class PreviewEventBasedWidget(QWidget):
             # create normalized data for most recent settings
             for i in range(len(self.parent_window.batch_export_settings_dict["batch_subjects"])):
                 subject = self.parent_window.batch_export_settings_dict["batch_subjects"][i]
+                # if subject was not previewed yet, read data and add to dict
+                if subject not in self.raw_data_dict:
+                    self.get_raw_data(subject, self.parent_window.preview_params[1][subject])
                 # create separate options dictionary for batch analysis
                 self.batch_options_dict = {"subject":subject,
                                             "subject_group_name":self.parent_window.batch_export_settings_dict["batch_subjects_group_names"][i]}
@@ -5136,9 +5139,9 @@ class PreviewEventBasedWidget(QWidget):
                     if len(evt[0])==0:
                         self.show_info_dialog("Some "+self.options["event2"]+" event data is missing.")
                     self.event_data.append(evt)
-                # if subject was not previewed yet, read data and add to dict
-                if subject not in self.raw_data_dict:
-                    self.get_raw_data(subject, self.parent_window.preview_params[1][subject])
+                # # if subject was not previewed yet, read data and add to dict
+                # if subject not in self.raw_data_dict:
+                #     self.get_raw_data(subject, self.parent_window.preview_params[1][subject])
                 if  self.raw_data_dict[subject] != None:
                     # trim to batch export settings
                     # key is the subject name, value is a list
