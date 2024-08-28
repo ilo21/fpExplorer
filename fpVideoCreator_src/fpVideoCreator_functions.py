@@ -580,7 +580,7 @@ def find_closest_time_pair_indexes(time_stamp,found_index_list=[],times_to_compa
                 before_and_after_frame_idx.append(i)
         return before_and_after_frame_idx
     
-def shift_indexes_left(input_list,shift_no):             
+def shift_indexes_left(input_list,shift_no):  # make sure the shift_no is positive           
     shifted_list = []
     for i in range(len(input_list)):
         el = input_list[i]
@@ -617,6 +617,7 @@ def create_trial_animations(data,trials,event_name,fps,saving_path,subject,cam_e
     if not os.path.exists(saving_path):
         os.mkdir(saving_path)
     headers = all_trials_df.columns.tolist()
+    # print(f"Headers {headers}")
     # get time and trial values
     time_list = all_trials_df.iloc[:,0].tolist()
     # list of tuples: column idx, trial
@@ -624,16 +625,19 @@ def create_trial_animations(data,trials,event_name,fps,saving_path,subject,cam_e
     # change trials to column indexes in the dataframe
     for i in range(len(headers)):
         header_split = headers[i].split(" ")
-        try:
-            trial_col = int(header_split[0][-1])
-            for trial in which_trials:
-                if trial_col == trial:
-                    indexes_with_trials.append((i,trial))
-        except:
-            pass
-            # print("Could not find trial number in the header")
+        if header_split[0].startswith("Trial"):
+            try:
+                # convert all after "Trial" to int
+                trial_col = int(header_split[0][5:])
+                for trial in which_trials:
+                    if trial_col == trial:
+                        indexes_with_trials.append((i,trial))
+            except:
+                pass
+                # print("Could not find trial number in the header")
     # for trial in which_trials:
     print()
+    print(f"Total trials to animate: {len(indexes_with_trials)}")
     if len(indexes_with_trials) > 0:
         for i in tqdm(range(len(indexes_with_trials)), total= len(indexes_with_trials), mininterval = 3, desc="Saving animations"):
             # print(f"Trial: {trial}")

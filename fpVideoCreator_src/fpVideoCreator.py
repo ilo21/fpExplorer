@@ -71,7 +71,7 @@ DEFAULT_HZ = 100
 MAX_SMOOTH_WINDOW = 10000
 DEFAULT_SMOOTH_WINDOW = 10
 DEFAULT_EXPORT_FOLDER = "_fpVideoCreatorAnalysis"
-SHIFT_MAX = 100
+SHIFT_MAX = 20
 VIDEO_DELAY_SEC = 0.2 # the camera starts recording later than fp data collection
 ###############################
 # CLASS FORM MAIN GUI WINDOW  #
@@ -795,16 +795,13 @@ class PreviewEventBasedWidget(QWidget):
                           self.preview_init_params[1][self.preview_init_params[0][0]["subject_names"][0]])
         # read first subject's frequency and create suggested downsampled rate
         self.current_fs = fpVideoCreator_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
-        # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
-        self.suggested_downsample_samples = DEFAULT_HZ
-        self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-        self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
-        self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
-        # print("Current suggested downsample rate:",self.settings_dict[0]['downsample'])
-        # keep trimmed data separately with latest trimming settings
-        # first element of that list is beginning and end seconds to trim
-        # second element is trimmed data dict ts:timestamps, signal:data,control:data
-        self.trimmed_raw_data_dict = {}
+        if self.settings_dict[0]['downsample'] == None:
+            # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
+            self.suggested_downsample_samples = DEFAULT_HZ
+            self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
+            self.suggested_downsample_rate = round(self.current_fs/self.suggested_downsample_samples)
+            self.settings_dict[0]["entered_downsample"] = self.suggested_downsample_rate
+           
         
         # create a list of available events for current subject
         self.events_from_current_subject = fpVideoCreator_functions.get_events(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]])
@@ -927,9 +924,9 @@ class PreviewEventBasedWidget(QWidget):
         self.after_sec_text = QLineEdit("15")
         self.after_sec_text.setValidator(QtGui.QIntValidator())
         self.options_layout.addRow(self.after_sec_label,self.after_sec_text)
-        self.shift_label = QLabel("Shift n Video Frames:")
+        self.shift_label = QLabel("Shift n/-n Video Frames:")
         self.shift_text = QLineEdit("0")
-        shift_info = "Between 0 and " +str(SHIFT_MAX)+" frames"
+        shift_info = "Positive frames make the video shift to the left. Negative to the right."
         self.shift_text.setToolTip(shift_info)
         self.shift_text.setValidator(QtGui.QIntValidator())
         self.options_layout.addRow(self.shift_label,self.shift_text)
@@ -981,8 +978,8 @@ class PreviewEventBasedWidget(QWidget):
         # set current subject
         self.options["subject"] = self.subject_comboBox.currentText()
         shift = int(self.shift_text.text())
-        if shift < 0 or shift > SHIFT_MAX:
-            self.show_info_dialog("If you need to shift so much, you might have a problem with your data.") 
+        if shift > SHIFT_MAX or shift < -SHIFT_MAX:
+            self.show_info_dialog("Max shift is " + str(SHIFT_MAX)+ " frames.\nIf you need to shift more, you might have a problem with your data.") 
             return False
         else:
             self.options["shift"] = shift
@@ -1023,6 +1020,7 @@ class PreviewEventBasedWidget(QWidget):
         # # create trials list 
         # self.current_trials = [i+1 for i in range(len(self.event_onsets[0]))]
         print("\nEvent:",self.options["event"])
+        print("Total event onsets", len(self.event_onsets[0]))
         print("This event onsets", self.event_onsets[0])
         if len(self.event_onsets[0]) == 0:
             self.show_info_dialog("Some "+self.options["event"]+" event data is missing.")
@@ -1122,12 +1120,14 @@ class PreviewEventBasedWidget(QWidget):
             return
         # read new subject's frequency and update suggested downsampled rate (only if it is different)
         new_fs = fpVideoCreator_functions.get_frequency(self.raw_data_dict[self.preview_init_params[0][0]["subject_names"][0]],self.preview_init_params[0][0]["signal_name"])
+        print(f"new fs: {new_fs}, previous fs: {self.current_fs}")
         if new_fs != self.current_fs:
             # self.suggested_downsample_samples = int(int(self.current_fs)*DEFAULT_DOWNSAMPLE_PCT/100)
             self.suggested_downsample_samples = DEFAULT_HZ
             self.settings_dict[0]['downsample'] = self.suggested_downsample_samples
-            self.suggested_downsample_rate = int(int(self.current_fs)/self.suggested_downsample_samples)
+            self.suggested_downsample_rate = int(int(new_fs)/self.suggested_downsample_samples)
             self.settings[0]["entered_downsample"] = self.suggested_downsample_rate
+            self.current_fs = new_fs
         
         
             
@@ -1189,6 +1189,9 @@ class PreviewEventBasedWidget(QWidget):
             video.release()
             # find frame ind before and after for each trial (for each trial there will be a tuple: trial, list of size=2(before and after))
             all_trials_before_and_after_frame_idx = []
+            # check if there is enough data before and after selected event
+            enough_data_before = [] # list of booleans for each selected trial
+            enough_data_after = []  # list of booleans
             for i in range(len(self.current_trials)):
                 trial_idx = self.current_trials[i]-1 # trials start from 1
                 trial_ts = self.event_onsets[0][trial_idx] + current_cam_ons[0]# correct for delay + VIDEO_DELAY_SEC?...First cam event is the offset
@@ -1221,11 +1224,32 @@ class PreviewEventBasedWidget(QWidget):
                                     self.show_info_dialog("Could not find before and after frame pair for the video")
                                     all_trials_before_and_after_frame_idx = []
                                     break
-        if len(all_trials_before_and_after_frame_idx) != 0:
+                #################################################################
+                # check if there is enough data before and after selected event
+                # Open video file and check video duration
+                video = cv2.VideoCapture(self.video_path)
+                # number of frames in video
+                frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+                fps = video.get(cv2.CAP_PROP_FPS)      # OpenCV v2.x used "CV_CAP_PROP_FPS"
+                duration = frame_count/fps
+                video.release()
+                if trial_ts - self.options["sec_before"] > 0:
+                    enough_data_before.append(True)
+                else:
+                    enough_data_before.append(False)
+                if trial_ts + self.options["sec_after"] < duration:
+                    enough_data_after.append(True)
+                else:
+                    enough_data_after.append(False)
+            #################################################################
+        if len(all_trials_before_and_after_frame_idx) != 0 and all(enough_data_before) == True and all(enough_data_after) == True:
             add_shift = 0
             if fps == 10:
                 add_shift = 2 # add additional shift if the video was slower
-            shifted = fpVideoCreator_functions.shift_indexes_right(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
+            if self.options["shift"] >= 0:
+                shifted = fpVideoCreator_functions.shift_indexes_right(all_trials_before_and_after_frame_idx,self.options["shift"]+add_shift) 
+            else:
+                shifted = fpVideoCreator_functions.shift_indexes_left(all_trials_before_and_after_frame_idx,abs(self.options["shift"])+add_shift) 
             print(f"shifted trials before and after: {shifted}")
             ################################################################################################################
             # create animated trials first
@@ -1234,7 +1258,12 @@ class PreviewEventBasedWidget(QWidget):
             # create folder first
             head,tail = os.path.split(self.video_path)
             video_name = tail.split(".")[0]
-            path4videos = os.path.join(self.current_saving_path,video_name+"_shift"+str(self.options["shift"])+"_videos")
+            if self.options["shift"] > 0:
+                path4videos = os.path.join(self.current_saving_path,video_name+"_right_shift"+str(self.options["shift"])+"_videos")
+            elif self.options["shift"] < 0:
+                path4videos = os.path.join(self.current_saving_path,video_name+"_left_shift"+str(abs(self.options["shift"]))+"_videos")
+            else:
+                path4videos = os.path.join(self.current_saving_path,video_name+"_shift"+str(self.options["shift"])+"_videos")
             # create as many animations as in current trials
             created_animations = fpVideoCreator_functions.create_trial_animations(self.current_trials_df,self.current_trials,event,fps,path4videos,self.options["subject"],self.options["cam_event"])
             ####################################################################################################################
@@ -1256,7 +1285,7 @@ class PreviewEventBasedWidget(QWidget):
                 self.show_info_dialog("No trial animations created. Therefore no videos either")
             #############################################################################################################################
         else:
-            self.show_info_dialog("Did not create animations or trial videos")
+            self.show_info_dialog("Did not create animations or trial videos.\nDouble check that there is enough data and video before and after the events.")
         self.enable_buttons_signal.emit()               
 
 
@@ -1290,71 +1319,85 @@ class PreviewEventBasedWidget(QWidget):
 ###############################
 # CLASS FOR SELECTING TRIALS  #
 ###############################   
-        
+
 class SelectTrialsWindow(QMainWindow):
     # pyqt signal to send experiment name
     got_trials_sig = pyqtSignal(list)
-    def __init__(self,parent_window,trials_list):
+    
+    def __init__(self, parent_window, trials_list):
         super(SelectTrialsWindow, self).__init__()
         self.setWindowTitle("Select Trials")
         self.setWindowIcon(QtGui.QIcon(ICO))
-        self.resize(400,100)
+        self.resize(400, 100)  # Adjust the size of the window
         self.parent_window = parent_window
-        # self.parent_window.app_closed.connect(self.exit_app)
-        self.channel_names = trials_list
+        # self.channel_names = trials_list
         self.checked_trials = []
-
         self.bold_label_stylesheet = "QLabel {font-weight: bold}"
-            
-        self.main_widget = QWidget()
-        self.setCentralWidget(self.main_widget)
         
-        self.main_layout = QVBoxLayout()
-        self.main_layout.setContentsMargins(10,10,10,10)
+        # Create central widget
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        
+        # Main layout for the window
+        self.main_layout = QVBoxLayout(self.central_widget)
+        
+        # Label and select all button (outside of the scroll area)
         self.trials_label = QLabel("Select trials:")
         self.trials_label.setStyleSheet(self.bold_label_stylesheet)
         self.main_layout.addWidget(self.trials_label)
+        
+        self.select_all_trials_btn = QRadioButton("Deselect/Select All")
+        self.main_layout.addWidget(self.select_all_trials_btn)
+        
+        # Create scroll area for check buttons
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.main_layout.addWidget(self.scroll_area)
 
-        # update trials according to batch settings
+        # Widget to contain the check buttons inside the scroll area
+        self.scroll_widget = QWidget()
+        self.scroll_area.setWidget(self.scroll_widget)
+        
+        # Layout for check buttons inside the scroll area
+        self.scroll_layout = QHBoxLayout(self.scroll_widget)
+        self.scroll_layout.setAlignment(Qt.AlignLeft)  # Align checkboxes to the left
         self.trials_button_group = []
-        # create new buttons
-        self.trials_layout = QHBoxLayout()
-        self.trials_layout.setAlignment(Qt.AlignCenter)
+        
+        # Add checkboxes to the scrollable area
         for i in range(trials_list):
-            # create btn
-            # add button to a group
-            # add to list
-            # add to layout
-            btn = QCheckBox(str(i+1))
+            btn = QCheckBox(str(i + 1))
             btn.setChecked(True)
-            self.trials_layout.addWidget(btn)
-            self.trials_button_group.append(btn)    
-        self.main_layout.addLayout(self.trials_layout)
+            self.scroll_layout.addWidget(btn)
+            self.trials_button_group.append(btn)
+        
+        # Add Done button (outside of the scroll area)
         self.btn_layout = QHBoxLayout()
         self.btn_layout.setAlignment(Qt.AlignRight)
         self.select_btn = QPushButton("Done")
         self.btn_layout.addWidget(self.select_btn)
-        self.main_layout.addLayout(self.btn_layout)  
-        self.main_widget.setLayout(self.main_layout)
+        self.main_layout.addLayout(self.btn_layout)
         
+        # Connect signals
         self.select_btn.clicked.connect(self.read_trials)
-        
-    def read_trials(self):
-        for btn in self.trials_button_group:
-            # print(btn.text(),btn.isChecked())
-            if btn.isChecked():
-                self.checked_trials.append(int(btn.text()))
-        # print("selected trials",self.checked_trials)
-        self.select_btn.setEnabled(False)
-        QApplication.processEvents() 
-        self.close()
-        
-    def closeEvent(self,evt):
-        self.got_trials_sig[list].emit(self.checked_trials)
+        self.select_all_trials_btn.toggled.connect(self.select_all_btn_clicked)
 
+    
+    def select_all_btn_clicked(self):
+        for btn in self.trials_button_group:
+            btn.setChecked(not btn.isChecked())
+    
+    def read_trials(self):
+        self.checked_trials = [int(btn.text()) for btn in self.trials_button_group if btn.isChecked()]
+        self.select_btn.setEnabled(False)
+        QApplication.processEvents()
+        self.close()
+    
+    def closeEvent(self, evt):
+        self.got_trials_sig[list].emit(self.checked_trials)
+    
     def exit_app(self):
         self.close()
-################### end SelectTrialsWindow class  
+##########################################################################################################
  
 
 ################################################################
