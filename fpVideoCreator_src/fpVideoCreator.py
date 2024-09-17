@@ -172,7 +172,7 @@ class MyMainWidget(QMainWindow):
 
     def enable_all_buttons(self):
         self.select_data_btn.setEnabled(True)
-        if (len(self.select_data_window_content)>0 or len(self.select_custom_data_window_content)>0):
+        if (len(self.select_data_window_content)>0):
             self.settings_btn.setEnabled(True)
         QApplication.processEvents() 
 
@@ -786,6 +786,10 @@ class PreviewEventBasedWidget(QWidget):
         self.options = {"subject":self.preview_init_params[0][0]["subject_names"][0],
                         "event":""
                         }
+
+        # if the csv file with events was included
+        self.is_evt_csv = False
+        self.evt_csv_df = None
         
         # a dictionary with subject:extracted raw data
         self.raw_data_dict = {}
@@ -869,6 +873,19 @@ class PreviewEventBasedWidget(QWidget):
             + "font-size: 6;\n" \
             + "font-weight: bold;\n" \
             + "}" 
+        self.small_btn_stylesheet = \
+            ".QPushButton{\n" \
+            + "padding-left: 5px;\n" \
+            + "padding-right: 5px;\n" \
+            + "padding-top: 1px;\n"\
+            + "padding-bottom: 1px;\n" \
+            + "margin-left:0px;\n" \
+            + "margin-right:0px;\n" \
+            + "margin-top:0px;\n" \
+            + "margin-bottom:0px;\n" \
+            + "font-size: 6;\n" \
+            + "font-weight: normal;\n" \
+            + "}" 
         # create gui
         self.setupGUI()
 
@@ -909,7 +926,12 @@ class PreviewEventBasedWidget(QWidget):
         self.event_from_data_comboBox.addItems(self.events_from_current_subject)
         self.show_event_label = QLabel("Select Event")
         self.show_event_label.setStyleSheet(self.bold_label_stylesheet)
-        self.options_layout.addRow(self.show_event_label,self.event_from_data_comboBox)       
+        self.options_layout.addRow(self.show_event_label,self.event_from_data_comboBox)   
+        self.events_file_path_btn = QPushButton("Add Events\nFrom File")
+        self.events_file_path_btn.setStyleSheet(self.small_btn_stylesheet)
+        self.events_file_path_text = QLineEdit("")
+        self.events_file_path_text.textChanged.connect(self.on_evt_file_change)
+        self.options_layout.addRow(self.events_file_path_btn,self.events_file_path_text)
         self.event_name_text = QLineEdit("")
         self.event_name_text.setToolTip("i.e, Tone")
         self.options_layout.addRow("Event name (optional)",self.event_name_text)
@@ -949,6 +971,55 @@ class PreviewEventBasedWidget(QWidget):
 
         self.perievent_analysis_btn.clicked.connect(self.perievent_analysis_btn_clicked)
         self.select_folder_btn.clicked.connect(self.select_folder_btn_clicked)
+        self.events_file_path_btn.clicked.connect(self.select_events_file_btn_clicked)
+
+
+    def select_events_file_btn_clicked(self):
+        # set text field to the value of selected path
+        self.events_file_path_text.setText(QFileDialog.getOpenFileName(self,"Select file with events")[0])
+
+    # when user selects a custom csv file with events
+    def on_evt_file_change(self):
+        # check if the text path was entered
+        if len(self.events_file_path_text.text()) > 0:
+            # try to read events from csv file
+            data_ok = self.read_custom_events_from_csv()
+            if data_ok:
+                self.is_evt_csv = True
+                self.show_info_dialog("New events from csv file should be now visible under\n \"Select Event\" drop down menu")
+            else:
+                self.is_evt_csv = False
+                self.evt_csv_df = None
+                # remove csv events if there were any
+                self.event_from_data_comboBox.clear()
+                self.event_from_data_comboBox.addItems(self.events_from_current_subject)
+        else:
+            self.is_evt_csv = False
+            self.evt_csv_df = None
+            # remove csv events if there were any
+            self.event_from_data_comboBox.clear()
+            self.event_from_data_comboBox.addItems(self.events_from_current_subject)
+
+    # read events from csv file and add them to the list of events
+    def read_custom_events_from_csv(self):
+        events_path = self.events_file_path_text.text()
+        if not os.path.exists(events_path):
+            self.show_info_dialog("Could not read from selected file.\nPath does not exist.")
+            return False
+        else:
+            self.events_path = events_path # do I need to remember this?
+            self.evt_csv_df = pd.read_csv(events_path)
+            self.evt_from_csv = self.get_csv_events(self.evt_csv_df)
+            self.event_from_data_comboBox.clear()
+            self.event_from_data_comboBox.addItems(self.events_from_current_subject+self.evt_from_csv)
+            return True
+
+    def get_csv_events(self,df):
+        all_events = df.iloc[:,0].unique()
+        events = []
+        for evt in all_events:
+            events.append(str(evt))
+        return events
 
     # show a reminder when cam event is changed
     def on_cam_evt_change(self):
@@ -1013,9 +1084,12 @@ class PreviewEventBasedWidget(QWidget):
             return False
         
         # set event
-        self.options["event"] = self.event_from_data_comboBox.currentText()
         self.options["event_name"] = self.event_name_text.text()
-        self.event_onsets = fpVideoCreator_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+        self.options["event"] = self.event_from_data_comboBox.currentText()
+        if self.options["event"] in self.events_from_current_subject: # if event is from tdt data
+            self.event_onsets = fpVideoCreator_functions.get_event_on_off(self.raw_data_dict[self.options["subject"]], self.options["event"])
+        else: # if event is from csv file
+            self.event_onsets = fpVideoCreator_functions.get_csv_event_on_off(self.evt_csv_df, self.options["event"])
 
         # # create trials list 
         # self.current_trials = [i+1 for i in range(len(self.event_onsets[0]))]
@@ -1115,6 +1189,8 @@ class PreviewEventBasedWidget(QWidget):
         self.path2save_text.setText(saving_path) 
             
     def on_subject_change(self):
+        # clear csv path
+        self.events_file_path_text.setText("")
         self.options_pre_check()
         if self.raw_data_dict[self.options["subject"]] == None:
             return
@@ -1135,22 +1211,38 @@ class PreviewEventBasedWidget(QWidget):
         self.disable_buttons_signal.emit()
         all_data_read = self.read_options()
         if all_data_read:
-            self.data_by_event = fpVideoCreator_functions.filter_data_around_event_directly(self.raw_data_dict[self.options["subject"]],
-                                                                            self.options["event"],
-                                                                            self.options["sec_before"],
-                                                                            self.options["sec_after"],
-                                                                            self.settings_dict,
-                                                                            self.preview_init_params[0][0]["signal_name"],
-                                                                            self.preview_init_params[0][0]["control_name"])
-            # show popup with trials selection
-            if (len(self.data_by_event.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(self.data_by_event.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
-                trials_no = len(self.data_by_event.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
-                self.select_trials_window = SelectTrialsWindow(self,trials_no)  
-                self.select_trials_window.got_trials_sig.connect(self.selected_trials_received)
-                self.select_trials_window.show()
-            else:   # if there was not enough data
-                self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
-                self.enable_buttons_signal.emit()
+            # check if event is from tdt data
+            if self.options["event"] in self.events_from_current_subject:
+                self.data_by_event = fpVideoCreator_functions.filter_data_around_event_directly(self.raw_data_dict[self.options["subject"]],
+                                                                                self.options["event"],
+                                                                                self.options["sec_before"],
+                                                                                self.options["sec_after"],
+                                                                                self.settings_dict,
+                                                                                self.preview_init_params[0][0]["signal_name"],
+                                                                                self.preview_init_params[0][0]["control_name"])
+                # print(f"data by event:\n{self.data_by_event}")
+                # show popup with trials selection
+                if (len(self.data_by_event.streams[self.preview_init_params[0][0]["signal_name"]].filtered) > 0) and (len(self.data_by_event.streams[self.preview_init_params[0][0]["control_name"]].filtered) > 0):
+                    trials_no = len(self.data_by_event.streams[self.preview_init_params[0][0]["signal_name"]].filtered)
+                    self.select_trials_window = SelectTrialsWindow(self,trials_no)  
+                    self.select_trials_window.got_trials_sig.connect(self.selected_trials_received)
+                    self.select_trials_window.show()
+                else:   # if there was not enough data
+                    self.show_info_dialog("Not enough data that satisfy your request.\nTry changing event or times around the event.")
+                    self.enable_buttons_signal.emit()
+            # end if event was from tdt data
+            else: # if it is event from csv file
+                self.data_by_event = fpVideoCreator_functions.filter_data_around_csv_event(self.raw_data_dict[self.options["subject"]],
+                                                                                self.evt_csv_df,
+                                                                                self.options,
+                                                                                self.preview_init_params,
+                                                                                self.settings_dict)
+                # print(f"data by csv event:\n{self.data_by_event}")
+                if len(self.data_by_event["signal"]) > 0 and len(self.data_by_event["control"]):
+                    trials_no = len(self.event_onsets[0])
+                    self.select_trials_window = SelectTrialsWindow(self,trials_no)  
+                    self.select_trials_window.got_trials_sig.connect(self.selected_trials_received)
+                    self.select_trials_window.show()
         else:
             self.enable_buttons_signal.emit()
 
@@ -1164,19 +1256,30 @@ class PreviewEventBasedWidget(QWidget):
             event = self.options["event_name"]
         # list of trials
         self.current_trials = trials
-        # get normalized trials to preview
-        self.current_trials_df = fpVideoCreator_functions.get_normalized_trials(
-                                                    self.options["subject"],
-                                                    self.data_by_event,
-                                                    self.current_trials,
-                                                    event,
-                                                    self.options["sec_before"],
-                                                    self.options["sec_after"],
-                                                    self.settings_dict,
-                                                    self.preview_init_params[0][0]["signal_name"],
-                                                    self.preview_init_params[0][0]["control_name"]
-                                                    )  
-        # print(f"Trials df:\n{self.current_trials_df}")
+        if event in self.events_from_current_subject:
+            # get normalized trials
+            self.current_trials_df = fpVideoCreator_functions.get_normalized_trials(
+                                                        self.options["subject"],
+                                                        self.data_by_event,
+                                                        self.current_trials,
+                                                        event,
+                                                        self.options["sec_before"],
+                                                        self.options["sec_after"],
+                                                        self.settings_dict,
+                                                        self.preview_init_params[0][0]["signal_name"],
+                                                        self.preview_init_params[0][0]["control_name"]
+                                                        )  
+        else: # event from csv file
+            self.current_trials_df = fpVideoCreator_functions.get_normalized_csv_trials(
+                                                        self.options["subject"],
+                                                        self.data_by_event,
+                                                        self.current_trials,
+                                                        event,
+                                                        self.options["sec_before"],
+                                                        self.options["sec_after"],
+                                                        self.settings_dict
+                                                        )  
+        # print(f"Trials df:\n{self.current_trials_df}") #columns: Time (sec) and Trial1 (%df/F)...
         # look for matching trial in frames
         if self.options["subject"] in self.cam_data_dict:
             current_cam_ons = self.cam_data_dict[self.options["subject"]][0]

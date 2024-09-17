@@ -413,9 +413,143 @@ def filter_data_around_event_directly(raw_data,event_name,sec_before,sec_after,s
     
     return modified_data
 
-# plot raw but downsampled perievents
+def filter_data_around_csv_event(raw_data,events_df,perievent_options_dict,preview_init_params,settings_dict):
+        filtered = {}
+        event_name = perievent_options_dict["event"]
+        before = perievent_options_dict["sec_before"]
+        till = perievent_options_dict["sec_after"]+0.1
+        evt_onsets = get_csv_event_on_off(events_df, event_name)[0]
+        ########################################################################################
+        signal_data = get_single_channel(raw_data,preview_init_params[0][0]["signal_name"])
+        control_data = get_single_channel(raw_data,preview_init_params[0][0]["control_name"])
+        raw_ts = create_timestamps(raw_data,preview_init_params[0][0]["signal_name"],signal_data)
+        # timestamps in data do not match exactly timestamps in event file
+        evt_onsets_from_data = []
+        ########################################################################################
+        # signal_data = raw_data.iloc[:,1].to_numpy()
+        # control_data = raw_data.iloc[:,2].to_numpy()
+        # # timestamps in data do not match exactly timestamps in event file
+        # evt_onsets_from_data = []
+        # raw_ts = raw_data.iloc[:,0].to_numpy()
+        ##############################################################################
+        # round raw to 3 decimal places just in case the original time is not found
+        rounded_arr = np.around(raw_ts,decimals=3)
+        for el in evt_onsets:
+            if el in raw_ts:
+                evt_onsets_from_data.append(el)
+            else:              
+                rounded_onset = round(el,3)
+                if rounded_onset in rounded_arr:
+                    # pick only the first one
+                    result_idx = np.where(rounded_arr == rounded_onset)[0][0]
+                    evt_onsets_from_data.append(raw_ts[result_idx])
+        if len(evt_onsets_from_data) == 0:
+            print("Could not find matching event onset times times")
+            return filtered
+        
+        # chop data into windows around the events
+        signals = []
+        controls = []
+        for evt in evt_onsets_from_data:
+            condition = np.greater_equal(raw_ts,evt-before)&np.less(raw_ts,evt+till)
+            signal_temp = np.extract(condition,signal_data)
+            control_temp = np.extract(condition,control_data)
+            signals.append(signal_temp)
+            controls.append(control_temp)
+        
+        # downsample data as well
+        N = settings_dict[0]["downsample"] 
+        
+        control_downsampled = []
+        signal_downsampled = []
+        # get frequency
+        interval_float = raw_ts[1]-raw_ts[0]
+        fs = 1/interval_float
+        try:
+            for lst in controls:
+                ts = np.linspace(1, len(lst), len(lst))/fs
+                # round last time to full integer
+                last = math.floor(ts[-1])
+                # make new times till total expected
+                ts_adjusted = np.linspace(1/N,last,last*N)
+                control_interpolated = interp1d(ts, lst)
+                resampled_data = control_interpolated(ts_adjusted)
+                control_downsampled.append(resampled_data)
+            for lst in signals:
+                ts = np.linspace(1, len(lst), len(lst))/fs
+                # round last time to full integer
+                last = math.floor(ts[-1])
+                ts_adjusted = np.linspace(1/N,last,last*N)
+                signal_interpolated = interp1d(ts, lst)
+                resampled_data = signal_interpolated(ts_adjusted)
+                signal_downsampled.append(resampled_data)
+            filtered["signal"] = signal_downsampled
+            filtered["control"] = control_downsampled   
+        except:
+            print("Not enough data that satisfy your request. Try changing event or times around event.")
+        
+        return filtered
+
+def get_single_channel(raw_data,chnl_name):
+#    print('channel 1:', len(raw_data.streams[chnl_name].data))
+    chnl_data = raw_data.streams[chnl_name].data
+    # get that in seconds 
+    times = create_timestamps(raw_data,chnl_name,chnl_data)
+    # round to whole seconds
+    full_total_sec = int(times[-1])
+    # get only recording up to that time value
+    full_times = [el for el in times if el < full_total_sec]
+    chnl_data = chnl_data[:len(full_times)]
+    return chnl_data
+
+def create_timestamps(raw_data,chnl_name,channel_data):
+    num_samples = len(channel_data)
+    times = np.linspace(1, num_samples, num_samples) / raw_data.streams[chnl_name].fs
+    return times
+
+def get_csv_event_on_off(event_dataframe, event):
+        ''' Returns onset and offset times of the tones
+            First element of this array are onset times, 
+            Second el are offset times
+        '''
+        on_off = [[],[]]
+        # first column should be Event name, second event onset, last event offset
+        column_names = list(event_dataframe.columns)
+        # select only rows with given event name
+        # first make sure the events from dataframe are all strings
+        event_dataframe.loc[:,column_names[0]] = event_dataframe.loc[:, column_names[0]].astype(str)
+        selected_event_df = event_dataframe.loc[event_dataframe[column_names[0]] == event]
+        onsets = selected_event_df[column_names[1]].tolist()
+        # validate (could be i.e inf)
+        valid_onsets = []
+        for el in onsets:
+            try:
+                val = float(el)
+                valid_onsets.append(val)
+            except:
+                pass
+        offsets = selected_event_df[column_names[2]].tolist()
+        # validate
+        valid_offsets = []
+        for el in offsets:
+            try:
+                val = float(el)
+                valid_offsets.append(val)
+            except:
+                pass
+        if len(valid_onsets) > 0:
+            on_off[0] = valid_onsets
+        else:
+            print("There are no onsets for the event",event)
+        if len(valid_offsets) > 0:
+            on_off[1] = valid_offsets
+        else:
+            print("There are no offsets for the event",event)
+        return on_off
+
+
 def get_normalized_trials(subject,modified_data,current_trials,event,sec_before,sec_after,settings_dict,signal_name,control_name):
-    settings_dict[0]["subject"] = subject
+    # settings_dict[0]["subject"] = subject
     show_norm_as = settings_dict[0]["show_norm_as"]
     raw_df = None
     event_name = event
@@ -435,10 +569,10 @@ def get_normalized_trials(subject,modified_data,current_trials,event,sec_before,
     # print(ts1)
     ts2 = ts1
 
-    total_plots = len(GCaMP_perievent_data) # total number of events
-    # allow to show only up till 9 plots
-    if total_plots > 9:
-        total_plots = 9
+    # total_plots = len(GCaMP_perievent_data) # total number of events
+    # # allow to show only up till 9 plots
+    # if total_plots > 9:
+    #     total_plots = 9
     
     if settings_dict[0]["filter"] == True:
         print("Start smoothing",settings_dict[0]["filter_window"])
@@ -530,7 +664,122 @@ def get_normalized_trials(subject,modified_data,current_trials,event,sec_before,
         norm_type = " (z-score)"
     else:
         norm_type = " (%df/F)"
-    # for i in range(total_plots):
+    # for selected trials
+    for i in range(len(current_trials)):
+        # header_signal = "Trial"+str(i+1)+norm_type
+        header_signal = "Trial"+str(current_trials[i])+norm_type
+        signal_data = y_dff_all[i]
+        df = pd.DataFrame({header_signal:signal_data})
+        dfs.append(df)
+    raw_df= pd.concat(dfs,axis=1)
+
+    return raw_df
+
+def get_normalized_csv_trials(subject,filtered_data,current_trials,event,sec_before,sec_after,settings_dict):
+    show_norm_as = settings_dict[0]["show_norm_as"]
+    raw_df = None
+    event_name = event
+    GCaMP_perievent_data = filtered_data['signal']
+    control_perievent_data = filtered_data['control']
+    if len(current_trials) > 0:
+        # only those trials that are selected
+        # print(current_trials)
+        GCaMP_perievent_data = [GCaMP_perievent_data[trial-1] for trial in current_trials]
+        control_perievent_data = [control_perievent_data[trial-1] for trial in current_trials]
+    
+    N = settings_dict[0]["downsample"]
+    # !!! Create times in sec first to get last time value not total samples!!!
+    t1From0 = np.linspace(1/N,(sec_before+sec_after),(sec_before+sec_after)*N)
+    # print(t1From0)
+    ts1 = -sec_before + t1From0
+    # print(ts1)
+    ts2 = ts1
+   
+    
+    if settings_dict[0]["filter"] == True:
+        print("Start smoothing",settings_dict[0]["filter_window"])
+        # smooth data using filter
+        temp_signal_smoothed = []
+        temp_control_smoothed = []
+        a = 1
+        b = np.divide(np.ones((settings_dict[0]["filter_window"],)), settings_dict[0]["filter_window"])
+        for i in range(len(GCaMP_perievent_data)):
+            single_evt = filtfilt(b, a, GCaMP_perievent_data[i])
+            temp_signal_smoothed.append(single_evt)
+        for i in range(len(control_perievent_data)):
+            single_evt = filtfilt(b, a, control_perievent_data[i])
+            temp_control_smoothed.append(single_evt)
+        if len(temp_signal_smoothed) > 0 and len(temp_control_smoothed) > 0:
+            GCaMP_perievent_data = temp_signal_smoothed
+            control_perievent_data = temp_control_smoothed
+        print("Done smoothing")
+        
+    # normalize
+    y_dff_all = []
+    # find out how to normalize
+    if settings_dict[0]["normalization"] == 'Standard Polynomial Fitting':
+        # https://github.com/djamesbarker/pMAT
+        for x, y in zip(control_perievent_data, GCaMP_perievent_data):
+            x = np.array(x)
+            y = np.array(y)
+            
+            # https://stackoverflow.com/questions/45338872/matlab-polyval-function-with-three-outputs-equivalent-in-python-numpy
+            mu = np.mean(x)
+            std = np.std(x, ddof=0)
+            # Call np.polyfit(), using the shifted and scaled version of control_arr
+            cscaled = np.polynomial.polynomial.Polynomial.fit((x - mu)/std, y, 1)
+            # Create a poly1d object that can be called
+            # https://numpy.org/doc/stable/reference/routines.polynomials.html
+            pscaled = Polynomial(cscaled.convert().coef)
+            # Inputs to pscaled must be shifted and scaled using mu and std
+            F0 = pscaled((x - mu)/std)
+        #    print("F0?",F0[:20])
+            dffnorm = (y - F0)/F0 * 100
+            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+            # to make 0 the mean value for DF/F
+            negative = dffnorm[dffnorm<0]
+            dff=dffnorm-np.mean(negative)
+
+            if show_norm_as == "Z-Score":
+                median_all = np.median(dff)
+                mad = stats.median_absolute_deviation(dff)
+                dff = (dff - median_all)/mad
+
+            y_dff_all.append(dff)
+            
+    elif settings_dict[0]["normalization"] == 'Modified Polynomial Fitting':
+        for x, y in zip(control_perievent_data, GCaMP_perievent_data):
+            x = np.array(x)
+            y = np.array(y)
+            bls_signal = np.polynomial.polynomial.Polynomial.fit(ts1, y, 1)
+            F0_signal = polyval(ts1,bls_signal.convert().coef)
+            dFF_signal = (y - F0_signal)/F0_signal *100
+            
+            bls_control = np.polynomial.polynomial.Polynomial.fit(ts2,x,1)
+            F0_control = polyval(ts2,bls_control.convert().coef)
+            dFF_control = (x - F0_control)/F0_control *100
+            dFFnorm = dFF_signal - dFF_control
+            # find all values of the normalized DF/F that are negative so you can next shift up the curve 
+            # to make 0 the mean value for DF/F
+            negative = dFFnorm[dFFnorm<0]
+            dff = dFFnorm-np.mean(negative)
+
+            if show_norm_as == "Z-Score":
+                median_all = np.median(dff)
+                mad = stats.median_absolute_deviation(dff)
+                dff = (dff - median_all)/mad
+
+            y_dff_all.append(dff)
+       
+    # create a list of dataframes to join later
+    dfs = []
+    time_df = pd.DataFrame({"Time (sec)":ts1})
+    dfs.append(time_df)
+    if show_norm_as == 'Z-Score':
+        norm_type = " (z-score)"
+    else:
+        norm_type = " (%df/F)"
+
     for i in range(len(current_trials)):
         # header_signal = "Trial"+str(i+1)+norm_type
         header_signal = "Trial"+str(current_trials[i])+norm_type
