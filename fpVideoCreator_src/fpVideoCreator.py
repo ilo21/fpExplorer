@@ -255,14 +255,15 @@ class MyMainWidget(QMainWindow):
         # if self.select_data_window_content[0]["event_based"] == True:
             # try reading the first data tank on the list 
             # to verify if there are indeed events
-        if fpVideoCreator_functions.check_events(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]]):
-            self.enable_all_buttons()
+        # # Don't check events
+        # if fpVideoCreator_functions.check_events(self.batch_paths_dict[self.select_data_window_content[0]["subject_names"][0]]):
+        self.enable_all_buttons()
             # show window with options to plot perievent
-            self.preview_widget = PreviewEventBasedWidget(self,self.preview_params)
+        self.preview_widget = PreviewEventBasedWidget(self,self.preview_params)
             # add widget to dock
-            self.bottom_dock_widget.addWidget(self.preview_widget)
-        else:
-            self.show_info_dialog("No events found in your data.")
+        self.bottom_dock_widget.addWidget(self.preview_widget)
+        # else:
+        #     self.show_info_dialog("No events found in your data.")
 
     # add raw data structure and subject to self.raw_data dictionary   
     def get_raw_data(self,subject,my_path):
